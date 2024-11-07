@@ -2,10 +2,12 @@
 
 import logging
 import base64
+import traceback
 import json
 import grpc
 
 from authlib.integrations.base_client import OAuthError
+import sentry_sdk
 
 import publisher_pb2
 import publisher_pb2_grpc
@@ -38,32 +40,48 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
     """Publisher Service Descriptor"""
 
     def handle_create_grpc_error_response(
-        self, context, response, sys_msg, status_code, **kwargs
+        self,
+        context,
+        response,
+        error,
+        status_code,
+        send_to_sentry=False,
+        user_msg=None,
+        error_type="ERROR",
+        error_prefix=None,
     ):
         """
         Handles the creation of a gRPC error response.
 
         Args:
-            context: gRPC context.
-            response: gRPC response object.
-            sys_msg (str or tuple): System message.
-            status_code: gRPC status code.
-            user_msg (str or tuple): User-friendly message.
-            error_type (str): Type of error.
+            context (grpc.ServicerContext): The gRPC context object.
+            response (callable): The gRPC response object.
+            error (Exception or str): The exception instance or error message.
+            status_code (grpc.StatusCode): The gRPC status code to be set for the response
+                (e.g., grpc.StatusCode.INTERNAL).
+            send_to_sentry (bool): If set to True, the error will be sent to Sentry for tracking.
+            user_msg (str, optional): A user-friendly error message to be returned to the client.
+                If not provided, the `error` message will be used.
+            error_type (str, optional): A string identifying the type of error. Defaults to "ERROR".
+                When set to "UNKNOWN", it triggers the logging of a full exception traceback
+                for debugging purposes.
+            error_prefix (str, optional): An optional prefix to prepend to the error message
+                for additional context (e.g., indicating the specific operation or subsystem
+                that caused the error).
 
         Returns:
             An instance of the specified response with the error set.
         """
-        user_msg = kwargs.get("user_msg")
-        error_type = kwargs.get("error_type")
-
-        if not user_msg:
-            user_msg = sys_msg
+        user_msg = user_msg or str(error)
 
         if error_type == "UNKNOWN":
-            logger.exception(sys_msg)
+            traceback.print_exception(type(error), error, error.__traceback__)
+            if send_to_sentry:
+                sentry_sdk.capture_exception(error)
+        elif send_to_sentry:
+            sentry_sdk.capture_message(user_msg, level="error")
 
-        context.set_details(user_msg)
+        context.set_details(f"{error_prefix}: {user_msg}" if error_prefix else user_msg)
         context.set_code(status_code)
 
         return response()
@@ -470,8 +488,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     response,
                     decode_error,
                     grpc.StatusCode.INVALID_ARGUMENT,
-                    user_msg="Invalid content format.",
+                    error_prefix="Error Decoding Platform Payload",
                     error_type="UNKNOWN",
+                    send_to_sentry=True,
                 )
             return (platform_letter, encrypted_content, device_id), None
 
@@ -485,6 +504,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     response,
                     platform_err,
                     grpc.StatusCode.INVALID_ARGUMENT,
+                    send_to_sentry=True,
                 )
             return platform_info, None
 
@@ -503,6 +523,8 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     response,
                     get_access_token_error.details(),
                     get_access_token_error.code(),
+                    error_prefix="Error Fetching Access Token",
+                    send_to_sentry=True,
                 )
             if not get_access_token_response.success:
                 return None, response(
@@ -523,6 +545,8 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     response,
                     decrypt_payload_error.details(),
                     decrypt_payload_error.code(),
+                    error_prefix="Error Decrypting Platform Payload",
+                    send_to_sentry=True,
                 )
             if not decrypt_payload_response.success:
                 return None, response(
@@ -629,6 +653,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     response,
                     parse_error,
                     grpc.StatusCode.INVALID_ARGUMENT,
+                    send_to_sentry=True,
                 )
 
             content_parts = list(content_parts)
@@ -687,6 +712,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 str(e),
                 grpc.StatusCode.INVALID_ARGUMENT,
                 error_type="UNKNOWN",
+                send_to_sentry=True,
             )
 
         except Exception as exc:
@@ -697,6 +723,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 grpc.StatusCode.INTERNAL,
                 user_msg="Oops! Something went wrong. Please try again later.",
                 error_type="UNKNOWN",
+                send_to_sentry=True,
             )
 
     def GetPNBACode(self, request, context):

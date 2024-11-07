@@ -2,7 +2,6 @@
 
 import logging
 import os
-from datetime import datetime
 from concurrent import futures
 
 import grpc
@@ -10,12 +9,16 @@ from grpc_interceptor import ServerInterceptor
 import publisher_pb2_grpc
 
 from utils import get_configs
+from sentry_config import initialize_sentry, SENTRY_ENABLED
 from grpc_publisher_service import PublisherService
 
 logging.basicConfig(
     level=logging.INFO, format=("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 )
 logger = logging.getLogger("publisher.grpc.server")
+
+if SENTRY_ENABLED:
+    initialize_sentry()
 
 
 class LoggingInterceptor(ServerInterceptor):
@@ -32,33 +35,24 @@ class LoggingInterceptor(ServerInterceptor):
 
     def intercept(self, method, request_or_iterator, context, method_name):
         """
-        Intercept method called for each incoming RPC.
+        Intercept method calls for each incoming RPC.
         """
         response = method(request_or_iterator, context)
         if context.details():
             self.logger.error(
-                '%s - - [%s] "%s %s" %s -',
-                context.peer(),
-                datetime.now().strftime("%B %d, %Y %H:%M:%S"),
+                "%s %s - %s -",
                 method_name,
                 self.server_protocol,
                 str(context.code()).split(".")[1],
             )
         else:
-            self.logger.info(
-                '%s - - [%s] "%s %s" %s -',
-                context.peer(),
-                datetime.now().strftime("%B %d, %Y %H:%M:%S"),
-                method_name,
-                self.server_protocol,
-                "OK",
-            )
+            self.logger.info("%s %s - %s -", method_name, self.server_protocol, "OK")
         return response
 
 
 def serve():
     """
-    Starts the gRPC server and listens for requests.
+    Starts the gRPC server and listens for requests using a thread pool.
     """
     mode = get_configs("MODE", False, "development")
     server_certificate = get_configs("SSL_CERTIFICATE")
@@ -77,11 +71,11 @@ def serve():
     logger.info("Logical CPU cores available: %s", num_cpu_cores)
     logger.info("gRPC server max workers: %s", max_workers)
 
-    server = grpc.server(
+    grpc_server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=max_workers),
         interceptors=[LoggingInterceptor()],
     )
-    publisher_pb2_grpc.add_PublisherServicer_to_server(PublisherService(), server)
+    publisher_pb2_grpc.add_PublisherServicer_to_server(PublisherService(), grpc_server)
 
     if mode == "production":
         try:
@@ -93,7 +87,7 @@ def serve():
             server_credentials = grpc.ssl_server_credentials(
                 ((private_key_data, server_certificate_data),)
             )
-            server.add_secure_port(f"{hostname}:{secure_port}", server_credentials)
+            grpc_server.add_secure_port(f"{hostname}:{secure_port}", server_credentials)
             logger.info(
                 "TLS is enabled: The server is securely running at %s:%s",
                 hostname,
@@ -111,25 +105,25 @@ def serve():
         except Exception as e:
             logger.critical(
                 (
-                    "Unable to start server: Error loading TLS credentials: %s. ",
-                    "Please check your configuration.",
+                    "Unable to start server: Error loading TLS credentials: %s. "
+                    "Please check your configuration."
                 ),
                 e,
             )
             raise
     else:
-        server.add_insecure_port(f"{hostname}:{port}")
+        grpc_server.add_insecure_port(f"{hostname}:{port}")
         logger.warning(
             "The server is running in insecure mode at %s:%s", hostname, port
         )
 
-    server.start()
+    grpc_server.start()
 
     try:
-        server.wait_for_termination()
+        grpc_server.wait_for_termination()
     except KeyboardInterrupt:
         logger.info("Shutting down the server...")
-        server.stop(0)
+        grpc_server.stop(0)
         logger.info("The server has stopped successfully")
 
 

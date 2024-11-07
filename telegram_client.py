@@ -334,8 +334,6 @@ class Methods:
             logger.debug("sending message to: %s...", recipient)
             await client.send_message(recipient, text)
 
-            logger.info("- Successfully sent message")
-
         except Exception as error:
             logger.error("An error occurred while sending a message.")
             raise error

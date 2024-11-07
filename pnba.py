@@ -6,6 +6,7 @@ import logging
 import re
 import datetime
 import asyncio
+import sentry_sdk
 import telegram_client
 
 logging.basicConfig(
@@ -136,6 +137,14 @@ class PNBAClient:
             asyncio.run(client.message(recipient=recipient, text=message))
 
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            publish_alert = (
+                f"Successfully sent message for '{self.platform}' at {timestamp}"
+            )
+            sentry_sdk.capture_message(
+                publish_alert,
+                level="info",
+            )
+            logger.info(publish_alert)
             return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
 
         except Exception as error:

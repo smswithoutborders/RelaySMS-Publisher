@@ -11,6 +11,7 @@ import json
 import datetime
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.base_client import OAuthError
+import sentry_sdk
 
 from utils import get_configs
 
@@ -370,9 +371,14 @@ class OAuth2Client:
             tweet_id = response.json()["data"]["id"]
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        logger.info(
-            "Successfully sent message for '%s' at %s", self.platform, timestamp
+        publish_alert = (
+            f"Successfully sent message for '{self.platform}' at {timestamp}"
         )
+        sentry_sdk.capture_message(
+            publish_alert,
+            level="info",
+        )
+        logger.info(publish_alert)
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
 
     def _send_generic_message(self, message, url):
@@ -387,7 +393,13 @@ class OAuth2Client:
 
         response_data = response.json()
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        logger.info(
-            "Successfully sent message for '%s' at %s", self.platform, timestamp
+
+        publish_alert = (
+            f"Successfully sent message for '{self.platform}' at {timestamp}"
         )
+        sentry_sdk.capture_message(
+            publish_alert,
+            level="info",
+        )
+        logger.info(publish_alert)
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
