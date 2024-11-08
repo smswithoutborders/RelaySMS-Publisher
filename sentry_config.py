@@ -23,6 +23,7 @@ def initialize_sentry():
             get_configs("SENTRY_PROFILES_SAMPLE_RATE", default_value=1.0)
         ),
         integrations=[GRPCIntegration()],
+        enable_tracing=True,
     )
 
     sentry_sdk.set_tag("project", "Publisher")

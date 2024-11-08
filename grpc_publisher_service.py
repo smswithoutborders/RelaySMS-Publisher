@@ -74,7 +74,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
         """
         user_msg = user_msg or str(error)
 
-        if error_type == "UNKNOWN":
+        if error_type == "UNKNOWN" and isinstance(error, Exception):
             traceback.print_exception(type(error), error, error.__traceback__)
             if send_to_sentry:
                 sentry_sdk.capture_exception(error)
