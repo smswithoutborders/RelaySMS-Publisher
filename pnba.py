@@ -128,25 +128,20 @@ class PNBAClient:
             message (dict): The message payload to be sent. The payload should be a
                 properly formatted dictionary according to the platform's specifications.
         """
-        try:
-            client = self.session.Methods(self.phone_number)
-            recipient = re.sub(r"\s+", "", recipient)
-            if not recipient.startswith("+"):
-                recipient = "+" + recipient
+        client = self.session.Methods(self.phone_number)
+        recipient = re.sub(r"\s+", "", recipient)
+        if not recipient.startswith("+"):
+            recipient = "+" + recipient
 
-            asyncio.run(client.message(recipient=recipient, text=message))
+        asyncio.run(client.message(recipient=recipient, text=message))
 
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            publish_alert = (
-                f"Successfully sent message for '{self.platform}' at {timestamp}"
-            )
-            sentry_sdk.capture_message(
-                publish_alert,
-                level="info",
-            )
-            logger.info(publish_alert)
-            return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
-
-        except Exception as error:
-            logger.exception(error)
-            return {"error": str(error)}
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        publish_alert = (
+            f"Successfully sent message for '{self.platform}' at {timestamp}"
+        )
+        sentry_sdk.capture_message(
+            publish_alert,
+            level="info",
+        )
+        logger.info(publish_alert)
+        return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."

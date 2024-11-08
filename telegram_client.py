@@ -335,7 +335,7 @@ class Methods:
             await client.send_message(recipient, text)
 
         except Exception as error:
-            logger.error("An error occurred while sending a message.")
+            logger.error("An error occurred while sending a telegram message.")
             raise error
 
         finally:

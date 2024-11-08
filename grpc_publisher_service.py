@@ -19,6 +19,7 @@ from utils import (
     get_platform_details_by_shortcode,
 )
 from oauth2 import OAuth2Client
+import telegram_client
 from pnba import PNBAClient
 from relaysms_payload import decode_relay_sms_payload
 from grpc_vault_entity_client import (
@@ -705,11 +706,21 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 success=True,
             )
 
-        except OAuthError as e:
+        except telegram_client.Errors.RPCError as exc:
             return self.handle_create_grpc_error_response(
                 context,
                 response,
-                str(e),
+                exc,
+                grpc.StatusCode.INVALID_ARGUMENT,
+                error_type="UNKNOWN",
+                send_to_sentry=True,
+            )
+
+        except OAuthError as exc:
+            return self.handle_create_grpc_error_response(
+                context,
+                response,
+                exc,
                 grpc.StatusCode.INVALID_ARGUMENT,
                 error_type="UNKNOWN",
                 send_to_sentry=True,
