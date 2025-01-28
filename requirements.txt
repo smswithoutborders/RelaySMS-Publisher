@@ -24,3 +24,6 @@ retry==0.9.2
 rsa==4.9
 sentry-sdk==2.18.0
 SwobThirdPartyPlatforms @ git+https://github.com/smswithoutborders/SMSWithoutBorders-Customized-Third-Party-Platforms.git@main#egg=SwobThirdPartyPlatforms
+fastapi[standard]==0.115.6
+uvicorn>=0.22.0
+peewee>=3.15.0
