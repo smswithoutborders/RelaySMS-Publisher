@@ -30,10 +30,6 @@ pip install -r requirements.txt
   fastapi dev api_v1.py
    ```
 
-  Access the API documentation at [http://localhost:8000/docs](http://localhost:8000/docs).
-
-
-
 ### Where to Find the Documentation
 
 The API documentation is automatically generated and available here:
