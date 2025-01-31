@@ -8,47 +8,36 @@ from peewee import (
     IntegerField,
     SqliteDatabase,
 )
-from playhouse.migrate import SqliteMigrator, migrate
+import logging
 
-# Database connection
-DATABASE_PATH = "./metrics.db"  # SQLite database file
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+DATABASE_PATH = "./metrics.db" 
 database = SqliteDatabase(DATABASE_PATH)
 
+class Publications(Model):
+    """Model representing the Publications Table."""
 
-class Metrics(Model):
-    """Model representing the Metrics Table."""
-
-    id = IntegerField(primary_key=True)  # Auto-incrementing ID
-    country_code = CharField()  # Country code
-    platform_name = CharField()  # Platform name
-    source = CharField()  # Source (bridge or platform)
-    status = CharField()  # Status (failed or published)
-    gateway_client = CharField()  # Gateway client
-    date_time = DateTimeField(default=datetime.datetime.now)  # Date & time
+    id = IntegerField(primary_key=True) 
+    country_code = CharField() 
+    platform_name = CharField() 
+    source = CharField()  
+    status = CharField() 
+    gateway_client = CharField()  
+    date_time = DateTimeField(default=datetime.datetime.now) 
 
     class Meta:
         """Meta class to define database connection and table name."""
         database = database
-        table_name = "metrics"
+        table_name = "publications"
 
 
-# Function to initialize the database
 def init_db():
-    """Create the database and the metrics table if they don't exist."""
+    """Create the database and the publications table if they don't exist."""
     database.connect()
-    database.create_tables([Metrics], safe=True)
-    print("Database and table initialized.")
+    database.create_tables([Publications], safe=True)
+    logging.info("Database and table initialized.")
 
 
-# Example migration logic (if needed in the future)
-def migrate_db():
-    """Perform migrations if the schema changes."""
-    migrator = SqliteMigrator(database)
-    # Example: Add a new column if needed
-    # migrate(migrator.add_column('metrics', 'new_column', CharField(null=True)))
-    print("Database migration completed.")
-
-
-# Initialize the database when the script is run
 if __name__ == "__main__":
     init_db()

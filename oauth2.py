@@ -13,6 +13,8 @@ from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.base_client import OAuthError
 import sentry_sdk
 
+from publications import store_publication
+
 from utils import get_configs
 
 OAUTH2_CONFIGURATIONS = {
@@ -354,6 +356,7 @@ class OAuth2Client:
 
         tweets = chunk_tweet(message)
         tweet_id = None
+        status = "failed"
 
         for chunk in tweets:
             payload = create_tweet_payload(chunk, tweet_id)
@@ -366,9 +369,17 @@ class OAuth2Client:
                     self.platform,
                     response_data,
                 )
+                store_publication(
+                    country_code="Unknown",
+                    platform_name=self.platform,
+                    source="Platforms",
+                    gateway_client="Unknown",
+                    status="failed",
+                )
                 return response_data
 
             tweet_id = response.json()["data"]["id"]
+            status = "published"  
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         publish_alert = (
@@ -379,15 +390,30 @@ class OAuth2Client:
             level="info",
         )
         logger.info(publish_alert)
+        store_publication(
+            country_code="Unknown",
+            platform_name=self.platform,
+            source="Platforms",
+            gateway_client="Unknown",
+            status=status,
+        )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
 
     def _send_generic_message(self, message, url):
         response = self.session.post(url, json=message)
+        status = "failed"
 
         if not response.ok:
             response_data = response.text
             logger.error(
                 "Failed to send message for %s: %s", self.platform, response_data
+            )
+            store_publication(
+                country_code="Unknown",
+                platform_name=self.platform,
+                source="Platforms",
+                gateway_client="Unknown",
+                status="failed",
             )
             return response_data
 
@@ -402,4 +428,13 @@ class OAuth2Client:
             level="info",
         )
         logger.info(publish_alert)
+        status = "published"
+
+        store_publication(
+            country_code="Unknown",
+            platform_name=self.platform,
+            source="Generic",
+            gateway_client="Unknown",
+            status=status,
+        )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."

@@ -9,6 +9,8 @@ import asyncio
 import sentry_sdk
 import telegram_client
 
+from publications import store_publication
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -132,8 +134,10 @@ class PNBAClient:
         recipient = re.sub(r"\s+", "", recipient)
         if not recipient.startswith("+"):
             recipient = "+" + recipient
+        status = "failed"
 
         asyncio.run(client.message(recipient=recipient, text=message))
+        status = "published"
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         publish_alert = (
@@ -144,4 +148,11 @@ class PNBAClient:
             level="info",
         )
         logger.info(publish_alert)
+        store_publication(
+            country_code="Unknown",
+            platform_name=self.platform,
+            source="Platforms",
+            gateway_client="Unknown",
+            status=status,
+    )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
