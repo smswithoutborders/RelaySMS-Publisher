@@ -5,11 +5,9 @@ from pydantic import BaseModel
 from publications import create_publication_entry, get_publication
 import logging
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create an APIRouter instance
 router = APIRouter()
 
 class PublicationsCreate(BaseModel):
