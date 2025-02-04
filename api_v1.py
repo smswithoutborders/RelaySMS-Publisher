@@ -23,7 +23,7 @@ class PublicationsCreate(BaseModel):
 class PublicationsRead(PublicationsCreate):
     id: int
 
-@router.get("/metrics/", response_model=List[PublicationsRead])
+@router.get("/metrics/publications", response_model=List[PublicationsRead])
 def fetch_publication(
     start_date: datetime.date = Query(...),
     end_date: datetime.date = Query(...),
@@ -52,8 +52,6 @@ def fetch_publication(
         logger.error(f"Error fetching publications: {e}")
         raise HTTPException(status_code=500, detail="Error fetching publications")
 
-# Create the FastAPI app
 app = FastAPI()
 
-# Mount the router under the /v1 prefix
 app.include_router(router, prefix="/v1")
