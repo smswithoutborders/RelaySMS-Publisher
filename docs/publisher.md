@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
    Run the FastAPI application server. By default, the server will run on `http://localhost:8000`.
    ```bash
-  fastapi dev api_v1.py
+  fastapi dev app.py
    ```
 
 ### Where to Find the Documentation

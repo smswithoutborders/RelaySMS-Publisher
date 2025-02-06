@@ -134,10 +134,8 @@ class PNBAClient:
         recipient = re.sub(r"\s+", "", recipient)
         if not recipient.startswith("+"):
             recipient = "+" + recipient
-        status = "failed"
 
         asyncio.run(client.message(recipient=recipient, text=message))
-        status = "published"
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         publish_alert = (
@@ -153,6 +151,6 @@ class PNBAClient:
             platform_name=self.platform,
             source="Platforms",
             gateway_client="Unknown",
-            status=status,
+            status="published",
     )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."

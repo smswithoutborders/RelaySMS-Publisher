@@ -356,7 +356,6 @@ class OAuth2Client:
 
         tweets = chunk_tweet(message)
         tweet_id = None
-        status = "failed"
 
         for chunk in tweets:
             payload = create_tweet_payload(chunk, tweet_id)
@@ -379,7 +378,6 @@ class OAuth2Client:
                 return response_data
 
             tweet_id = response.json()["data"]["id"]
-            status = "published"  
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         publish_alert = (
@@ -395,13 +393,12 @@ class OAuth2Client:
             platform_name=self.platform,
             source="Platforms",
             gateway_client="Unknown",
-            status=status,
+            status="published",
         )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
 
     def _send_generic_message(self, message, url):
         response = self.session.post(url, json=message)
-        status = "failed"
 
         if not response.ok:
             response_data = response.text
@@ -428,13 +425,12 @@ class OAuth2Client:
             level="info",
         )
         logger.info(publish_alert)
-        status = "published"
 
         store_publication(
             country_code="Unknown",
             platform_name=self.platform,
             source="Generic",
             gateway_client="Unknown",
-            status=status,
+            status="published",
         )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."

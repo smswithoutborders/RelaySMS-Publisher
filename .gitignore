@@ -156,5 +156,4 @@ dmypy.json
 # Except for publisher.proto
 !publisher.proto
 
-gmail_credentials.json
-/gmail_credentials.json
+*_credentials.json

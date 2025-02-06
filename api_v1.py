@@ -1,25 +1,20 @@
-from fastapi import FastAPI, HTTPException, Query, APIRouter
+"""
+This program is free software: you can redistribute it under the terms
+of the GNU General Public License, v. 3.0. If a copy of the GNU General
+Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
+"""
+
+from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 import datetime
-from pydantic import BaseModel
-from publications import create_publication_entry, get_publication
+from publications import get_publication
 import logging
+from api_schemas import PublicationsCreate, PublicationsRead  
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-class PublicationsCreate(BaseModel):
-    country_code: str
-    platform_name: str
-    source: str
-    status: str
-    gateway_client: str
-    date_time: Optional[datetime.datetime] = None
-
-class PublicationsRead(PublicationsCreate):
-    id: int
 
 @router.get("/metrics/publications", response_model=List[PublicationsRead])
 def fetch_publication(
@@ -49,7 +44,3 @@ def fetch_publication(
     except Exception as e:
         logger.error(f"Error fetching publications: {e}")
         raise HTTPException(status_code=500, detail="Error fetching publications")
-
-app = FastAPI()
-
-app.include_router(router, prefix="/v1")
