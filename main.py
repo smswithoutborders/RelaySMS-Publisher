@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import datetime
 import os
 import pika
 import random
@@ -10,8 +9,6 @@ import base64
 import json
 
 import aes
-
-from publications import store_publication
 
 from SwobThirdPartyPlatforms import ImportPlatform
 from SwobThirdPartyPlatforms.exceptions import PlatformDoesNotExist
@@ -24,7 +21,6 @@ def publishing_payload(ch, method, properties, body: bytes) -> None:
     """
     """
     logging.info("Publishing payload: %s", body)
-    timestamp = datetime.datetime.now()
 
     try:
         body = base64.b64decode(body)
@@ -38,14 +34,6 @@ def publishing_payload(ch, method, properties, body: bytes) -> None:
 
     except Exception as error:
         logging.exception(error)
-        
-        store_publication(
-            country_code="Unknown",
-            platform_name="Unknown",
-            source="Platforms",
-            gateway_client="Unknown",
-            status="failed",
-        )
         ch.basic_reject(delivery_tag=method.delivery_tag, requeue=True)
 
     else:
@@ -53,40 +41,23 @@ def publishing_payload(ch, method, properties, body: bytes) -> None:
         body_content = ':'.join(body_content.split(':')[1:])
 
         platform_name = body['platform_name']
-        country_code = body.get('country_code', 'Unknown')
-        source = body.get('source', 'Unknown')
-        gateway_client = body.get('gateway_client', 'Unknown')
 
         try:
             platform = ImportPlatform(platform_name=platform_name)
             platform.execute(body=body_content, user_details=body)
-            status = "published" 
 
         except PlatformDoesNotExist as error:
             logging.exception(error)
-            status = "failed"
             ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
 
         except Exception as error:
             logging.exception(error)
             # ch.basic_reject(delivery_tag=method.delivery_tag, requeue=True)
-            status = "failed"
             ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
-            
 
-        store_publication(
-            country_code=country_code,
-            platform_name=platform_name,
-            source=source,
-            gateway_client=gateway_client,
-            status=status,
-    )
-
-    if status == "published":
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-        logging.info("Publishing complete.")
-    else:
-        ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+        else:
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            logging.info("publishing complete...")
 
 
 @retry((pika.exceptions.AMQPConnectionError, pika.exceptions.AMQPHeartbeatTimeout), 
