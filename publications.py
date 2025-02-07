@@ -6,12 +6,11 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 
 import datetime
 import logging
-from db import create_publication_entry, fetch_publication
-
+from db_models import Publications
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def store_publication(country_code, platform_name, source, gateway_client, status, date_time=None):
+def create_publication_entry(country_code, platform_name, source, gateway_client, status, date_time=None):
     """
     Store a new publication entry with correct status.
 
@@ -41,19 +40,24 @@ def store_publication(country_code, platform_name, source, gateway_client, statu
 
     return publication
 
-def create_publication_entry(country_code, platform_name, source, status, gateway_client, date_time=None):
-    """Create a new metric entry in the database."""
-    publication_data = {
-        "country_code": country_code,
-        "platform_name": platform_name,
-        "source": source,
-        "status": status,
-        "gateway_client": gateway_client,
-        "date_time": date_time or datetime.datetime.now(),
-    }
+def fetch_publication(start_date, end_date, filters):
+    """Fetch publications based on filters."""
+    query = Publications.select().where(
+        (Publications.date_time >= start_date) & (Publications.date_time <= end_date)
+    )
     
-    return create_publication_entry(publication_data)
+    for key, value in filters.items():
+        if value:
+            query = query.where(getattr(Publications, key) == value)
+    
+    return list(query)
+
 
 def get_publication(start_date, end_date, filters=None):
     """Retrieve Publications with optional filters."""
     return fetch_publication(start_date, end_date, filters)
+
+
+
+
+

@@ -30,21 +30,3 @@ else:
 if database.is_closed():
     database.connect()
     logging.info("Database connection established.")
-
-from db_models import Publications
-
-def create_publication_entry(data):
-    """Insert a new publication record into the database."""
-    return Publications.create(**data)
-
-def fetch_publication(start_date, end_date, filters):
-    """Fetch publications based on filters."""
-    query = Publications.select().where(
-        (Publications.date_time >= start_date) & (Publications.date_time <= end_date)
-    )
-    
-    for key, value in filters.items():
-        if value:
-            query = query.where(getattr(Publications, key) == value)
-    
-    return list(query)
