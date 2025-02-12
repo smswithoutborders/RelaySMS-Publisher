@@ -26,7 +26,3 @@ else:
     DATABASE_PATH = os.getenv("SQLITE_PATH", "./metrics.db")
     database = SqliteDatabase(DATABASE_PATH)
     logging.info(f"Using SQLite Database at {DATABASE_PATH}.")
-
-if database.is_closed():
-    database.connect()
-    logging.info("Database connection established.")

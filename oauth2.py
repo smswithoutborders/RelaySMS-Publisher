@@ -13,7 +13,7 @@ from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.base_client import OAuthError
 import sentry_sdk
 
-from publications import store_publication
+from publications import create_publication_entry
 
 from utils import get_configs
 
@@ -368,7 +368,7 @@ class OAuth2Client:
                     self.platform,
                     response_data,
                 )
-                store_publication(
+                create_publication_entry(
                     country_code="Unknown",
                     platform_name=self.platform,
                     source="Platforms",
@@ -388,7 +388,7 @@ class OAuth2Client:
             level="info",
         )
         logger.info(publish_alert)
-        store_publication(
+        create_publication_entry(
             country_code="Unknown",
             platform_name=self.platform,
             source="Platforms",
@@ -405,7 +405,7 @@ class OAuth2Client:
             logger.error(
                 "Failed to send message for %s: %s", self.platform, response_data
             )
-            store_publication(
+            create_publication_entry(
                 country_code="Unknown",
                 platform_name=self.platform,
                 source="Platforms",
@@ -426,7 +426,7 @@ class OAuth2Client:
         )
         logger.info(publish_alert)
 
-        store_publication(
+        create_publication_entry(
             country_code="Unknown",
             platform_name=self.platform,
             source="Generic",

@@ -26,8 +26,4 @@ class Publications(Model):
         """Meta class to define database connection and table name."""
         database = database
         table_name = "publications"
-
-def init_db():
-    """Create the database and the publications table if they don't exist."""
-    database.create_tables([Publications], safe=True)
-    logging.info("Database and table initialized.")
+        

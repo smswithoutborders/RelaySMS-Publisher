@@ -6,7 +6,7 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 
 from pydantic import BaseModel
 import datetime
-from typing import Optional
+from typing import Optional, List
 
 class PublicationsCreate(BaseModel):
     country_code: str
@@ -18,3 +18,10 @@ class PublicationsCreate(BaseModel):
 
 class PublicationsRead(PublicationsCreate):
     id: int
+ 
+class PublicationsResponse(BaseModel):
+    total_publications: int
+    total_published: int
+    total_failed: int
+    data: list[PublicationsRead]   
+    

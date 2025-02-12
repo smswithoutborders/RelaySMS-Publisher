@@ -9,7 +9,7 @@ import asyncio
 import sentry_sdk
 import telegram_client
 
-from publications import store_publication
+from publications import create_publication_entry
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -146,7 +146,7 @@ class PNBAClient:
             level="info",
         )
         logger.info(publish_alert)
-        store_publication(
+        create_publication_entry(
             country_code="Unknown",
             platform_name=self.platform,
             source="Platforms",
