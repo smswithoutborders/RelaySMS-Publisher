@@ -26,3 +26,4 @@ sentry-sdk==2.18.0
 SwobThirdPartyPlatforms @ git+https://github.com/smswithoutborders/SMSWithoutBorders-Customized-Third-Party-Platforms.git@main#egg=SwobThirdPartyPlatforms
 fastapi[standard]==0.115.6
 peewee>=3.15.0
+pymysql==1.1.1

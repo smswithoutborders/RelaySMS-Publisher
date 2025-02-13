@@ -6,24 +6,28 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 
 import datetime
 from peewee import Model, CharField, DateTimeField, IntegerField
-from db import database  
-import logging
+from db import connect
+from utils import create_tables
 
-logging.basicConfig(level=logging.INFO)
+database = connect()
+
 
 class Publications(Model):
     """Model representing the Publications Table."""
 
-    id = IntegerField(primary_key=True) 
-    country_code = CharField() 
-    platform_name = CharField() 
-    source = CharField()  
-    status = CharField() 
-    gateway_client = CharField()  
-    date_time = DateTimeField(default=datetime.datetime.now) 
+    id = IntegerField(primary_key=True)
+    country_code = CharField(null=True)
+    platform_name = CharField()
+    source = CharField()
+    status = CharField()
+    gateway_client = CharField(null=True)
+    date_time = DateTimeField(default=datetime.datetime.now)
 
     class Meta:
         """Meta class to define database connection and table name."""
+
         database = database
         table_name = "publications"
-        
+
+
+create_tables([Publications])
