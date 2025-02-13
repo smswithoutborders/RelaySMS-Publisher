@@ -623,37 +623,19 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
         try:
             invalid_fields_response = validate_fields()
             if invalid_fields_response:
-                create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"] if 'platform_info' in locals() else "Telegram",
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
+
                 return invalid_fields_response
 
             decoded_payload, decoding_error = decode_payload()
             if decoding_error:
-                create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"] if 'platform_info' in locals() else "Telegram",
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
+
                 return decoding_error
 
             platform_letter, encrypted_content, device_id = decoded_payload
 
             platform_info, platform_info_error = get_platform_info(platform_letter)
             if platform_info_error:
-                create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"] if 'platform_info' in locals() else "Telegram",
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
+
                 return platform_info_error
 
             device_id_hex = device_id.hex() if device_id else None
@@ -664,13 +646,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
             if decrypt_error:
-                create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"],
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
+
                 return decrypt_error
 
             content_parts, parse_error = parse_content(
@@ -678,13 +654,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
             if parse_error:
-                create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"],
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
+
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
@@ -704,13 +674,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 account_identifier=content_parts[0],
             )
             if access_token_error:
-                create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"],
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
                 return access_token_error
 
             message_response = None
@@ -743,12 +706,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             # if encrypt_payload_error:
             #     return encrypt_payload_error
             create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"],
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="published",
-                )
+                platform_name=platform_info["name"],
+                source="platforms",
+                status="published",
+            )
 
             return response(
                 message=f"Successfully published {platform_info['name']} message",
@@ -757,13 +718,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except telegram_client.Errors.RPCError as exc:
-            create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"] if 'platform_info' in locals() else "Unknown",
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -774,13 +728,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except OAuthError as exc:
-            create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"] if 'platform_info' in locals() else "Unknown",
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -792,12 +739,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
         except Exception as exc:
             create_publication_entry(
-                    country_code="Unknown",
-                    platform_name=platform_info["name"] if 'platform_info' in locals() else "Unknown",
-                    source="Platforms",
-                    gateway_client="Unknown",
-                    status="failed",
-                )
+                platform_name=(platform_info["name"]),
+                source="platforms",
+                status="failed",
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,

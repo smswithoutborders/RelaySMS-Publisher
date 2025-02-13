@@ -14,7 +14,7 @@ class PublicationsCreate(BaseModel):
     source: str
     status: str
     gateway_client: str
-    date_time: Optional[datetime.datetime] = None
+    date_created: Optional[datetime.datetime] = None
 
 class PublicationsRead(PublicationsCreate):
     id: int

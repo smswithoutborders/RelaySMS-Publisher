@@ -147,10 +147,8 @@ class PNBAClient:
         )
         logger.info(publish_alert)
         create_publication_entry(
-            country_code="Unknown",
             platform_name=self.platform,
-            source="Platforms",
-            gateway_client="Unknown",
+            source="platforms",
             status="published",
     )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."

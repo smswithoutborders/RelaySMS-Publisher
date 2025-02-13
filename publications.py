@@ -12,7 +12,7 @@ from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def create_publication_entry(country_code, platform_name, source, gateway_client, status, date_time=None):
+def create_publication_entry(country_code, platform_name, source, gateway_client, status, date_created=None):
     """
     Store a new publication entry with correct status.
 
@@ -22,7 +22,6 @@ def create_publication_entry(country_code, platform_name, source, gateway_client
         source (str): Source of publication.
         gateway_client (str): Gateway client.
         status (str): "published" if successful, "failed" if not.
-        date_time (datetime, optional): Timestamp. Defaults to now.
     """
     publication = Publications.create(
         country_code=country_code,
@@ -30,7 +29,6 @@ def create_publication_entry(country_code, platform_name, source, gateway_client
         source=source,
         status=status,
         gateway_client=gateway_client,
-        date_time=date_time or datetime.datetime.now()
     )
 
     log_func = logging.info if status == "published" else logging.error
@@ -41,7 +39,7 @@ def create_publication_entry(country_code, platform_name, source, gateway_client
 def fetch_publication(start_date: datetime.date, end_date: datetime.date, filters: dict[str, Optional[str]]) -> dict[str, any]:
     """Fetch publications based on filters."""
     query = Publications.select().where(
-        (Publications.date_time >= start_date) & (Publications.date_time <= end_date)
+        (Publications.date_created >= start_date) & (Publications.date_created <= end_date)
     )
     
     for key, value in filters.items():

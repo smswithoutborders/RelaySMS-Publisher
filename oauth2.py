@@ -369,10 +369,8 @@ class OAuth2Client:
                     response_data,
                 )
                 create_publication_entry(
-                    country_code="Unknown",
                     platform_name=self.platform,
-                    source="Platforms",
-                    gateway_client="Unknown",
+                    source="platforms",
                     status="failed",
                 )
                 return response_data
@@ -389,10 +387,8 @@ class OAuth2Client:
         )
         logger.info(publish_alert)
         create_publication_entry(
-            country_code="Unknown",
             platform_name=self.platform,
-            source="Platforms",
-            gateway_client="Unknown",
+            source="platforms",
             status="published",
         )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
@@ -406,10 +402,8 @@ class OAuth2Client:
                 "Failed to send message for %s: %s", self.platform, response_data
             )
             create_publication_entry(
-                country_code="Unknown",
                 platform_name=self.platform,
-                source="Platforms",
-                gateway_client="Unknown",
+                source="platforms",
                 status="failed",
             )
             return response_data
@@ -427,10 +421,8 @@ class OAuth2Client:
         logger.info(publish_alert)
 
         create_publication_entry(
-            country_code="Unknown",
             platform_name=self.platform,
-            source="Generic",
-            gateway_client="Unknown",
+            source="platforms",
             status="published",
         )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."

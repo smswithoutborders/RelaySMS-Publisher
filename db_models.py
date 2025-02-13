@@ -15,13 +15,12 @@ database = connect()
 class Publications(Model):
     """Model representing the Publications Table."""
 
-    id = IntegerField(primary_key=True)
     country_code = CharField(null=True)
     platform_name = CharField()
     source = CharField()
     status = CharField()
     gateway_client = CharField(null=True)
-    date_time = DateTimeField(default=datetime.datetime.now)
+    date_created = DateTimeField(default=datetime.datetime.now)
 
     class Meta:
         """Meta class to define database connection and table name."""
