@@ -44,11 +44,9 @@ def get_publication(
 
     try:
         result = fetch_publication(start_date, end_date, filters)
-        print("result >>>", result)
         publications = [
             PublicationsRead(**publication.__data__) for publication in result["data"]
         ]
-        print("publications >>>", publications)
         return PublicationsResponse(
             total_publications=result.get("total_publications", 0),
             total_published=result.get("total_published", 0),
