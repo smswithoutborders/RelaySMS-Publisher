@@ -9,10 +9,22 @@ import logging
 from db_models import Publications
 from peewee import fn
 from typing import Optional
+from datetime import datetime, timedelta
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-def create_publication_entry(country_code, platform_name, source, gateway_client, status, date_created=None):
+
+def create_publication_entry(
+    platform_name,
+    source,
+    status,
+    country_code=None,
+    gateway_client=None,
+    date_created=None,
+):
     """
     Store a new publication entry with correct status.
 
@@ -31,20 +43,30 @@ def create_publication_entry(country_code, platform_name, source, gateway_client
         gateway_client=gateway_client,
     )
 
-    logging.INFO("Successfully logged publication")
-            
+    logger.info("Successfully logged publication")
+
     return publication
 
-def fetch_publication(start_date: datetime.date, end_date: datetime.date, filters: dict[str, Optional[str]]) -> dict[str, any]:
+
+def fetch_publication(
+    start_date: datetime.date,
+    end_date: datetime.date,
+    filters: dict[str, Optional[str]],
+) -> dict[str, any]:
     """Fetch publications based on filters."""
+
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+
     query = Publications.select().where(
-        (Publications.date_created >= start_date) & (Publications.date_created <= end_date)
+        (Publications.date_created >= start_datetime)
+        & (Publications.date_created <= end_datetime)
     )
-    
+
     for key, value in filters.items():
         if value:
             query = query.where(getattr(Publications, key) == value)
-            
+
     total_publications = query.count()
     total_published = query.where(Publications.status == "published").count()
     total_failed = query.where(Publications.status == "failed").count()
@@ -55,4 +77,3 @@ def fetch_publication(start_date: datetime.date, end_date: datetime.date, filter
         "total_published": total_published,
         "total_failed": total_failed,
     }
-    

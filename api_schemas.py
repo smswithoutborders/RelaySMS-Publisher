@@ -8,20 +8,22 @@ from pydantic import BaseModel
 import datetime
 from typing import Optional, List
 
+
 class PublicationsCreate(BaseModel):
-    country_code: str
+    country_code: Optional[str] = None
     platform_name: str
     source: str
     status: str
-    gateway_client: str
+    gateway_client: Optional[str] = None
     date_created: Optional[datetime.datetime] = None
+
 
 class PublicationsRead(PublicationsCreate):
     id: int
- 
+
+
 class PublicationsResponse(BaseModel):
     total_publications: int
     total_published: int
     total_failed: int
-    data: list[PublicationsRead]   
-    
+    data: list[PublicationsRead]

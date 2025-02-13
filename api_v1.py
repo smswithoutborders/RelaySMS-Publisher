@@ -8,13 +8,14 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 import datetime
 import logging
-from api_schemas import PublicationsRead, PublicationsResponse  
+from api_schemas import PublicationsRead, PublicationsResponse
 from publications import fetch_publication
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
 
 @router.get("/metrics/publications", response_model=PublicationsResponse)
 def get_publication(
@@ -27,10 +28,12 @@ def get_publication(
     gateway_client: Optional[str] = Query(None),
 ):
     """Retrieve metrics with optional filters."""
-    logger.info(f"Fetching metrics with filters: start_date={start_date}, end_date={end_date}, "
-                f"country_code={country_code}, platform_name={platform_name}, source={source}, "
-                f"status={status}, gateway_client={gateway_client}")
-    
+    logger.info(
+        f"Fetching metrics with filters: start_date={start_date}, end_date={end_date}, "
+        f"country_code={country_code}, platform_name={platform_name}, source={source}, "
+        f"status={status}, gateway_client={gateway_client}"
+    )
+
     filters = {
         "country_code": country_code,
         "platform_name": platform_name,
@@ -38,16 +41,19 @@ def get_publication(
         "status": status,
         "gateway_client": gateway_client,
     }
-    
+
     try:
         result = fetch_publication(start_date, end_date, filters)
-        publications = [PublicationsRead(**publication.__data__) for publication in result["data"]]
-
+        print("result >>>", result)
+        publications = [
+            PublicationsRead(**publication.__data__) for publication in result["data"]
+        ]
+        print("publications >>>", publications)
         return PublicationsResponse(
             total_publications=result.get("total_publications", 0),
             total_published=result.get("total_published", 0),
             total_failed=result.get("total_failed", 0),
-            data=publications
+            data=publications,
         )
 
     except Exception as e:
