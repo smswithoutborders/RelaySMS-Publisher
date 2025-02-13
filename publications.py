@@ -31,8 +31,7 @@ def create_publication_entry(country_code, platform_name, source, gateway_client
         gateway_client=gateway_client,
     )
 
-    log_func = logging.info if status == "published" else logging.error
-    log_func("Stored publication: %s", publication.__data__)
+    logging.INFO("Successfully logged publication")
             
     return publication
 
