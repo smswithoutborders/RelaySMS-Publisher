@@ -733,7 +733,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
         except Exception as exc:
             create_publication_entry(
-                platform_name=(platform_info["name"]),
+                platform_name=platform_info["name"],
                 source="platforms",
                 status="failed",
             )
