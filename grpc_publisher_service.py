@@ -705,12 +705,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             # )
             # if encrypt_payload_error:
             #     return encrypt_payload_error
-            create_publication_entry(
-                platform_name=platform_info["name"],
-                source="platforms",
-                status="published",
-            )
-
             return response(
                 message=f"Successfully published {platform_info['name']} message",
                 publisher_response=message_response,
