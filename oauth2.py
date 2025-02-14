@@ -13,6 +13,8 @@ from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.base_client import OAuthError
 import sentry_sdk
 
+from publications import create_publication_entry
+
 from utils import get_configs
 
 OAUTH2_CONFIGURATIONS = {
@@ -366,6 +368,11 @@ class OAuth2Client:
                     self.platform,
                     response_data,
                 )
+                create_publication_entry(
+                    platform_name=self.platform,
+                    source="platforms",
+                    status="failed",
+                )
                 return response_data
 
             tweet_id = response.json()["data"]["id"]
@@ -379,6 +386,11 @@ class OAuth2Client:
             level="info",
         )
         logger.info(publish_alert)
+        create_publication_entry(
+            platform_name=self.platform,
+            source="platforms",
+            status="published",
+        )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
 
     def _send_generic_message(self, message, url):
@@ -388,6 +400,11 @@ class OAuth2Client:
             response_data = response.text
             logger.error(
                 "Failed to send message for %s: %s", self.platform, response_data
+            )
+            create_publication_entry(
+                platform_name=self.platform,
+                source="platforms",
+                status="failed",
             )
             return response_data
 
@@ -402,4 +419,10 @@ class OAuth2Client:
             level="info",
         )
         logger.info(publish_alert)
+
+        create_publication_entry(
+            platform_name=self.platform,
+            source="platforms",
+            status="published",
+        )
         return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
