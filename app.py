@@ -5,7 +5,7 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 from fastapi import FastAPI
-from api_v1 import router  
+from api_v1 import router
 
 app = FastAPI()
 
