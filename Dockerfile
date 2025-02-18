@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     default-libmysqlclient-dev \
     supervisor \
-    curl && \
+    curl \
+    git \
+    pkg-config && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -17,6 +19,8 @@ RUN pip install --disable-pip-version-check --quiet --no-cache-dir -r requiremen
 COPY . .
 
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+RUN make build-setup
 
 ENV MODE=production
 
