@@ -30,6 +30,7 @@ from grpc_vault_entity_client import (
     update_entity_token,
     delete_entity_token,
 )
+from publications import create_publication_entry
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -699,7 +700,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             # )
             # if encrypt_payload_error:
             #     return encrypt_payload_error
-
             return response(
                 message=f"Successfully published {platform_info['name']} message",
                 publisher_response=message_response,
@@ -707,6 +707,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except telegram_client.Errors.RPCError as exc:
+            create_publication_entry(
+                platform_name=platform_info["name"], source="platforms", status="failed"
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -717,6 +720,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except OAuthError as exc:
+            create_publication_entry(
+                platform_name=platform_info["name"], source="platforms", status="failed"
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -727,6 +733,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except Exception as exc:
+            create_publication_entry(
+                platform_name=platform_info["name"], source="platforms", status="failed"
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
