@@ -52,8 +52,10 @@ def fetch_publication(
     start_date: datetime.date,
     end_date: datetime.date,
     filters: dict[str, Optional[str]],
+    page: int = 1,
+    page_size: int = 10,
 ) -> dict[str, any]:
-    """Fetch publications based on filters."""
+    """Fetch publications based on filters with pagination."""
 
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
@@ -71,9 +73,15 @@ def fetch_publication(
     total_published = query.where(Publications.status == "published").count()
     total_failed = query.where(Publications.status == "failed").count()
 
+    offset = (page - 1) * page_size
+    paginated_query = query.limit(page_size).offset(offset)
+
     return {
-        "data": list(query),
+        "data": list(paginated_query),
         "total_publications": total_publications,
         "total_published": total_published,
         "total_failed": total_failed,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total_publications + page_size - 1) // page_size, 
     }

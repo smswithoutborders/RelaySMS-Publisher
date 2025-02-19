@@ -22,8 +22,16 @@ class PublicationsRead(PublicationsCreate):
     id: int
 
 
+class Pagination(BaseModel):
+    total_records: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class PublicationsResponse(BaseModel):
     total_publications: int
     total_published: int
     total_failed: int
-    data: list[PublicationsRead]
+    data: List[PublicationsRead]
+    pagination: Optional[Pagination] = None
