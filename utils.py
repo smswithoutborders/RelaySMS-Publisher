@@ -2,20 +2,17 @@
 
 import os
 import base64
-import logging
 import json
 from functools import wraps
 from email.message import EmailMessage
 from peewee import DatabaseError
 
 import pymysql
+from logutils import get_logger
 
 SUPPORTED_PLATFORM_FILE_PATH = os.path.join("resources", "platforms.json")
 
-logging.basicConfig(
-    level=logging.INFO, format=("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def get_configs(config_name, strict=False, default_value=None):

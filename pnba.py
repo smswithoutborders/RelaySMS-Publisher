@@ -2,19 +2,13 @@
 Phone number-based Authentication Client Module.
 """
 
-import logging
 import re
 import datetime
 import asyncio
-import sentry_sdk
 import telegram_client
+from logutils import get_logger
 
-from publications import create_publication_entry
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PNBAClient:
@@ -138,17 +132,10 @@ class PNBAClient:
         asyncio.run(client.message(recipient=recipient, text=message))
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        publish_alert = (
-            f"Successfully sent message for '{self.platform}' at {timestamp}"
+        logger.info(
+            "Successfully sent message for '%s' at %s", self.platform, timestamp
         )
-        sentry_sdk.capture_message(
-            publish_alert,
-            level="info",
+        return (
+            f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}.",
+            None,
         )
-        logger.info(publish_alert)
-        create_publication_entry(
-            platform_name=self.platform,
-            source="platforms",
-            status="published",
-    )
-        return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."

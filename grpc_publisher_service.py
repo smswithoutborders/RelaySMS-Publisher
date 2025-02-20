@@ -1,6 +1,6 @@
 """gRPC Publisher Service"""
 
-import logging
+import datetime
 import base64
 import traceback
 import json
@@ -17,6 +17,7 @@ from utils import (
     parse_content,
     check_platform_supported,
     get_platform_details_by_shortcode,
+    get_configs,
 )
 from oauth2 import OAuth2Client
 import telegram_client
@@ -30,12 +31,15 @@ from grpc_vault_entity_client import (
     update_entity_token,
     delete_entity_token,
 )
-from publications import create_publication_entry
+from notification_dispatcher import dispatch_notifications
+from logutils import get_logger
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+MOCK_DELIVERY_SMS = get_configs("MOCK_DELIVERY_SMS")
+MOCK_DELIVERY_SMS = (
+    MOCK_DELIVERY_SMS.lower() == "true" if MOCK_DELIVERY_SMS is not None else False
 )
-logger = logging.getLogger(__name__)
+
+logger = get_logger(__name__)
 
 
 class PublisherService(publisher_pb2_grpc.PublisherServicer):
@@ -620,6 +624,44 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             pnba_client = PNBAClient(platform_name, json.loads(token))
             return pnba_client.send_message(message=message, recipient=receiver)
 
+        def handle_publication_notifications(platform_name, message, status="failed"):
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            message = (
+                f"RelaySMS Delivery: "
+                f"{'Failed to send' if status == 'failed' else 'Successfully sent'} "
+                f"message to {platform_name} at {timestamp}. "
+                f"{f'\n{message}' if message else ''}"
+            )
+            notifications = [
+                {
+                    "notification_type": "event",
+                    "target": "publication",
+                    "details": {
+                        "platform_name": platform_name,
+                        "source": "platforms",
+                        "status": status,
+                    },
+                },
+            ]
+            if MOCK_DELIVERY_SMS:
+                notifications.append(
+                    {
+                        "notification_type": "event",
+                        "target": "sentry",
+                        "message": message,
+                        "details": {"level": "info", "capture_type": "message"},
+                    }
+                )
+            else:
+                notifications.append(
+                    {
+                        "notification_type": "sms",
+                        "target": request.metadata["From"],
+                        "message": message,
+                    }
+                )
+            dispatch_notifications(notifications)
+
         try:
             invalid_fields_response = validate_fields()
             if invalid_fields_response:
@@ -671,9 +713,12 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if access_token_error:
                 return access_token_error
 
-            message_response = None
+            publication_response = None
+            publication_error = None
+            message_body = None
+
             if platform_info["service_type"] == "email":
-                message_response = handle_oauth2_email(
+                publication_response, publication_error = handle_oauth2_email(
                     device_id=device_id_hex,
                     phone_number=request.metadata["From"],
                     platform_name=platform_info["name"],
@@ -681,7 +726,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     token=access_token,
                 )
             elif platform_info["service_type"] == "text":
-                message_response = handle_oauth2_text(
+                publication_response, publication_error = handle_oauth2_text(
                     device_id=device_id_hex,
                     phone_number=request.metadata["From"],
                     platform_name=platform_info["name"],
@@ -689,10 +734,18 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     token=access_token,
                 )
             elif platform_info["service_type"] == "message":
-                message_response = handle_pnba_message(
+                publication_response, publication_error = handle_pnba_message(
                     platform_name=platform_info["name"],
                     content_parts=content_parts,
                     token=access_token,
+                )
+
+            if publication_error:
+                handle_publication_notifications(platform_info["name"], message_body)
+                return response(
+                    message=f"Failed to publish {platform_info['name']} message",
+                    publisher_response=publication_error,
+                    success=False,
                 )
 
             # payload_ciphertext, encrypt_payload_error = encrypt_message(
@@ -700,16 +753,17 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             # )
             # if encrypt_payload_error:
             #     return encrypt_payload_error
+            handle_publication_notifications(
+                platform_info["name"], message_body, status="published"
+            )
             return response(
                 message=f"Successfully published {platform_info['name']} message",
-                publisher_response=message_response,
+                publisher_response=publication_response,
                 success=True,
             )
 
         except telegram_client.Errors.RPCError as exc:
-            create_publication_entry(
-                platform_name=platform_info["name"], source="platforms", status="failed"
-            )
+            handle_publication_notifications(platform_info["name"], message_body)
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -720,9 +774,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except OAuthError as exc:
-            create_publication_entry(
-                platform_name=platform_info["name"], source="platforms", status="failed"
-            )
+            handle_publication_notifications(platform_info["name"], message_body)
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -733,9 +785,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except Exception as exc:
-            create_publication_entry(
-                platform_name=platform_info["name"], source="platforms", status="failed"
-            )
+            handle_publication_notifications(platform_info["name"], message_body)
             return self.handle_create_grpc_error_response(
                 context,
                 response,

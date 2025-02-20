@@ -10,5 +10,6 @@ pillow==11.1.0
 pycryptodome==3.21.0
 pymysql==1.1.1
 requests==2.32.3
-sentry-sdk==2.18.0
+sentry-sdk[grpcio]==2.22.0
 Telethon==1.37.0
+twilio==9.4.5

@@ -5,7 +5,7 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 import datetime
-from peewee import Model, CharField, DateTimeField, IntegerField
+from peewee import Model, CharField, DateTimeField
 from db import connect
 from utils import create_tables
 

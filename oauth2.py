@@ -3,7 +3,6 @@ OAuth2 Client Module.
 """
 
 import os
-import logging
 import base64
 import math
 import textwrap
@@ -11,11 +10,9 @@ import json
 import datetime
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.base_client import OAuthError
-import sentry_sdk
-
-from publications import create_publication_entry
 
 from utils import get_configs
+from logutils import get_logger
 
 OAUTH2_CONFIGURATIONS = {
     "gmail": {
@@ -51,10 +48,7 @@ OAUTH2_CONFIGURATIONS = {
     },
 }
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def load_credentials(platform_name):
@@ -326,7 +320,9 @@ class OAuth2Client:
             user_id (str, optional): The ID of the user to send the message on behalf of.
 
         Returns:
-            dict: The response from the platform.
+            tuple:
+                str | None: The response from the platform.
+                str | None: An error message, if any.
         """
         url = (
             self.urls["send_message_uri"].format(user_id)
@@ -368,30 +364,18 @@ class OAuth2Client:
                     self.platform,
                     response_data,
                 )
-                create_publication_entry(
-                    platform_name=self.platform,
-                    source="platforms",
-                    status="failed",
-                )
-                return response_data
+                return None, response_data
 
             tweet_id = response.json()["data"]["id"]
 
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        publish_alert = (
-            f"Successfully sent message for '{self.platform}' at {timestamp}"
+        logger.info(
+            "Successfully sent message for '%s' at %s", self.platform, timestamp
         )
-        sentry_sdk.capture_message(
-            publish_alert,
-            level="info",
+        return (
+            f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}.",
+            None,
         )
-        logger.info(publish_alert)
-        create_publication_entry(
-            platform_name=self.platform,
-            source="platforms",
-            status="published",
-        )
-        return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."
 
     def _send_generic_message(self, message, url):
         response = self.session.post(url, json=message)
@@ -401,28 +385,14 @@ class OAuth2Client:
             logger.error(
                 "Failed to send message for %s: %s", self.platform, response_data
             )
-            create_publication_entry(
-                platform_name=self.platform,
-                source="platforms",
-                status="failed",
-            )
-            return response_data
+            return None, response_data
 
         response_data = response.json()
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        publish_alert = (
-            f"Successfully sent message for '{self.platform}' at {timestamp}"
+        logger.info(
+            "Successfully sent message for '%s' at %s", self.platform, timestamp
         )
-        sentry_sdk.capture_message(
-            publish_alert,
-            level="info",
+        return (
+            f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}.",
+            None,
         )
-        logger.info(publish_alert)
-
-        create_publication_entry(
-            platform_name=self.platform,
-            source="platforms",
-            status="published",
-        )
-        return f"Successfully sent message to '{self.platform}' on your behalf at {timestamp}."

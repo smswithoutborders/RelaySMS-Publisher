@@ -1,14 +1,11 @@
 """Module for connecting to a database."""
 
-import logging
 from peewee import Database, DatabaseError, MySQLDatabase, SqliteDatabase
 from playhouse.shortcuts import ReconnectMixin
 from utils import ensure_database_exists, get_configs
+from logutils import get_logger
 
-logging.basicConfig(
-    level=logging.INFO, format=("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 DATABASE_CONFIGS = {
     "mode": get_configs("MODE", default_value="development"),

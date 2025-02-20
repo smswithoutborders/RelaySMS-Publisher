@@ -4,15 +4,14 @@ of the GNU General Public License, v. 3.0. If a copy of the GNU General
 Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from typing import List, Optional
 import datetime
-import logging
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 from api_schemas import PublicationsRead, PublicationsResponse
 from publications import fetch_publication
+from logutils import get_logger
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter()
 

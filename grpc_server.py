@@ -1,6 +1,5 @@
 """Publisher gRPC server"""
 
-import logging
 import os
 from concurrent import futures
 
@@ -9,13 +8,11 @@ from grpc_interceptor import ServerInterceptor
 import publisher_pb2_grpc
 
 from utils import get_configs
+from logutils import get_logger
 from sentry_config import initialize_sentry, SENTRY_ENABLED
 from grpc_publisher_service import PublisherService
 
-logging.basicConfig(
-    level=logging.INFO, format=("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
-logger = logging.getLogger("publisher.grpc.server")
+logger = get_logger("publisher.grpc.server")
 
 if SENTRY_ENABLED:
     initialize_sentry()

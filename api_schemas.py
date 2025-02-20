@@ -4,9 +4,9 @@ of the GNU General Public License, v. 3.0. If a copy of the GNU General
 Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
 """
 
-from pydantic import BaseModel
 import datetime
-from typing import Optional, List
+from typing import Optional
+from pydantic import BaseModel
 
 
 class PublicationsCreate(BaseModel):

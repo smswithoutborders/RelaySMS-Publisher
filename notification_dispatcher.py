@@ -4,6 +4,15 @@ of the GNU General Public License, v. 3.0. If a copy of the GNU General
 Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
 """
 
+import concurrent.futures
+import threading
+import sentry_sdk
+from logutils import get_logger
+from sms_outbound import send_with_twilio
+from publications import create_publication_entry
+
+logger = get_logger(__name__)
+
 
 def send_sms_notification(phone_number: str, message: str):
     """Send an SMS notification.
@@ -15,41 +24,73 @@ def send_sms_notification(phone_number: str, message: str):
     Returns:
         bool: True if sent successfully, False otherwise.
     """
+    send_with_twilio(phone_number, message)
 
 
-def send_sentry_notification(message: str, level: str = "error") -> bool:
-    """Send a notification to Sentry.
-
-    Args:
-        message (str): The message content.
-        level (str): Log level (e.g., "info", "error") ()
-
-    Returns:
-        bool: True if sent successfully, False otherwise.
-    """
-
-
-def send_event(event_type: str, status: str, details: dict = None) -> bool:
+def send_event(
+    event_type: str,
+    details: dict = None,
+    message: str = None,
+    exception: Exception = None,
+) -> None:
     """Store an event in the database.
-    
+
     Args:
         event_type (str): The type of event (e.g., "publication")
-        status (str): Status of the event (e.g., "success", "failed")
         details (dict, optional): Additional parameters.
+        message (str, optional): The message content.
+        exception (Exception, optional): The exception object.
     """
+    match event_type:
+        case "publication":
+            create_publication_entry(**details)
+        case "sentry":
+            level = details.get("level")
+            capture_type = details.get("capture_type")
+
+            sentry = getattr(sentry_sdk, f"capture_{capture_type}")
+            data = message if capture_type == "message" else exception
+            sentry(data, level=level)
+        case _:
+            logger.error("Invalid event type: %s", event_type)
 
 
-def dispatch_notification(
-    notification_type: str, target: str, message: str, status: str, level: str = "error"
-) -> bool:
-    """Dispatch a notification based on the specified type.
+def dispatch_notifications(notifications: list):
+    """Dispatch multiple notifications concurrently using ThreadPoolExecutor.
 
     Args:
-        notification_tyoe (str): Type of notification ("sms", "sentry") .
-        target (str): The recipient (phone number for SMS, or event type for event storage).
-        message (str): The message content.
-        level (str, optional): Log level for Sentry (default: "error").
-
-    Returns:
-        bool: True if dispatched successfully, False otherwise.
+        notifications (list): A list of notification dictionaries, each containing:
+            - notification_type (str): Type of notification ("sms", "event").
+            - target (str): The recipient (phone number for SMS, or event type for event storage).
+            - message (str, optional): The message content.
+            - exception (Exception, optional): The exception object.
+            - details (dict, optional): Additional parameters.
     """
+
+    def _dispatch(notification):
+        notification_type = notification.get("notification_type")
+        target = notification.get("target")
+        message = notification.get("message")
+        details = notification.get("details")
+        exception = notification.get("exception")
+
+        match notification_type:
+            case "sms":
+                send_sms_notification(phone_number=target, message=message)
+            case "event":
+                send_event(
+                    event_type=target,
+                    details=details,
+                    message=message,
+                    exception=exception,
+                )
+            case _:
+                logger.error("Invalid notification type: %s", notification_type)
+
+    def _run_in_background():
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for notification in notifications:
+                executor.submit(_dispatch, notification)
+
+    thread = threading.Thread(target=_run_in_background, daemon=True)
+    thread.start()

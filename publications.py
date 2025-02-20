@@ -4,17 +4,12 @@ of the GNU General Public License, v. 3.0. If a copy of the GNU General
 Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
 """
 
-import datetime
-import logging
-from db_models import Publications
-from peewee import fn
+from datetime import datetime
 from typing import Optional
-from datetime import datetime, timedelta
+from db_models import Publications
+from logutils import get_logger
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def create_publication_entry(
@@ -23,7 +18,6 @@ def create_publication_entry(
     status,
     country_code=None,
     gateway_client=None,
-    date_created=None,
 ):
     """
     Store a new publication entry with correct status.
