@@ -37,5 +37,4 @@ grpc-server-start:
 	@$(python) -u grpc_server.py
 	$(call log_message,INFO - gRPC server started successfully.)
 
-grpc-server-setup: vault-proto grpc-compile grpc-server-start
-	$(call log_message,INFO - gRPC server setup completed.)
+build-setup: vault-proto grpc-compile
