@@ -750,7 +750,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             if publication_error:
-                handle_publication_notifications(platform_info["name"], message_body)
+                handle_publication_notifications(
+                    platform_info["name"], message_body, country_code
+                )
                 return response(
                     message=f"Failed to publish {platform_info['name']} message",
                     publisher_response=publication_error,
@@ -775,7 +777,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except telegram_client.Errors.RPCError as exc:
-            handle_publication_notifications(platform_info["name"], message_body)
+            handle_publication_notifications(platform_info["name"], message_body, country_code)
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -786,7 +788,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except OAuthError as exc:
-            handle_publication_notifications(platform_info["name"], message_body)
+            handle_publication_notifications(platform_info["name"], message_body, country_code)
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -797,7 +799,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except Exception as exc:
-            handle_publication_notifications(platform_info["name"], message_body)
+            handle_publication_notifications(platform_info["name"], message_body, country_code)
             return self.handle_create_grpc_error_response(
                 context,
                 response,
