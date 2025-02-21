@@ -546,7 +546,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 payload_ciphertext=base64.b64encode(encrypted_content).decode("utf-8"),
             )
             if decrypt_payload_error:
-                return None, self.handle_create_grpc_error_response(
+                return None, None, self.handle_create_grpc_error_response(
                     context,
                     response,
                     decrypt_payload_error.details(),
@@ -559,7 +559,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     message=decrypt_payload_response.message,
                     success=decrypt_payload_response.success,
                 )
-            return decrypt_payload_response.payload_plaintext, None
+                
+            country_code = decrypt_payload_response.country_code 
+            return decrypt_payload_response.payload_plaintext, country_code, None
 
         # def encrypt_message(device_id, plaintext):
         #     encrypt_payload_response, encrypt_payload_error = encrypt_payload(
@@ -624,7 +626,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             pnba_client = PNBAClient(platform_name, json.loads(token))
             return pnba_client.send_message(message=message, recipient=receiver)
 
-        def handle_publication_notifications(platform_name, message, status="failed"):
+        def handle_publication_notifications(platform_name, message, status="failed", country_code=country_code):
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             message = (
                 f"RelaySMS Delivery: "
@@ -678,7 +680,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 return platform_info_error
 
             device_id_hex = device_id.hex() if device_id else None
-            decrypted_content, decrypt_error = decrypt_message(
+            decrypted_content, country_code, decrypt_error = decrypt_message(
                 device_id=device_id_hex,
                 phone_number=request.metadata["From"],
                 encrypted_content=encrypted_content,
@@ -754,7 +756,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             # if encrypt_payload_error:
             #     return encrypt_payload_error
             handle_publication_notifications(
-                platform_info["name"], message_body, status="published"
+                platform_info["name"], message_body, status="published", country_code=country_code
             )
             return response(
                 message=f"Successfully published {platform_info['name']} message",
