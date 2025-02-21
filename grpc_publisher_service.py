@@ -546,21 +546,25 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 payload_ciphertext=base64.b64encode(encrypted_content).decode("utf-8"),
             )
             if decrypt_payload_error:
-                return None, None, self.handle_create_grpc_error_response(
-                    context,
-                    response,
-                    decrypt_payload_error.details(),
-                    decrypt_payload_error.code(),
-                    error_prefix="Error Decrypting Platform Payload",
-                    send_to_sentry=True,
+                return (
+                    None,
+                    None,
+                    self.handle_create_grpc_error_response(
+                        context,
+                        response,
+                        decrypt_payload_error.details(),
+                        decrypt_payload_error.code(),
+                        error_prefix="Error Decrypting Platform Payload",
+                        send_to_sentry=True,
+                    ),
                 )
             if not decrypt_payload_response.success:
                 return None, response(
                     message=decrypt_payload_response.message,
                     success=decrypt_payload_response.success,
                 )
-                
-            country_code = decrypt_payload_response.country_code 
+
+            country_code = decrypt_payload_response.country_code
             return decrypt_payload_response.payload_plaintext, country_code, None
 
         # def encrypt_message(device_id, plaintext):
@@ -626,7 +630,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             pnba_client = PNBAClient(platform_name, json.loads(token))
             return pnba_client.send_message(message=message, recipient=receiver)
 
-        def handle_publication_notifications(platform_name, message, status="failed", country_code=country_code):
+        def handle_publication_notifications(
+            platform_name, message, status="failed", country_code=None
+        ):
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             message = (
                 f"RelaySMS Delivery: "
@@ -642,6 +648,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                         "platform_name": platform_name,
                         "source": "platforms",
                         "status": status,
+                        "country_code": country_code,
                     },
                 },
             ]
@@ -756,7 +763,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             # if encrypt_payload_error:
             #     return encrypt_payload_error
             handle_publication_notifications(
-                platform_info["name"], message_body, status="published", country_code=country_code
+                platform_info["name"],
+                message_body,
+                status="published",
+                country_code=country_code,
             )
             return response(
                 message=f"Successfully published {platform_info['name']} message",
