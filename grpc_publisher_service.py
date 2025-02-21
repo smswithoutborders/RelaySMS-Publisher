@@ -542,7 +542,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 payload_ciphertext=base64.b64encode(encrypted_content).decode("utf-8"),
             )
             if decrypt_payload_error:
-                return None, self.handle_create_grpc_error_response(
+                return None, None, self.handle_create_grpc_error_response(
                     context,
                     response,
                     decrypt_payload_error.details(),
@@ -555,7 +555,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     message=decrypt_payload_response.message,
                     success=decrypt_payload_response.success,
                 )
-            return decrypt_payload_response.payload_plaintext, None
+                
+            country_code = decrypt_payload_response.country_code 
+            return decrypt_payload_response.payload_plaintext, country_code, None
 
         # def encrypt_message(device_id, plaintext):
         #     encrypt_payload_response, encrypt_payload_error = encrypt_payload(
@@ -574,7 +576,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
         #             success=encrypt_payload_response.success,
         #         )
         #     return encrypt_payload_response.payload_ciphertext, None
-
         def handle_oauth2_email(platform_name, content_parts, token, **kwargs):
             from_email, to_email, cc_email, bcc_email, subject, body = content_parts
             email_message = create_email_message(
@@ -636,7 +637,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 return platform_info_error
 
             device_id_hex = device_id.hex() if device_id else None
-            decrypted_content, decrypt_error = decrypt_message(
+            decrypted_content, country_code, decrypt_error = decrypt_message(
                 device_id=device_id_hex,
                 phone_number=request.metadata["From"],
                 encrypted_content=encrypted_content,
@@ -708,7 +709,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
         except telegram_client.Errors.RPCError as exc:
             create_publication_entry(
-                platform_name=platform_info["name"], source="platforms", status="failed"
+                platform_name=platform_info["name"], source="platforms", status="failed", country_code=country_code
             )
             return self.handle_create_grpc_error_response(
                 context,
@@ -721,7 +722,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
         except OAuthError as exc:
             create_publication_entry(
-                platform_name=platform_info["name"], source="platforms", status="failed"
+                platform_name=platform_info["name"], source="platforms", status="failed", country_code=country_code
             )
             return self.handle_create_grpc_error_response(
                 context,
@@ -734,7 +735,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
         except Exception as exc:
             create_publication_entry(
-                platform_name=platform_info["name"], source="platforms", status="failed"
+                platform_name=platform_info["name"], source="platforms", status="failed", country_code=country_code
             )
             return self.handle_create_grpc_error_response(
                 context,
