@@ -34,10 +34,9 @@ from grpc_vault_entity_client import (
 from notification_dispatcher import dispatch_notifications
 from logutils import get_logger
 
-MOCK_DELIVERY_SMS = get_configs("MOCK_DELIVERY_SMS")
 MOCK_DELIVERY_SMS = (
-    MOCK_DELIVERY_SMS.lower() == "true" if MOCK_DELIVERY_SMS is not None else False
-)
+    get_configs("MOCK_DELIVERY_SMS", default_value="true") or ""
+).lower() == "true"
 
 logger = get_logger(__name__)
 
@@ -777,7 +776,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except telegram_client.Errors.RPCError as exc:
-            handle_publication_notifications(platform_info["name"], message_body, country_code)
+            handle_publication_notifications(
+                platform_info["name"], message_body, country_code
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -788,7 +789,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except OAuthError as exc:
-            handle_publication_notifications(platform_info["name"], message_body, country_code)
+            handle_publication_notifications(
+                platform_info["name"], message_body, country_code
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -799,7 +802,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except Exception as exc:
-            handle_publication_notifications(platform_info["name"], message_body, country_code)
+            handle_publication_notifications(
+                platform_info["name"], message_body, country_code
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
