@@ -750,7 +750,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
             if publication_error:
                 handle_publication_notifications(
-                    platform_info["name"], message_body, country_code
+                    platform_info["name"],
+                    message_body,
+                    status="failed",
+                    country_code=country_code,
                 )
                 return response(
                     message=f"Failed to publish {platform_info['name']} message",
