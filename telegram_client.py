@@ -1,6 +1,5 @@
 """Telegram Client"""
 
-import logging
 import os
 import shutil
 import json
@@ -17,12 +16,9 @@ from telethon.errors import (
     PasswordHashInvalidError,
     RPCError,
 )
+from logutils import get_logger
 
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Errors:

@@ -155,3 +155,5 @@ dmypy.json
 
 # Except for publisher.proto
 !publisher.proto
+
+*_credentials.json

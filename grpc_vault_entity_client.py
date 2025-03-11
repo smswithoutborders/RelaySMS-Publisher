@@ -1,6 +1,5 @@
 """Vault gRPC Client"""
 
-import logging
 import functools
 import grpc
 
@@ -8,11 +7,9 @@ import vault_pb2
 import vault_pb2_grpc
 
 from utils import get_configs, mask_sensitive_info
+from logutils import get_logger
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def get_channel(internal=True):
