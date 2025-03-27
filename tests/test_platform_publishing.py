@@ -19,49 +19,25 @@ from logutils import get_logger
 logger = get_logger(__name__)
 
 
-class GrpcError:
-    """Represents a gRPC error with a code and details."""
+@pytest.fixture
+def generate_device_id():
+    """Fixture to generate a device ID."""
 
-    def __init__(self, code, details):
-        self.code = code
-        self.details = details
+    def _generate():
+        return b""
 
-
-def initialize_keypair(db_path):
-    """Initializes a keypair and returns it along with its public key."""
-    keypair = x25519(db_path)
-    return keypair, keypair.init()
-
-
-def encrypt_message(message, shared_key, server_pub_key, keystore_path):
-    """Encrypts a message using the provided shared key and server public key."""
-    state = States()
-    Ratchets.alice_init(state, shared_key, server_pub_key, keystore_path)
-    header, ciphertext = Ratchets.encrypt(
-        state=state, data=message.encode(), AD=server_pub_key
-    )
-    serialized_header = header.serialize()
-    encrypted_payload = (
-        struct.pack("<i", len(serialized_header)) + serialized_header + ciphertext
-    )
-    return encrypted_payload
-
-
-def create_payload(encrypted_payload, platform_shortcode, device_id):
-    """Creates a payload from the encrypted message payload."""
-    payload = (
-        struct.pack("<i", len(encrypted_payload))
-        + platform_shortcode
-        + encrypted_payload
-        + device_id
-    )
-    encoded_payload = base64.b64encode(payload).decode()
-    return encoded_payload
+    return _generate
 
 
 @pytest.fixture
 def keypairs(tmp_path):
     """Fixture to initialize and return keypairs for testing."""
+
+    def initialize_keypair(db_path):
+        """Initializes a keypair and returns it along with its public key."""
+        keypair = x25519(db_path)
+        return keypair, keypair.init()
+
     pub_keypair, pub_pk = initialize_keypair(tmp_path / "pub.db")
     did_keypair, did_pk = initialize_keypair(tmp_path / "did.db")
     return pub_keypair, pub_pk, did_keypair, did_pk
@@ -70,6 +46,13 @@ def keypairs(tmp_path):
 @pytest.fixture
 def authenticated_entity(grpc_stub):
     """Fixture to authenticate an entity using gRPC."""
+
+    class GrpcError:
+        """Represents a gRPC error with a code and details."""
+
+        def __init__(self, code, details):
+            self.code = code
+            self.details = details
 
     def _authenticated_entity(**kwargs):
         did_pk = (
@@ -103,18 +86,57 @@ def authenticated_entity(grpc_stub):
     return _authenticated_entity
 
 
-def test_gmail_publishing(
+def encrypt_message(message, shared_key, server_pub_key, keystore_path):
+    """Encrypts a message using the provided shared key and server public key."""
+    state = States()
+    Ratchets.alice_init(state, shared_key, server_pub_key, keystore_path)
+    header, ciphertext = Ratchets.encrypt(
+        state=state, data=message.encode(), AD=server_pub_key
+    )
+    serialized_header = header.serialize()
+    encrypted_payload = (
+        struct.pack("<i", len(serialized_header)) + serialized_header + ciphertext
+    )
+    return encrypted_payload
+
+
+def create_payload(encrypted_payload, platform_shortcode, device_id):
+    """Creates a payload from the encrypted message payload."""
+    payload = (
+        struct.pack("<i", len(encrypted_payload))
+        + platform_shortcode
+        + encrypted_payload
+        + device_id
+    )
+    encoded_payload = base64.b64encode(payload).decode()
+    return encoded_payload
+
+
+@pytest.mark.parametrize(
+    "platform, platform_shortcode, use_device_id",
+    [
+        ("gmail", b"g", False),  # Gmail with phone number
+        ("gmail", b"g", True),  # Gmail with device ID
+    ],
+)
+def test_platform_publishing(
     authenticated_entity,
     keypairs,
     tmp_path,
     send_message,
     credentials,
     messages,
+    generate_device_id,
+    platform,
+    platform_shortcode,
+    use_device_id,
 ):
     """Tests the Gmail publishing functionality."""
     pub_keypair, pub_pk, _, did_pk = keypairs
     phone_number = credentials["phone_number"]
     password = credentials["password"]
+
+    device_id = generate_device_id() if use_device_id else b""
 
     res, error = authenticated_entity(
         phone_number=phone_number,
@@ -148,19 +170,17 @@ def test_gmail_publishing(
 
     keystore_path = tmp_path / "state.db"
 
-    gmail_message = messages["gmail_message"]
+    platform_message = messages[f"{platform}_message"]
     try:
         encrypted_payload = encrypt_message(
-            gmail_message, shared_key, server_pub_key, keystore_path
+            platform_message, shared_key, server_pub_key, keystore_path
         )
     except Exception as e:
         pytest.fail(f"Message encryption failed: {str(e)}")
 
-    platoform_shortcode = b"g"
-    decive_id = b""
     try:
         encoded_payload = create_payload(
-            encrypted_payload, platoform_shortcode, decive_id
+            encrypted_payload, platform_shortcode, device_id
         )
     except Exception as e:
         pytest.fail(f"Payload creation failed: {str(e)}")
