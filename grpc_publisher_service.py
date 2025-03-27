@@ -33,6 +33,7 @@ from grpc_vault_entity_client import (
 )
 from notification_dispatcher import dispatch_notifications
 from logutils import get_logger
+from test_client import TestClient
 
 MOCK_DELIVERY_SMS = get_configs("MOCK_DELIVERY_SMS")
 MOCK_DELIVERY_SMS = (
@@ -514,6 +515,45 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return platform_info, None
 
+        def handle_test_client(
+            start_time,
+            sms_sent_time,
+            sms_received_time,
+            sms_routed_time,
+            status,
+            msisdn,
+        ):
+            test_error = TestClient().send_test_message(
+                start_time=start_time,
+                sms_sent_time=sms_sent_time,
+                sms_received_time=sms_received_time,
+                sms_routed_time=sms_routed_time,
+                status=status,
+                msisdn=msisdn,
+            )
+
+            if test_error:
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    test_error,
+                    grpc.StatusCode.INTERNAL,
+                    error_prefix="Error Saving Test Message",
+                    send_to_sentry=True,
+                )
+            return response(
+                message="Successfully saved test message to the database",
+                publisher_response={
+                    "start_time": start_time,
+                    "sms_sent_time": sms_sent_time,
+                    "sms_received_time": sms_received_time,
+                    "sms_routed_time": sms_routed_time,
+                    "status": status,
+                    "msisdn": msisdn,
+                },
+                success=True,
+            )
+
         def get_access_token(
             device_id, phone_number, platform_name, account_identifier
         ):
@@ -676,6 +716,24 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             platform_info, platform_info_error = get_platform_info(platform_letter)
             if platform_info_error:
                 return platform_info_error
+
+            if platform_info["service_type"] == "test":
+                (
+                    start_time,
+                    sms_sent_time,
+                    sms_received_time,
+                    sms_routed_time,
+                    status,
+                ) = decoded_payload
+                msisdn = request.metadata.get("From", "")
+                return handle_test_client(
+                    start_time,
+                    sms_sent_time,
+                    sms_received_time,
+                    sms_routed_time,
+                    status,
+                    msisdn,
+                )
 
             device_id_hex = device_id.hex() if device_id else None
             decrypted_content, decrypt_error = decrypt_message(
