@@ -14,6 +14,10 @@ from smswithoutborders_libsig.ratchets import Ratchets, States
 import vault_pb2
 import vault_pb2_grpc
 
+from logutils import get_logger
+
+logger = get_logger(__name__)
+
 
 class GrpcError:
     """Represents a gRPC error with a code and details."""
@@ -43,15 +47,13 @@ def encrypt_message(message, shared_key, server_pub_key, keystore_path):
     return encrypted_payload
 
 
-def create_payload(encrypted_payload):
+def create_payload(encrypted_payload, platform_shortcode, device_id):
     """Creates a payload from the encrypted message payload."""
     payload = (
-        bytes([0])
-        + bytes([10])
-        + bytes([1])
-        + struct.pack("<H", len(encrypted_payload))
-        + b"e"
+        struct.pack("<i", len(encrypted_payload))
+        + platform_shortcode
         + encrypted_payload
+        + device_id
     )
     encoded_payload = base64.b64encode(payload).decode()
     return encoded_payload
@@ -123,8 +125,8 @@ def test_gmail_publishing(
     if error:
         pytest.fail(f"Authentication failed: {error.code} -- {error.details}")
 
-    print(">>>>>>", res)
     if not res.requires_ownership_proof:
+        logger.error("server Response: %s", res)
         pytest.fail("Ownership proof was not required when it should be.")
 
     ownership_proof_response = credentials["ownership_proof_response"]
@@ -154,12 +156,17 @@ def test_gmail_publishing(
     except Exception as e:
         pytest.fail(f"Message encryption failed: {str(e)}")
 
+    platoform_shortcode = b"g"
+    decive_id = b""
     try:
-        encoded_payload = create_payload(encrypted_payload)
+        encoded_payload = create_payload(
+            encrypted_payload, platoform_shortcode, decive_id
+        )
     except Exception as e:
         pytest.fail(f"Payload creation failed: {str(e)}")
 
     response = send_message(phone_number, encoded_payload)
+    logger.info("Response: %s", response.json())
     assert (
         response.status_code == 200
     ), f"Expected status code 200, got {response.status_code}"
