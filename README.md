@@ -1,4 +1,4 @@
-# SMSWithoutBorders Publisher Documentation
+# Publisher Documentation
 
 ## Supported Platforms
 

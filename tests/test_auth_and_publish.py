@@ -119,7 +119,7 @@ def create_payload(encrypted_payload, platform_shortcode, device_id):
         ("gmail", b"g", True),  # Gmail with device ID
     ],
 )
-def test_platform_publishing(
+def test_auth_and_publish(
     authenticated_entity,
     keypairs,
     tmp_path,
