@@ -678,7 +678,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if decoding_error:
                 return decoding_error
 
-            print(">>>>>>>>>", decoded_payload)
             platform_info, platform_info_error = get_platform_info(
                 decoded_payload.get("platform_shortcode")
             )
