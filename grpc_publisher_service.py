@@ -23,6 +23,7 @@ from oauth2 import OAuth2Client
 import telegram_client
 from pnba import PNBAClient
 from relaysms_payload import decode_relay_sms_payload
+from content_parser import decode_content, extract_content
 from grpc_vault_entity_client import (
     list_entity_stored_tokens,
     store_entity_token,
@@ -484,9 +485,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         def decode_payload():
-            platform_letter, encrypted_content, device_id, decode_error = (
-                decode_relay_sms_payload(request.content)
-            )
+            decoded_result, decode_error = decode_content(request.content)
             if decode_error:
                 return None, self.handle_create_grpc_error_response(
                     context,
@@ -497,7 +496,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     error_type="UNKNOWN",
                     send_to_sentry=True,
                 )
-            return (platform_letter, encrypted_content, device_id), None
+            return decoded_result, None
 
         def get_platform_info(platform_letter):
             platform_info, platform_err = get_platform_details_by_shortcode(
@@ -679,31 +678,36 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if decoding_error:
                 return decoding_error
 
-            platform_letter, encrypted_content, device_id = decoded_payload
-
-            platform_info, platform_info_error = get_platform_info(platform_letter)
+            print(">>>>>>>>>", decoded_payload)
+            platform_info, platform_info_error = get_platform_info(
+                decoded_payload.get("platform_shortcode")
+            )
             if platform_info_error:
                 return platform_info_error
 
-            device_id_hex = device_id.hex() if device_id else None
+            device_id_hex = (
+                decoded_payload.get("device_id").hex()
+                if decoded_payload.get("device_id")
+                else None
+            )
             decrypted_content, country_code, decrypt_error = decrypt_message(
                 device_id=device_id_hex,
                 phone_number=request.metadata["From"],
-                encrypted_content=encrypted_content,
+                encrypted_content=decoded_payload.get("ciphertext"),
             )
 
             if decrypt_error:
                 return decrypt_error
 
-            content_parts, parse_error = parse_content(
+            content_parts, extraction_error = extract_content(
                 platform_info["service_type"], decrypted_content
             )
 
-            if parse_error:
+            if extraction_error:
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
-                    parse_error,
+                    extraction_error,
                     grpc.StatusCode.INVALID_ARGUMENT,
                     send_to_sentry=True,
                 )

@@ -25,7 +25,7 @@ The Publisher supports three formats of content:
 | **Version**              | **Hexadecimal Value** | **Decimal Value** | **Description**                                             |
 | ------------------------ | --------------------- | ----------------- | ----------------------------------------------------------- |
 | [v0](#payload-format-v0) | `None`                | `None`            | No explicit version marker, backward-compatible formats.    |
-| [v1](#payload-format-v1) | `0x0a`                | `10`              | Includes a version marker as the first byte of the payload. |
+| [v1](#payload-format-v1) | `0x01`                | `1`               | Includes a version marker as the first byte of the payload. |
 
 ## Payload Format V0
 
@@ -66,16 +66,14 @@ print(encoded)
 
 > [See available versions](#supported-payload-versions)
 
-| **Payload Type**                    | **Switch** | **Description**              |
-| ----------------------------------- | ---------- | ---------------------------- |
-| [Message Payload](#message-payload) | `0`        | Contains a client public key |
+| **Payload Type**                    | **Description**              |
+| ----------------------------------- | ---------------------------- |
+| [Message Payload](#message-payload) | Contains a client public key |
 
 ### Message Payload
 
-- **Switch**: `0`
 - **Format**:
   - **1 byte**: Version Marker. [See available versions](#supported-payload-versions).
-  - **1 byte**: Switch Value.
   - **2 bytes**: Ciphertext Length.
   - **1 bytes**: Device ID Length.
   - **1 bytes**: Access Token Length.
@@ -94,15 +92,14 @@ print(encoded)
 #### Visual Representation:
 
 ```plaintext
-+----------------+--------------+-------------------+------------------+---------------------+----------------------+--------------------+-----------------+-----------------+-----------------+-----------------+---------------+
-| Version Marker | Switch Value | Ciphertext Length | Device ID Length | Access Token Length | Refresh Token Length | Platform shortcode | Ciphertext      | Device ID       | Access Token    | Refresh Token   | Language Code |
-| (1 byte)       | (1 byte)     | (2 bytes)         | (1 byte)         | (1 byte)            | (1 byte)             | (1 byte)           | (Variable size) | (Variable size) | (Variable size) | (Variable size) | (2 bytes)     |
-+----------------+--------------+-------------------+------------------+---------------------+----------------------+--------------------+-----------------+-----------------+-----------------+-----------------+---------------+
++----------------+-------------------+------------------+---------------------+----------------------+--------------------+-----------------+-----------------+-----------------+-----------------+---------------+
+| Version Marker | Ciphertext Length | Device ID Length | Access Token Length | Refresh Token Length | Platform shortcode | Ciphertext      | Device ID       | Access Token    | Refresh Token   | Language Code |
+| (1 byte)       | (2 bytes)         | (1 byte)         | (1 byte)            | (1 byte)             | (1 byte)           | (Variable size) | (Variable size) | (Variable size) | (Variable size) | (2 bytes)     |
++----------------+-------------------+------------------+---------------------+----------------------+--------------------+-----------------+-----------------+-----------------+-----------------+---------------+
 ```
 
 ```python
 version_marker = b'\x0a'
-switch_value = b'\x00'
 platform_shortcode = b'g'
 language_code = b'en'
 device_id = b'...'
@@ -111,7 +108,6 @@ refresh_token = b'...'
 
 payload = (
    version_marker +
-   switch_value +
    struct.pack("<H", len(encrypted_content)) +
    bytes([len(device_id)]) +
    bytes([len(access_token)]) +

@@ -56,6 +56,12 @@ def credentials(test_config):
 
 
 @pytest.fixture
+def tokens(test_config):
+    """Fixture to provide tokens."""
+    return test_config["tokens"]
+
+
+@pytest.fixture
 def messages(test_config):
     """Fixture to provide messages."""
     return test_config["messages"]

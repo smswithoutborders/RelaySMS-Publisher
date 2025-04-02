@@ -48,7 +48,7 @@ def test_decode_v0_valid(payload, expected):
     "payload, expected",
     [
         (
-            b"\x0a\x00" + struct.pack("<H", 5) + b"\x00\x00\x00eabcde",
+            b"\x01" + struct.pack("<H", 5) + b"\x00\x00\x00eabcde",
             {
                 "version": "v1",
                 "len_ciphertext": 5,
@@ -64,7 +64,7 @@ def test_decode_v0_valid(payload, expected):
             },
         ),
         (
-            b"\x0a\x00" + struct.pack("<H", 3) + b"\x05\x05\x05txyz11223a1122b2233fr",
+            b"\x01" + struct.pack("<H", 3) + b"\x05\x05\x05txyz11223a1122b2233fr",
             {
                 "version": "v1",
                 "len_ciphertext": 3,
@@ -87,28 +87,21 @@ def test_decode_v1_valid(payload, expected):
     assert result == expected
 
 
-@pytest.mark.parametrize("payload", [b"\x0a\x05invalid"])
-def test_decode_v1_invalid(payload):
-    result, error = decode_v1(payload)
-    assert result is None
-    assert isinstance(error, ValueError)
-
-
 @pytest.mark.parametrize(
     "content, expected",
     [
         (
-            base64.b64encode(struct.pack("<i", 3) + b"xyz").decode(),
+            base64.b64encode(struct.pack("<i", 3) + b"xyza").decode(),
             {
                 "len_ciphertext": 3,
                 "platform_shortcode": "x",
-                "ciphertext": b"yz",
+                "ciphertext": b"yza",
                 "device_id": b"",
             },
         ),
         (
             base64.b64encode(
-                b"\x0a\x00" + struct.pack("<H", 4) + b"\x00\x00\x00edatafr"
+                b"\x01" + struct.pack("<H", 4) + b"\x00\x00\x00edatafr"
             ).decode(),
             {
                 "version": "v1",

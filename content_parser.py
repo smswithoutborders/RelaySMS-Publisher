@@ -38,7 +38,6 @@ def parse_payload(payload: bytes, format_spec: list) -> dict:
                 value = chr(value)
         else:
             size = struct.calcsize(fmt)
-            print(f"size: {size}")
             value = struct.unpack(fmt, payload[offset : offset + size])[0]
             offset += size
 
@@ -92,53 +91,47 @@ def decode_v1(payload: bytes) -> tuple:
     Returns:
         tuple: A dictionary of parsed values and an optional error.
     """
-    version = f"v{payload[0]-9}"
-    switch_value = payload[1]
-    parsers = {
-        0: [
-            FormatSpec(key="len_ciphertext", fmt="<H", decoding=None, use_chr=False),
-            FormatSpec(key="len_device_id", fmt=1, decoding=None, use_chr=False),
-            FormatSpec(key="len_access_token", fmt=1, decoding=None, use_chr=False),
-            FormatSpec(key="len_refresh_token", fmt=1, decoding=None, use_chr=False),
-            FormatSpec(key="platform_shortcode", fmt=1, decoding=None, use_chr=True),
-            FormatSpec(
-                key="ciphertext",
-                fmt=lambda d: d["len_ciphertext"],
-                decoding=None,
-                use_chr=False,
-            ),
-            FormatSpec(
-                key="device_id",
-                fmt=lambda d: d["len_device_id"],
-                decoding=None,
-                use_chr=False,
-            ),
-            FormatSpec(
-                key="access_token",
-                fmt=lambda d: d["len_access_token"],
-                decoding=None,
-                use_chr=False,
-            ),
-            FormatSpec(
-                key="refresh_token",
-                fmt=lambda d: d["len_refresh_token"],
-                decoding=None,
-                use_chr=False,
-            ),
-            FormatSpec(
-                key="language",
-                fmt=2,
-                decoding="utf-8",
-                use_chr=False,
-            ),
-        ],
-    }
-
-    if switch_value not in parsers:
-        return None, ValueError(f"Invalid switch value: {switch_value}")
+    version = f"v{payload[0]}"
+    parsers = [
+        FormatSpec(key="len_ciphertext", fmt="<H", decoding=None, use_chr=False),
+        FormatSpec(key="len_device_id", fmt=1, decoding=None, use_chr=False),
+        FormatSpec(key="len_access_token", fmt=1, decoding=None, use_chr=False),
+        FormatSpec(key="len_refresh_token", fmt=1, decoding=None, use_chr=False),
+        FormatSpec(key="platform_shortcode", fmt=1, decoding=None, use_chr=True),
+        FormatSpec(
+            key="ciphertext",
+            fmt=lambda d: d["len_ciphertext"],
+            decoding=None,
+            use_chr=False,
+        ),
+        FormatSpec(
+            key="device_id",
+            fmt=lambda d: d["len_device_id"],
+            decoding=None,
+            use_chr=False,
+        ),
+        FormatSpec(
+            key="access_token",
+            fmt=lambda d: d["len_access_token"],
+            decoding=None,
+            use_chr=False,
+        ),
+        FormatSpec(
+            key="refresh_token",
+            fmt=lambda d: d["len_refresh_token"],
+            decoding=None,
+            use_chr=False,
+        ),
+        FormatSpec(
+            key="language",
+            fmt=2,
+            decoding="utf-8",
+            use_chr=False,
+        ),
+    ]
 
     try:
-        result = parse_payload(payload[2:], parsers[switch_value])
+        result = parse_payload(payload[1:], parsers)
         result["version"] = version
         return result, None
     except Exception as e:
@@ -156,10 +149,9 @@ def decode_content(content: str) -> tuple:
     """
     try:
         payload = base64.b64decode(content)
-        first_byte = payload[0]
-        if first_byte >= 10:
-            return decode_v1(payload)
-        return decode_v0(payload)
+        if is_v0_payload(payload):
+            return decode_v0(payload)
+        return decode_v1(payload)
     except Exception as e:
         return None, e
 
@@ -202,3 +194,26 @@ def extract_content(service_type: str, content: str) -> tuple:
         return (sender, receiver, message), None
 
     return None, "Invalid service_type. Must be 'email', 'text', or 'message'."
+
+
+def is_v0_payload(payload):
+    """Determines if the given payload follows v0 format."""
+    try:
+        # Ensure at least 5 bytes exist (4 for length + 1 for platform_shortcode)
+        if len(payload) < 5:
+            return False
+
+        # Extract the first 4 bytes as a little-endian integer (ciphertext length)
+        ciphertext_length = struct.unpack("<i", payload[:4])[0]
+
+        # Ensure ciphertext_length is non-negative
+        if ciphertext_length < 0:
+            return False
+
+        # Ensure the payload has enough bytes for ciphertext + device_id
+        if len(payload) >= (4 + 1 + ciphertext_length):
+            return True
+
+        return False
+    except Exception:
+        return False
