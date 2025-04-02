@@ -14,7 +14,6 @@ import publisher_pb2_grpc
 
 from utils import (
     create_email_message,
-    parse_content,
     check_platform_supported,
     get_platform_details_by_shortcode,
     get_configs,
@@ -22,7 +21,6 @@ from utils import (
 from oauth2 import OAuth2Client
 import telegram_client
 from pnba import PNBAClient
-from relaysms_payload import decode_relay_sms_payload
 from content_parser import decode_content, extract_content
 from grpc_vault_entity_client import (
     list_entity_stored_tokens,
@@ -34,12 +32,15 @@ from grpc_vault_entity_client import (
 )
 from notification_dispatcher import dispatch_notifications
 from logutils import get_logger
+from translations import Localization
 
 MOCK_DELIVERY_SMS = (
     get_configs("MOCK_DELIVERY_SMS", default_value="true") or ""
 ).lower() == "true"
 
 logger = get_logger(__name__)
+loc = Localization()
+t = loc.translate
 
 
 class PublisherService(publisher_pb2_grpc.PublisherServicer):
@@ -629,14 +630,29 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             return pnba_client.send_message(message=message, recipient=receiver)
 
         def handle_publication_notifications(
-            platform_name, message, status="failed", country_code=None
+            platform_name, status="failed", country_code=None, **kwargs
         ):
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                loc.set_locale(kwargs.get("language") or "en")
+            except ValueError as e:
+                logger.error(e)
+
+            timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S (%Z)"
+            )
             message = (
-                f"RelaySMS Delivery: "
-                f"{'Failed to send' if status == 'failed' else 'Successfully sent'} "
-                f"message to {platform_name} at {timestamp}. "
-                f"{f'\n{message}' if message else ''}"
+                t("sms_delivery_message")
+                .format(
+                    additional_data=kwargs.get("additional_data"),
+                    platform_name=platform_name,
+                    delivery_status=(
+                        t("delivery_status_failed")
+                        if status == "failed"
+                        else t("delivery_status_success")
+                    ),
+                    timestamp=timestamp,
+                )
+                .replace("\\n", "\n")
             )
             notifications = [
                 {
@@ -726,7 +742,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
             publication_response = None
             publication_error = None
-            message_body = None
+            message_body = ""
 
             if platform_info["service_type"] == "email":
                 publication_response, publication_error = handle_oauth2_email(
@@ -754,9 +770,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if publication_error:
                 handle_publication_notifications(
                     platform_info["name"],
-                    message_body,
                     status="failed",
                     country_code=country_code,
+                    additional_data=message_body,
+                    language=decoded_payload.get("language"),
                 )
                 return response(
                     message=f"Failed to publish {platform_info['name']} message",
@@ -771,9 +788,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             #     return encrypt_payload_error
             handle_publication_notifications(
                 platform_info["name"],
-                message_body,
                 status="published",
                 country_code=country_code,
+                additional_data=message_body,
+                language=decoded_payload.get("language"),
             )
             return response(
                 message=f"Successfully published {platform_info['name']} message",
@@ -784,9 +802,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
         except telegram_client.Errors.RPCError as exc:
             handle_publication_notifications(
                 platform_info["name"],
-                message_body,
                 status="failed",
                 country_code=country_code,
+                language=decoded_payload.get("language"),
             )
             return self.handle_create_grpc_error_response(
                 context,
@@ -800,9 +818,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
         except OAuthError as exc:
             handle_publication_notifications(
                 platform_info["name"],
-                message_body,
                 status="failed",
                 country_code=country_code,
+                language=decoded_payload.get("language"),
             )
             return self.handle_create_grpc_error_response(
                 context,
@@ -816,9 +834,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
         except Exception as exc:
             handle_publication_notifications(
                 platform_info["name"],
-                message_body,
                 status="failed",
                 country_code=country_code,
+                language=decoded_payload.get("language"),
             )
             return self.handle_create_grpc_error_response(
                 context,

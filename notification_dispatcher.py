@@ -50,6 +50,7 @@ def send_event(
 
             sentry = getattr(sentry_sdk, f"capture_{capture_type}")
             data = message if capture_type == "message" else exception
+            logger.debug("Notification event: %s", data)
             sentry(data, level=level)
         case _:
             logger.error("Invalid event type: %s", event_type)
