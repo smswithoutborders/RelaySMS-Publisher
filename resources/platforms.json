@@ -25,5 +25,14 @@
     "icon_svg": "https://raw.githubusercontent.com/smswithoutborders/SMSWithoutBorders-Publisher/main/resources/icons/telegram.svg",
     "icon_png": "https://raw.githubusercontent.com/smswithoutborders/SMSWithoutBorders-Publisher/main/resources/icons/telegram.png",
     "support_url_scheme": false
+  },
+  {
+    "name": "ReliabilityTest",
+    "shortcode": "r",
+    "service_type": "test",
+    "protocol_type": "event",
+    "icon_svg": "",
+    "icon_png": "",
+    "support_url_scheme": false
   }
 ]

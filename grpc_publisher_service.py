@@ -33,6 +33,7 @@ from grpc_vault_entity_client import (
 )
 from notification_dispatcher import dispatch_notifications
 from logutils import get_logger
+from test_client import TestClient
 
 MOCK_DELIVERY_SMS = get_configs("MOCK_DELIVERY_SMS")
 MOCK_DELIVERY_SMS = (
@@ -513,6 +514,104 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     send_to_sentry=True,
                 )
             return platform_info, None
+        
+        def handle_test_client(
+            msisdn,
+            payload,
+            context,
+            response,
+        ):
+            """
+            Handles saving test messages to the database for the 'test' service type.
+
+            Args:
+                msisdn (str): The phone number involved in the test.
+                payload (dict): The payload containing the test_id, time, and other information.
+                context (grpc.ServicerContext): The gRPC context object.
+                response (callable): The gRPC response object.
+
+            Returns:
+                response: A gRPC response indicating success or failure.
+            """
+            try:
+                # Extract fields from the payload
+                sms_sent_time_epoch = payload.get("time")
+                test_id = payload.get("id")
+
+                logger.debug(f"Payload received: {payload}")
+                logger.debug(f"Extracted test_id: {test_id}, type: {type(test_id)}")
+                logger.debug(f"Extracted sms_sent_time_epoch: {sms_sent_time_epoch}, type: {type(sms_sent_time_epoch)}")
+
+                # Ensure test_id is an integer
+                try:
+                    test_id = int(test_id)
+                    logger.debug(f"Converted test_id to integer: {test_id}")
+                except ValueError:
+                    return self.handle_create_grpc_error_response(
+                        context,
+                        response,
+                        f"Invalid test_id: {test_id}. Must be an integer.",
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        error_prefix="Invalid Payload",
+                        send_to_sentry=True,
+                    )
+
+                if not sms_sent_time_epoch or not test_id:
+                    return self.handle_create_grpc_error_response(
+                        context,
+                        response,
+                        "Invalid payload: Missing required fields (time or id).",
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        error_prefix="Invalid Payload",
+                        send_to_sentry=True,
+                    )
+
+                # Convert epoch time to datetime
+                try:
+                    sms_sent_time = datetime.datetime.fromtimestamp(int(sms_sent_time_epoch))
+                    logger.debug(f"Converted sms_sent_time: {sms_sent_time}, type: {type(sms_sent_time)}")
+                except (ValueError, OSError) as e:
+                    return self.handle_create_grpc_error_response(
+                        context,
+                        response,
+                        f"Invalid epoch time: {sms_sent_time_epoch}. Must be a valid Unix timestamp.",
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        error_prefix="Invalid Payload",
+                        send_to_sentry=True,
+                    )
+
+                # Use the TestClient to update the test message
+                test_client = TestClient()
+                _, test_error = test_client.update_test_message(test_id=test_id, sms_sent_time=sms_sent_time)
+
+                if test_error:
+                    # Handle error when updating the test message
+                    return self.handle_create_grpc_error_response(
+                        context,
+                        response,
+                        test_error,
+                        grpc.StatusCode.NOT_FOUND if "not found" in test_error else grpc.StatusCode.INTERNAL,
+                        error_prefix="Error Updating Test Message",
+                        send_to_sentry=True,
+                    )
+
+                # Return a success response
+                return response(
+                    message="Successfully updated test message in the database",
+                    publisher_response="Successfully published message to Test Plaftform",
+                    success=True,
+                )
+
+            except Exception as exc:
+                logger.error(f"Unexpected Error in Test Client: {exc}")
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    exc,
+                    grpc.StatusCode.INTERNAL,
+                    error_prefix="Unexpected Error in Test Client",
+                    send_to_sentry=True,
+                )
 
         def get_access_token(
             device_id, phone_number, platform_name, account_identifier
@@ -703,6 +802,23 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             content_parts = list(content_parts)
             content_parts[0] = content_parts[0].replace("\n", "")
             content_parts = tuple(content_parts)
+
+            if platform_info["service_type"] == "test":
+                # Use the decoded payload directly from decode_payload
+                parsed_payload= content_parts
+               
+                sms_sent_time, test_id, msisdn = parsed_payload
+
+                return handle_test_client(
+                    msisdn=msisdn,
+                    payload={
+                        "time": sms_sent_time,
+                        "id": test_id,
+                        "msisdn": msisdn,
+                    },
+                    context=context,
+                    response=response,
+                )
 
             access_token, access_token_error = get_access_token(
                 device_id=device_id_hex,
