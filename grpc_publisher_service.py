@@ -534,15 +534,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 response: A gRPC response indicating success or failure.
             """
             try:
-                # Extract fields from the payload
                 sms_sent_time_epoch = payload.get("time")
                 test_id = payload.get("id")
 
-                logger.debug(f"Payload received: {payload}")
-                logger.debug(f"Extracted test_id: {test_id}, type: {type(test_id)}")
-                logger.debug(f"Extracted sms_sent_time_epoch: {sms_sent_time_epoch}, type: {type(sms_sent_time_epoch)}")
-
-                # Ensure test_id is an integer
                 try:
                     test_id = int(test_id)
                     logger.debug(f"Converted test_id to integer: {test_id}")
@@ -566,7 +560,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                         send_to_sentry=True,
                     )
 
-                # Convert epoch time to datetime
                 try:
                     sms_sent_time = datetime.datetime.fromtimestamp(int(sms_sent_time_epoch))
                     logger.debug(f"Converted sms_sent_time: {sms_sent_time}, type: {type(sms_sent_time)}")
@@ -580,12 +573,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                         send_to_sentry=True,
                     )
 
-                # Use the TestClient to update the test message
                 test_client = TestClient()
                 _, test_error = test_client.update_test_message(test_id=test_id, sms_sent_time=sms_sent_time)
 
                 if test_error:
-                    # Handle error when updating the test message
                     return self.handle_create_grpc_error_response(
                         context,
                         response,
@@ -595,7 +586,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                         send_to_sentry=True,
                     )
 
-                # Return a success response
                 return response(
                     message="Successfully updated test message in the database",
                     publisher_response="Successfully published message to Test Plaftform",
@@ -804,7 +794,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             content_parts = tuple(content_parts)
 
             if platform_info["service_type"] == "test":
-                # Use the decoded payload directly from decode_payload
                 parsed_payload= content_parts
                
                 sms_sent_time, test_id, msisdn = parsed_payload

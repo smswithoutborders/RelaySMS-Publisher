@@ -26,7 +26,6 @@ class TestClient:
     ):
         timestamp = datetime.datetime.utcnow().isoformat()
 
-        # Save the message in the database
         try:
             with database.atomic():
                 ReliabilityTests.create(
@@ -60,21 +59,17 @@ class TestClient:
             logger.debug(f"Updating test message with ID: {test_id}, SMS sent time: {sms_sent_time}")
             logger.debug(f"test_id type: {type(test_id)}, sms_sent_time type: {type(sms_sent_time)}")
 
-            # Ensure test_id is an integer
             if not isinstance(test_id, int):
                 raise TypeError(f"test_id must be an integer, got {type(test_id)}")
 
-            # Ensure sms_sent_time is a datetime object
             if not isinstance(sms_sent_time, datetime.datetime):
                 raise TypeError(f"sms_sent_time must be a datetime object, got {type(sms_sent_time)}")
 
             with database.atomic():
-                # Query the database for the test record using test_id
                 test_record = ReliabilityTests.get(ReliabilityTests.id == test_id)
 
-                # Update the test record with the new information
                 test_record.sms_sent_time = sms_sent_time
-                test_record.status = "done"  # Update the status to 'done'
+                test_record.status = "done" 
                 test_record.save()
 
             logger.info("Successfully updated test message in database.")
