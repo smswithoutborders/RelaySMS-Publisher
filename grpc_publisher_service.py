@@ -521,18 +521,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             context,
             response,
         ):
-            """
-            Handles saving test messages to the database for the 'test' service type.
-
-            Args:
-                msisdn (str): The phone number involved in the test.
-                payload (dict): The payload containing the test_id, time, and other information.
-                context (grpc.ServicerContext): The gRPC context object.
-                response (callable): The gRPC response object.
-
-            Returns:
-                response: A gRPC response indicating success or failure.
-            """
+          
             try:
                 sms_sent_time_epoch = payload.get("time")
                 test_id = payload.get("id")
