@@ -35,10 +35,9 @@ from notification_dispatcher import dispatch_notifications
 from logutils import get_logger
 from test_client import TestClient
 
-MOCK_DELIVERY_SMS = get_configs("MOCK_DELIVERY_SMS")
 MOCK_DELIVERY_SMS = (
-    MOCK_DELIVERY_SMS.lower() == "true" if MOCK_DELIVERY_SMS is not None else False
-)
+    get_configs("MOCK_DELIVERY_SMS", default_value="true") or ""
+).lower() == "true"
 
 logger = get_logger(__name__)
 
@@ -586,20 +585,26 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 payload_ciphertext=base64.b64encode(encrypted_content).decode("utf-8"),
             )
             if decrypt_payload_error:
-                return None, self.handle_create_grpc_error_response(
-                    context,
-                    response,
-                    decrypt_payload_error.details(),
-                    decrypt_payload_error.code(),
-                    error_prefix="Error Decrypting Platform Payload",
-                    send_to_sentry=True,
+                return (
+                    None,
+                    None,
+                    self.handle_create_grpc_error_response(
+                        context,
+                        response,
+                        decrypt_payload_error.details(),
+                        decrypt_payload_error.code(),
+                        error_prefix="Error Decrypting Platform Payload",
+                        send_to_sentry=True,
+                    ),
                 )
             if not decrypt_payload_response.success:
                 return None, response(
                     message=decrypt_payload_response.message,
                     success=decrypt_payload_response.success,
                 )
-            return decrypt_payload_response.payload_plaintext, None
+
+            country_code = decrypt_payload_response.country_code
+            return decrypt_payload_response.payload_plaintext, country_code, None
 
         # def encrypt_message(device_id, plaintext):
         #     encrypt_payload_response, encrypt_payload_error = encrypt_payload(
@@ -664,7 +669,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             pnba_client = PNBAClient(platform_name, json.loads(token))
             return pnba_client.send_message(message=message, recipient=receiver)
 
-        def handle_publication_notifications(platform_name, message, status="failed"):
+        def handle_publication_notifications(
+            platform_name, message, status="failed", country_code=None
+        ):
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             message = (
                 f"RelaySMS Delivery: "
@@ -680,6 +687,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                         "platform_name": platform_name,
                         "source": "platforms",
                         "status": status,
+                        "country_code": country_code,
                     },
                 },
             ]
@@ -736,7 +744,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             device_id_hex = device_id.hex() if device_id else None
-            decrypted_content, decrypt_error = decrypt_message(
+            decrypted_content, country_code, decrypt_error = decrypt_message(
                 device_id=device_id_hex,
                 phone_number=request.metadata["From"],
                 encrypted_content=encrypted_content,
@@ -799,7 +807,12 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             if publication_error:
-                handle_publication_notifications(platform_info["name"], message_body)
+                handle_publication_notifications(
+                    platform_info["name"],
+                    message_body,
+                    status="failed",
+                    country_code=country_code,
+                )
                 return response(
                     message=f"Failed to publish {platform_info['name']} message",
                     publisher_response=publication_error,
@@ -812,7 +825,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             # if encrypt_payload_error:
             #     return encrypt_payload_error
             handle_publication_notifications(
-                platform_info["name"], message_body, status="published"
+                platform_info["name"],
+                message_body,
+                status="published",
+                country_code=country_code,
             )
             return response(
                 message=f"Successfully published {platform_info['name']} message",
@@ -821,7 +837,12 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except telegram_client.Errors.RPCError as exc:
-            handle_publication_notifications(platform_info["name"], message_body)
+            handle_publication_notifications(
+                platform_info["name"],
+                message_body,
+                status="failed",
+                country_code=country_code,
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -832,7 +853,12 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except OAuthError as exc:
-            handle_publication_notifications(platform_info["name"], message_body)
+            handle_publication_notifications(
+                platform_info["name"],
+                message_body,
+                status="failed",
+                country_code=country_code,
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
@@ -843,7 +869,12 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
 
         except Exception as exc:
-            handle_publication_notifications(platform_info["name"], message_body)
+            handle_publication_notifications(
+                platform_info["name"],
+                message_body,
+                status="failed",
+                country_code=country_code,
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
