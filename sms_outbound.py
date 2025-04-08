@@ -9,10 +9,10 @@ from twilio.base.exceptions import TwilioRestException
 from utils import get_configs
 from logutils import get_logger
 
-TWILIO_ACCOUNT_SID = get_configs("TWILIO_ACCOUNT_SID", strict=True)
-TWILIO_AUTH_TOKEN = get_configs("TWILIO_AUTH_TOKEN", strict=True)
-TWILIO_SERVICE_SID = get_configs("TWILIO_SERVICE_SID", strict=True)
-TWILIO_PHONE_NUMBER = get_configs("TWILIO_PHONE_NUMBER", strict=True)
+TWILIO_ACCOUNT_SID = get_configs("TWILIO_ACCOUNT_SID", strict=False)
+TWILIO_AUTH_TOKEN = get_configs("TWILIO_AUTH_TOKEN", strict=False)
+TWILIO_SERVICE_SID = get_configs("TWILIO_SERVICE_SID", strict=False)
+TWILIO_PHONE_NUMBER = get_configs("TWILIO_PHONE_NUMBER", strict=False)
 
 logger = get_logger(__name__)
 

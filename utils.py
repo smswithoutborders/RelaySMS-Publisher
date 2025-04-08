@@ -246,7 +246,15 @@ def parse_content(service_type, content):
         sender, receiver, message = parts
         return (sender, receiver, message), None
 
-    return None, "Invalid service_type. Must be 'email', 'text', or 'message'."
+    if service_type == "test":
+        # Test format: 'sms_sent_time:test_id:msisdn'
+        parts = content.split(":", 2)
+        if len(parts) != 3:
+            return None, "Message content must have exactly 3 parts."
+        sms_sent_time, test_id, msisdn = parts
+        return (sms_sent_time, test_id, msisdn), None
+
+    return None, "Invalid service_type. Must be 'email', 'text', 'message', or 'test'."
 
 
 def mask_sensitive_info(value):

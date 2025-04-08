@@ -86,6 +86,7 @@ start the OAuth2 flow.
 > | ------------- | --------- | ------------ | -------- | -------- |
 > | Gmail         | g         | Email        | OAuth2   | Optional |
 > | Twitter       | t         | Text         | OAuth2   | Required |
+> | ReliabilityTest       | r         | Text         | event   | None |
 
 ---
 
