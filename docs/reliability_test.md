@@ -80,15 +80,11 @@ If the message reaches the Test Platform, it will be saved in the database.
 ## Fetching Reliability Test Results
 Use the endpoint to fetch reliability data:
 
-**GET** `/v3/clients/<msisdn>/tests`
+**GET** `/v3/reliability-tests`
 
 ### Optional Filters:
 - `start_time`
 - `status`
 - `msisdn`
-
----
-
-For more information, refer to the [Test Platform Content Format](./test_platform_content_format.md#reliability-testing).
 
 ---
