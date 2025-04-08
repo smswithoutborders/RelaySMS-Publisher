@@ -312,6 +312,15 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             return (token, profile), None
 
         def store_token(token, profile):
+            local_tokens = {}
+
+            if request.store_on_device:
+                local_tokens = {
+                    "access_token": token.pop("access_token"),
+                    "refresh_token": token.pop("refresh_token"),
+                    "id_token": token.pop("id_token", ""),
+                }
+
             store_response, store_error = store_entity_token(
                 long_lived_token=request.long_lived_token,
                 platform=request.platform,
@@ -336,7 +345,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             return response(
-                success=True, message="Successfully fetched and stored token"
+                success=True,
+                message="Successfully fetched and stored token",
+                tokens=local_tokens,
             )
 
         try:
