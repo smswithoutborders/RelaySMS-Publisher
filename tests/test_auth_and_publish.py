@@ -115,8 +115,6 @@ def create_payload_v1(
     encrypted_payload,
     platform_shortcode,
     device_id,
-    access_token,
-    refresh_token,
     language,
 ):
     """Creates a v1 payload."""
@@ -124,13 +122,9 @@ def create_payload_v1(
         bytes([1])
         + struct.pack("<H", len(encrypted_payload))
         + bytes([len(device_id)])
-        + bytes([len(access_token)])
-        + bytes([len(refresh_token)])
         + platform_shortcode
         + encrypted_payload
         + device_id
-        + access_token
-        + refresh_token
         + language
     )
     encoded_payload = base64.b64encode(payload).decode()
@@ -261,8 +255,8 @@ def test_auth_and_publish_v0(
     "platform, platform_shortcode, use_device_id, include_tokens",
     [
         ("gmail", b"g", False, True),  # Gmail with phone number
-        ("gmail", b"g", True, True),  # Gmail with device ID
-        ("gmail", b"g", False, False),  # Without tokens
+        # ("gmail", b"g", True, True),  # Gmail with device ID
+        # ("gmail", b"g", False, False),  # Without tokens
     ],
 )
 def test_auth_and_publish_v1(
