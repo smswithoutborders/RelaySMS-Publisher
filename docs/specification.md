@@ -9,13 +9,15 @@
 
 The Publisher supports four formats of content:
 
-1. **Email format**: `from:to:cc:bcc:subject:body`
+1. **Email format**: `from:to:cc:bcc:subject:body[:access_token:refresh_token]`
 
    - Example: Gmail
+   - Square brackets (`[]`) indicate optional fields.
 
-2. **Text format**: `sender:text`
+2. **Text format**: `sender:text[:access_token:refresh_token]`
 
    - Example: Twitter
+   - Square brackets (`[]`) indicate optional fields.
 
 3. **Message format**: `sender:receiver:message`
 
@@ -42,7 +44,7 @@ The Publisher supports four formats of content:
 - **Format**:
   - **4 bytes**: Ciphertext Length.
   - **1 byte**: Platform shortcode. For a list of supported platforms and their corresponding shortcodes, refer to the [Supported Platforms](/docs/grpc.md#supported-platforms) section.
-  - **Variable**: Ciphertext.
+  - **Variable**: Ciphertext. (encrypted [Content Format](#content-format)).
   - **Variable**: Device ID.
 
 > [!NOTE]
@@ -82,13 +84,9 @@ print(encoded)
   - **1 byte**: Version Marker. [See available versions](#supported-payload-versions).
   - **2 bytes**: Ciphertext Length.
   - **1 bytes**: Device ID Length.
-  - **1 bytes**: Access Token Length.
-  - **1 bytes**: Refresh Token Length.
   - **1 byte**: Platform shortcode.
-  - **Variable**: Ciphertext.
+  - **Variable**: Ciphertext. (encrypted [Content Format](#content-format)).
   - **Variable**: Device ID.
-  - **Variable**: Access Token.
-  - **Variable**: Refresh Token.
   - **2 bytes**: Language Code (ISO 639-1 format).
 
 > [!NOTE]
@@ -98,31 +96,26 @@ print(encoded)
 #### Visual Representation:
 
 ```plaintext
-+----------------+-------------------+------------------+---------------------+----------------------+--------------------+-----------------+-----------------+-----------------+-----------------+---------------+
-| Version Marker | Ciphertext Length | Device ID Length | Access Token Length | Refresh Token Length | Platform shortcode | Ciphertext      | Device ID       | Access Token    | Refresh Token   | Language Code |
-| (1 byte)       | (2 bytes)         | (1 byte)         | (1 byte)            | (1 byte)             | (1 byte)           | (Variable size) | (Variable size) | (Variable size) | (Variable size) | (2 bytes)     |
-+----------------+-------------------+------------------+---------------------+----------------------+--------------------+-----------------+-----------------+-----------------+-----------------+---------------+
++----------------+-------------------+------------------+--------------------+-----------------+-----------------+---------------+
+| Version Marker | Ciphertext Length | Device ID Length | Platform shortcode | Ciphertext      | Device ID       | Language Code |
+| (1 byte)       | (2 bytes)         | (1 byte)         | (1 byte)           | (Variable size) | (Variable size) | (2 bytes)     |
++----------------+-------------------+------------------+--------------------+-----------------+-----------------+---------------+
 ```
 
 ```python
-version_marker = b'\x0a'
+version_marker = b'\x01'
 platform_shortcode = b'g'
 language_code = b'en'
 device_id = b'...'
-access_token = b'...'
-refresh_token = b'...'
+encrypted_content = b'...'
 
 payload = (
    version_marker +
    struct.pack("<H", len(encrypted_content)) +
    bytes([len(device_id)]) +
-   bytes([len(access_token)]) +
-   bytes([len(refresh_token)]) +
    platform_shortcode +
    encrypted_content +
    device_id +
-   access_token +
-   refresh_token +
    language_code
 )
 encoded = base64.b64encode(payload).decode("utf-8")

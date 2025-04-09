@@ -149,6 +149,8 @@ def perform_auth_and_publish(
     use_device_id,
     create_payload_func,
     create_payload_args,
+    include_tokens=False,
+    tokens=None,
 ):
     """Helper function to perform authentication and publishing."""
     pub_keypair, pub_pk, did_keypair, did_pk = keypairs
@@ -190,6 +192,9 @@ def perform_auth_and_publish(
     keystore_path = tmp_path / "state.db"
 
     platform_message = messages[f"{platform}_message"]
+    if include_tokens:
+        platform_message += f":{tokens['access_token']}:{tokens['refresh_token']}"
+
     try:
         encrypted_payload = encrypt_message(
             platform_message, pub_shared_key, server_pub_key, keystore_path
@@ -274,13 +279,6 @@ def test_auth_and_publish_v1(
     include_tokens,
 ):
     """Tests publishing functionality for v1."""
-    if include_tokens:
-        access_token = tokens["access_token"].encode()
-        refresh_token = tokens["refresh_token"].encode()
-    else:
-        access_token = b""
-        refresh_token = b""
-
     language = credentials["language"].encode()
 
     perform_auth_and_publish(
@@ -294,5 +292,7 @@ def test_auth_and_publish_v1(
         platform_shortcode,
         use_device_id,
         create_payload_v1,
-        [access_token, refresh_token, language],
+        [language],
+        include_tokens=include_tokens,
+        tokens=tokens,
     )

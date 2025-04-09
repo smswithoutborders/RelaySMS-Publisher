@@ -48,34 +48,26 @@ def test_decode_v0_valid(payload, expected):
     "payload, expected",
     [
         (
-            b"\x01" + struct.pack("<H", 5) + b"\x00\x00\x00eabcde",
+            b"\x01" + struct.pack("<H", 5) + b"\x00eabcde",
             {
                 "version": "v1",
                 "len_ciphertext": 5,
                 "len_device_id": 0,
-                "len_access_token": 0,
-                "len_refresh_token": 0,
                 "platform_shortcode": "e",
                 "ciphertext": b"abcde",
                 "device_id": b"",
-                "access_token": b"",
-                "refresh_token": b"",
                 "language": "",
             },
         ),
         (
-            b"\x01" + struct.pack("<H", 3) + b"\x05\x05\x05txyz11223a1122b2233fr",
+            b"\x01" + struct.pack("<H", 3) + b"\x05txyz11223fr",
             {
                 "version": "v1",
                 "len_ciphertext": 3,
                 "len_device_id": 5,
-                "len_access_token": 5,
-                "len_refresh_token": 5,
                 "platform_shortcode": "t",
                 "ciphertext": b"xyz",
                 "device_id": b"11223",
-                "access_token": b"a1122",
-                "refresh_token": b"b2233",
                 "language": "fr",
             },
         ),
@@ -100,20 +92,14 @@ def test_decode_v1_valid(payload, expected):
             },
         ),
         (
-            base64.b64encode(
-                b"\x01" + struct.pack("<H", 4) + b"\x00\x00\x00edatafr"
-            ).decode(),
+            base64.b64encode(b"\x01" + struct.pack("<H", 4) + b"\x00edatafr").decode(),
             {
                 "version": "v1",
                 "len_ciphertext": 4,
                 "len_device_id": 0,
-                "len_access_token": 0,
-                "len_refresh_token": 0,
                 "platform_shortcode": "e",
                 "ciphertext": b"data",
                 "device_id": b"",
-                "access_token": b"",
-                "refresh_token": b"",
                 "language": "fr",
             },
         ),
@@ -138,12 +124,31 @@ def test_decode_content_invalid(content):
         (
             "email",
             "from:to:cc:bcc:subject:body",
-            ("from", "to", "cc", "bcc", "subject", "body"),
+            ("from", "to", "cc", "bcc", "subject", "body", None, None),
+        ),
+        (
+            "email",
+            "from:to:cc:bcc:subject:body:access_token:refresh_token",
+            (
+                "from",
+                "to",
+                "cc",
+                "bcc",
+                "subject",
+                "body",
+                "access_token",
+                "refresh_token",
+            ),
         ),
         (
             "text",
             "sender:text",
-            ("sender", "text"),
+            ("sender", "text", None, None),
+        ),
+        (
+            "text",
+            "sender:text:access_token:refresh_token",
+            ("sender", "text", "access_token", "refresh_token"),
         ),
         (
             "message",
