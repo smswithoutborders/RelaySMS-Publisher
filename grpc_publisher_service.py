@@ -146,6 +146,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
         phone_number = kwargs.get("phone_number")
         account_id = kwargs["account_id"]
         platform = kwargs["platform"]
+        skip_token_update = kwargs["skip_token_update"]
 
         def handle_token_update(token, **kwargs):
             """
@@ -155,6 +156,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 token (dict or object): The token information containing access and refresh tokens.
             """
             logger.debug(kwargs)
+            if skip_token_update:
+                logger.debug("Skipping token update for %s on %s", account_id, platform)
+                return True
 
             update_response, update_error = update_entity_token(
                 device_id=device_id,
@@ -312,6 +316,15 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             return (token, profile), None
 
         def store_token(token, profile):
+            local_tokens = {}
+
+            if request.store_on_device:
+                local_tokens = {
+                    "access_token": token.pop("access_token"),
+                    "refresh_token": token.pop("refresh_token"),
+                    "id_token": token.pop("id_token", ""),
+                }
+
             store_response, store_error = store_entity_token(
                 long_lived_token=request.long_lived_token,
                 platform=request.platform,
@@ -336,7 +349,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             return response(
-                success=True, message="Successfully fetched and stored token"
+                success=True,
+                message="Successfully fetched and stored token",
+                tokens=local_tokens,
             )
 
         try:
@@ -545,26 +560,26 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 payload_ciphertext=base64.b64encode(encrypted_content).decode("utf-8"),
             )
             if decrypt_payload_error:
-                return (
-                    None,
-                    None,
-                    self.handle_create_grpc_error_response(
-                        context,
-                        response,
-                        decrypt_payload_error.details(),
-                        decrypt_payload_error.code(),
-                        error_prefix="Error Decrypting Platform Payload",
-                        send_to_sentry=True,
-                    ),
+                return None, self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    decrypt_payload_error.details(),
+                    decrypt_payload_error.code(),
+                    error_prefix="Error Decrypting Platform Payload",
+                    send_to_sentry=True,
                 )
+
             if not decrypt_payload_response.success:
                 return None, response(
                     message=decrypt_payload_response.message,
                     success=decrypt_payload_response.success,
                 )
 
-            country_code = decrypt_payload_response.country_code
-            return decrypt_payload_response.payload_plaintext, country_code, None
+            result = {
+                "payload_plaintext": decrypt_payload_response.payload_plaintext,
+                "country_code": decrypt_payload_response.country_code,
+            }
+            return result, None
 
         # def encrypt_message(device_id, plaintext):
         #     encrypt_payload_response, encrypt_payload_error = encrypt_payload(
@@ -585,7 +600,16 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
         #     return encrypt_payload_response.payload_ciphertext, None
 
         def handle_oauth2_email(platform_name, content_parts, token, **kwargs):
-            from_email, to_email, cc_email, bcc_email, subject, body = content_parts
+            (
+                from_email,
+                to_email,
+                cc_email,
+                bcc_email,
+                subject,
+                body,
+                access_token,
+                refresh_token,
+            ) = content_parts
             email_message = create_email_message(
                 from_email,
                 to_email,
@@ -594,9 +618,14 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 cc_email=cc_email,
                 bcc_email=bcc_email,
             )
+            token_data = json.loads(token)
+            if access_token and refresh_token:
+                token_data["access_token"] = access_token
+                token_data["refresh_token"] = refresh_token
+
             oauth2_client = OAuth2Client(
                 platform_name,
-                json.loads(token),
+                token_data,
                 self.create_token_update_handler(
                     device_id=kwargs.get("device_id"),
                     phone_number=kwargs.get("phone_number"),
@@ -604,6 +633,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     platform=platform_name,
                     response_cls=response,
                     grpc_context=context,
+                    skip_token_update=access_token and refresh_token,
                 ),
             )
             return oauth2_client.send_message(email_message, from_email)
@@ -705,7 +735,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 if decoded_payload.get("device_id")
                 else None
             )
-            decrypted_content, country_code, decrypt_error = decrypt_message(
+            decrypted_result, decrypt_error = decrypt_message(
                 device_id=device_id_hex,
                 phone_number=request.metadata["From"],
                 encrypted_content=decoded_payload.get("ciphertext"),
@@ -715,7 +745,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 return decrypt_error
 
             content_parts, extraction_error = extract_content(
-                platform_info["service_type"], decrypted_content
+                platform_info["service_type"], decrypted_result.get("payload_plaintext")
             )
 
             if extraction_error:
@@ -771,7 +801,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 handle_publication_notifications(
                     platform_info["name"],
                     status="failed",
-                    country_code=country_code,
+                    country_code=decrypted_result.get("country_code"),
                     additional_data=message_body,
                     language=decoded_payload.get("language"),
                 )
@@ -789,7 +819,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             handle_publication_notifications(
                 platform_info["name"],
                 status="published",
-                country_code=country_code,
+                country_code=decrypted_result.get("country_code"),
                 additional_data=message_body,
                 language=decoded_payload.get("language"),
             )
@@ -803,7 +833,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             handle_publication_notifications(
                 platform_info["name"],
                 status="failed",
-                country_code=country_code,
+                country_code=decrypted_result.get("country_code"),
                 language=decoded_payload.get("language"),
             )
             return self.handle_create_grpc_error_response(
@@ -819,7 +849,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             handle_publication_notifications(
                 platform_info["name"],
                 status="failed",
-                country_code=country_code,
+                country_code=decrypted_result.get("country_code"),
                 language=decoded_payload.get("language"),
             )
             return self.handle_create_grpc_error_response(
@@ -835,7 +865,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             handle_publication_notifications(
                 platform_info["name"],
                 status="failed",
-                country_code=country_code,
+                country_code=decrypted_result.get("country_code"),
                 language=decoded_payload.get("language"),
             )
             return self.handle_create_grpc_error_response(

@@ -95,8 +95,6 @@ def decode_v1(payload: bytes) -> tuple:
     parsers = [
         FormatSpec(key="len_ciphertext", fmt="<H", decoding=None, use_chr=False),
         FormatSpec(key="len_device_id", fmt=1, decoding=None, use_chr=False),
-        FormatSpec(key="len_access_token", fmt=1, decoding=None, use_chr=False),
-        FormatSpec(key="len_refresh_token", fmt=1, decoding=None, use_chr=False),
         FormatSpec(key="platform_shortcode", fmt=1, decoding=None, use_chr=True),
         FormatSpec(
             key="ciphertext",
@@ -107,18 +105,6 @@ def decode_v1(payload: bytes) -> tuple:
         FormatSpec(
             key="device_id",
             fmt=lambda d: d["len_device_id"],
-            decoding=None,
-            use_chr=False,
-        ),
-        FormatSpec(
-            key="access_token",
-            fmt=lambda d: d["len_access_token"],
-            decoding=None,
-            use_chr=False,
-        ),
-        FormatSpec(
-            key="refresh_token",
-            fmt=lambda d: d["len_refresh_token"],
             decoding=None,
             use_chr=False,
         ),
@@ -170,20 +156,33 @@ def extract_content(service_type: str, content: str) -> tuple:
             - error (str): An error message if extraction fails, otherwise None.
     """
     if service_type == "email":
-        # Email format: 'from:to:cc:bcc:subject:body'
-        parts = content.split(":", 5)
-        if len(parts) != 6:
-            return None, "Email content must have exactly 6 parts."
-        from_email, to_email, cc_email, bcc_email, subject, body = parts
-        return (from_email, to_email, cc_email, bcc_email, subject, body), None
+        # Email format: 'from:to:cc:bcc:subject:body[:access_token:refresh_token]'
+        parts = content.split(":", 7)
+        if len(parts) < 6:
+            return None, "Email content must have at least 6 parts."
+        from_email, to_email, cc_email, bcc_email, subject, body = parts[:6]
+        access_token = parts[6] if len(parts) > 6 else None
+        refresh_token = parts[7] if len(parts) > 7 else None
+        return (
+            from_email,
+            to_email,
+            cc_email,
+            bcc_email,
+            subject,
+            body,
+            access_token,
+            refresh_token,
+        ), None
 
     if service_type == "text":
-        # Text format: 'sender:text'
-        parts = content.split(":", 1)
-        if len(parts) != 2:
-            return None, "Text content must have exactly 2 parts."
-        sender, text = parts
-        return (sender, text), None
+        # Text format: 'sender:text[:access_token:refresh_token]'
+        parts = content.split(":", 3)
+        if len(parts) < 2:
+            return None, "Text content must have at least 2 parts."
+        sender, text = parts[:2]
+        access_token = parts[2] if len(parts) > 2 else None
+        refresh_token = parts[3] if len(parts) > 3 else None
+        return (sender, text, access_token, refresh_token), None
 
     if service_type == "message":
         # Message format: 'sender:receiver:message'
