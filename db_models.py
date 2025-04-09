@@ -29,7 +29,7 @@ class Publications(Model):
         table_name = "publications"
 
 
-class GatewayClients(database.Model):
+class GatewayClients(Model):
     """Model representing Gateway Clients."""
 
     msisdn = CharField(primary_key=True)
@@ -48,7 +48,7 @@ class GatewayClients(database.Model):
         table_name = "gateway_clients"
 
 
-class ReliabilityTests(database.Model):
+class ReliabilityTests(Model):
     """Model representing Gateway Clients Reliability Tests."""
 
     start_time = DateTimeField(default=datetime.datetime.now)

@@ -1,7 +1,3 @@
-Here’s the revised version with corrected grammar, improved clarity, and slight formatting adjustments for consistency:
-
----
-
 # Reliability Testing Specification for Gateway Clients
 
 This outlines how to perform reliability testing for gateway clients using the Test Platform. The test is designed to measure how reliable a gateway client is in receiving and routing SMS messages accurately and promptly.
@@ -31,7 +27,7 @@ The payload published to the gateway client should contain the following fields 
 ### 1. Start the Test
 Send a request to the gateway server using the endpoint:
 
-**POST** `/v3/clients/tests`
+**POST** `/v3/clients/<msisdn>/tests`
 
 #### Request Body:
 ```json
@@ -45,7 +41,8 @@ Send a request to the gateway server using the endpoint:
 ```json
 {
   "message": "Test started successfully",
-  "test_id": "1"
+  "test_id": "1",
+  "test_start_time": "1746799899" // test start time in unix time
 }
 ```
 
@@ -61,7 +58,7 @@ Send the ideal payload format to the gateway client using the regular publish fl
 ```
 
 Where:
-- `start_time` is the Unix timestamp
+- `start_time` is the Unix timestamp returned from the API
 - `id` is the Test ID returned from the API
 - `msisdn` is the gateway client number
 
@@ -80,7 +77,7 @@ If the message reaches the Test Platform, it will be saved in the database.
 ## Fetching Reliability Test Results
 Use the endpoint to fetch reliability data:
 
-**GET** `/v3/reliability-tests`
+**GET** `/v3/clients/<msisdn>/tests`
 
 ### Optional Filters:
 - `start_time`
