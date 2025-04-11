@@ -32,7 +32,6 @@ Send a request to the gateway server using the endpoint:
 #### Request Body:
 ```json
 {
-  "msisdn": "123456789", 
   "test_start_time": "2025-04-08T01:25:00"
 }
 ```

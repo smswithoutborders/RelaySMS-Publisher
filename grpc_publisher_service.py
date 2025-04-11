@@ -529,27 +529,14 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return platform_info, None
 
-        def handle_test_client(payload, metadata):
-            content_parts, extraction_error = extract_content(
-                "test", payload.get("content")
-            )
-            if extraction_error:
-                return PublisherService.handle_create_grpc_error_response(
-                    context,
-                    response,
-                    extraction_error,
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    error_prefix="Invalid Payload",
-                    send_to_sentry=True,
-                )
-         
+        def handle_test_client(content_parts):
             sms_sent_time_epoch, test_id, msisdn = content_parts
 
             test_id = int(test_id)
             sms_sent_time = datetime.datetime.fromtimestamp(int(sms_sent_time_epoch))
 
-            sms_received_time_str = metadata.get("Date")
-            sms_routed_time_str = metadata.get("Date_sent")
+            sms_received_time_str = request.metadata.get("Date")
+            sms_routed_time_str = request.metadata.get("Date_sent")
 
             try:
                 sms_received_time = (
@@ -574,10 +561,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     f"Failed to parse sms_routed_time: {sms_routed_time_str} - {e}"
                 )
                 sms_routed_time = None
-
-            logger.info(
-                f"Converted metadata - sms_received_time: {sms_received_time}, sms_routed_time: {sms_routed_time}"
-            )
 
             test_client = TestClient()
             _, test_error = test_client.update_test_message(
@@ -841,14 +824,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             content_parts = tuple(content_parts)
 
             if platform_info["service_type"] == "test":
-                return handle_test_client(
-                    payload={
-                        "content": decrypted_content,
-                        "Date": decoded_payload.get("Date"),
-                        "Date_sent": decoded_payload.get("Date_sent"),
-                    },
-                    metadata=request.metadata,
-                )
+                return handle_test_client(content_parts)
 
             access_token, access_token_error = get_access_token(
                 device_id=device_id_hex,
