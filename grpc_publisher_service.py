@@ -530,13 +530,19 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             return platform_info, None
 
         def handle_test_client(content_parts):
-            sms_sent_time_epoch, test_id, msisdn = content_parts
+            sms_sent_time_str = request.metadata.get("Date")
+            sms_received_time_str = request.metadata.get("Date_sent")
+            sms_routed_time = datetime.datetime.now()
 
-            test_id = int(test_id)
-            sms_sent_time = datetime.datetime.fromtimestamp(int(sms_sent_time_epoch))
-
-            sms_received_time_str = request.metadata.get("Date")
-            sms_routed_time_str = request.metadata.get("Date_sent")
+            try:
+                sms_sent_time = (
+                    datetime.datetime.fromisoformat(sms_sent_time_str)
+                    if sms_sent_time_str
+                    else None
+                )
+            except Exception as e:
+                logger.error(f"Failed to parse sms_sent_time: {sms_sent_time_str} - {e}")
+                sms_sent_time = None
 
             try:
                 sms_received_time = (
@@ -550,18 +556,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
                 sms_received_time = None
 
-            try:
-                sms_routed_time = (
-                    datetime.datetime.fromisoformat(sms_routed_time_str)
-                    if sms_routed_time_str
-                    else None
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to parse sms_routed_time: {sms_routed_time_str} - {e}"
-                )
-                sms_routed_time = None
-
+            test_id = int(content_parts[1]) 
             test_client = TestClient()
             _, test_error = test_client.update_test_message(
                 test_id=test_id,

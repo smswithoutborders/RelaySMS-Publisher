@@ -92,7 +92,7 @@ class TestClient:
 
     def calculate_reliability_score_for_client(self, msisdn: str) -> float:
         """
-        Calculate the reliability score for a gateway client based on successful SMS routing.
+        Calculate the reliability score for a gateway client based on SMS routing time.
 
         Args:
             msisdn (str): The MSISDN of the client.
@@ -107,23 +107,27 @@ class TestClient:
         if total_tests == 0:
             return round(0.0, 2)
 
-        successful_tests = (
-            ReliabilityTests.select()
-            .where(
-                ReliabilityTests.msisdn == msisdn,
-                ReliabilityTests.status == "success",
-                (~ReliabilityTests.sms_routed_time.is_null()),
-                (
-                    (
-                        ReliabilityTests.sms_routed_time.to_timestamp()
-                        - ReliabilityTests.sms_received_time.to_timestamp()
-                    )
-                    <= 300  # 5 minutes
-                ),
-            )
-            .count()
-        )
+        successful_tests = 0
+        total_score = 0
 
-        reliability = (successful_tests / total_tests) * 100
+        tests = ReliabilityTests.select().where(ReliabilityTests.msisdn == msisdn)
+
+        for test in tests:
+            if test.sms_routed_time and test.sms_received_time:
+                time_difference = (
+                    test.sms_routed_time.to_timestamp()
+                    - test.sms_received_time.to_timestamp()
+                )
+
+                if time_difference <= 180:  # 3 minutes
+                    total_score += 100
+                elif time_difference <= 300:  # 5 minutes
+                    total_score += 50
+                else:
+                    total_score += 0
+
+                successful_tests += 1
+
+        reliability = total_score / total_tests
 
         return round(reliability, 2)
