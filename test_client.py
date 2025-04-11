@@ -21,47 +21,11 @@ class TestClient:
     def __init__(self):
         pass
 
-    def send_test_message(
-        self,
-        start_time,
-        sms_sent_time,
-        sms_received_time,
-        sms_routed_time,
-        status,
-        msisdn,
-    ):
-        timestamp = datetime.datetime.utcnow().isoformat()
-
-        try:
-            with database.atomic():
-                ReliabilityTests.create(
-                    timestamp=timestamp,
-                    start_time=start_time,
-                    sms_sent_time=sms_sent_time,
-                    sms_received_time=sms_received_time,
-                    sms_routed_time=sms_routed_time,
-                    status=status,
-                    msisdn=msisdn,
-                )
-            logger.info("Successfully saved test message to database.")
-        except Exception as e:
-            logger.error("Failed to save test message: %s", str(e))
-            return None, str(e)
-
-        return None, None
-
-    def update_test_message(
+    def update_reliability_test(
         self, test_id, sms_sent_time, sms_received_time, sms_routed_time
     ):
         try:
-            if not isinstance(test_id, int):
-                raise TypeError(f"test_id must be an integer, got {type(test_id)}")
-
-            if not isinstance(sms_sent_time, datetime.datetime):
-                raise TypeError(
-                    f"sms_sent_time must be a datetime object, got {type(sms_sent_time)}"
-                )
-
+            
             with database.atomic():
                 test_record = ReliabilityTests.get(ReliabilityTests.id == test_id)
 
@@ -90,15 +54,24 @@ class TestClient:
             logger.error("Failed to update test message: %s", str(e))
             return None, str(e)
 
-    def calculate_reliability_score_for_client(self, msisdn: str) -> float:
+    def calculate_reliability_score_for_client(msisdn: str) -> float:
         """
-        Calculate the reliability score for a gateway client based on SMS routing time.
+        Calculate the reliability score for a gateway client based on successful SMS routing.
 
         Args:
             msisdn (str): The MSISDN of the client.
 
         Returns:
             float: Reliability percentage rounded to two decimal places.
+
+        Notes:
+            This function calculates the reliability score for a given client based on the
+            percentage of successful SMS routings within a 3-minute window. Reliability is
+            defined as the ratio of successful SMS routings to the total number of tests
+            conducted for the client.
+
+            A successful SMS routing is defined as a routing with a 'success' status, where
+            the SMS is routed within 180 seconds (3 minutes) of being received by the system.
         """
         total_tests = (
             ReliabilityTests.select().where(ReliabilityTests.msisdn == msisdn).count()
@@ -107,27 +80,23 @@ class TestClient:
         if total_tests == 0:
             return round(0.0, 2)
 
-        successful_tests = 0
-        total_score = 0
+        successful_tests = (
+            ReliabilityTests.select()
+            .where(
+                ReliabilityTests.msisdn == msisdn,
+                ReliabilityTests.status == "success",
+                (~ReliabilityTests.sms_routed_time.is_null()),
+                (
+                    (
+                        ReliabilityTests.sms_routed_time.to_timestamp()
+                        - ReliabilityTests.sms_received_time.to_timestamp()
+                    )
+                    <= 300
+                ),
+            )
+            .count()
+        )
 
-        tests = ReliabilityTests.select().where(ReliabilityTests.msisdn == msisdn)
-
-        for test in tests:
-            if test.sms_routed_time and test.sms_received_time:
-                time_difference = (
-                    test.sms_routed_time.to_timestamp()
-                    - test.sms_received_time.to_timestamp()
-                )
-
-                if time_difference <= 180:  # 3 minutes
-                    total_score += 100
-                elif time_difference <= 300:  # 5 minutes
-                    total_score += 50
-                else:
-                    total_score += 0
-
-                successful_tests += 1
-
-        reliability = total_score / total_tests
+        reliability = (successful_tests / total_tests) * 100
 
         return round(reliability, 2)

@@ -528,7 +528,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     send_to_sentry=True,
                 )
             return platform_info, None
-
+        
         def handle_test_client(content_parts):
             sms_sent_time_str = request.metadata.get("Date")
             sms_received_time_str = request.metadata.get("Date_sent")
@@ -540,50 +540,55 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     if sms_sent_time_str
                     else None
                 )
-            except Exception as e:
-                logger.error(f"Failed to parse sms_sent_time: {sms_sent_time_str} - {e}")
-                sms_sent_time = None
-
-            try:
                 sms_received_time = (
                     datetime.datetime.fromisoformat(sms_received_time_str)
                     if sms_received_time_str
                     else None
                 )
-            except Exception as e:
-                logger.error(
-                    f"Failed to parse sms_received_time: {sms_received_time_str} - {e}"
+                test_id = int(content_parts[1])
+
+                test_client = TestClient()
+                _, test_error = test_client.update_reliability_test(
+                    test_id=test_id,
+                    sms_sent_time=sms_sent_time,
+                    sms_received_time=sms_received_time,
+                    sms_routed_time=sms_routed_time,
                 )
-                sms_received_time = None
 
-            test_id = int(content_parts[1]) 
-            test_client = TestClient()
-            _, test_error = test_client.update_test_message(
-                test_id=test_id,
-                sms_sent_time=sms_sent_time,
-                sms_received_time=sms_received_time,
-                sms_routed_time=sms_routed_time,
-            )
+                if test_error:
+                    return PublisherService.handle_create_grpc_error_response(
+                        context,
+                        response,
+                        test_error,
+                        grpc.StatusCode.NOT_FOUND if "not found" in test_error.lower() else grpc.StatusCode.INTERNAL,
+                        error_prefix="Failed to update reliability test",
+                        send_to_sentry=True,
+                    )
 
-            if test_error:
+                return response(
+                    message="Reliability test updated successfully in the database.",
+                    publisher_response="Message successfully published to Reliability test Platform.",
+                    success=True,
+                )
+
+            except ValueError as e:
                 return PublisherService.handle_create_grpc_error_response(
                     context,
                     response,
-                    test_error,
-                    (
-                        grpc.StatusCode.NOT_FOUND
-                        if "not found" in test_error
-                        else grpc.StatusCode.INTERNAL
-                    ),
-                    error_prefix="Error Updating Test Message",
-                    send_to_sentry=True,
+                    f"Invalid input: {str(e)}",
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    error_prefix="Parsing error",
                 )
 
-            return response(
-                message="Successfully updated test message in the database",
-                publisher_response="Successfully published message to Test Platform",
-                success=True,
-            )
+            except Exception as e:
+                return PublisherService.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    f"Unexpected error: {str(e)}",
+                    grpc.StatusCode.INTERNAL,
+                    error_prefix="Unhandled exception occurred",
+                    send_to_sentry=True,
+                )
 
         def get_access_token(
             device_id, phone_number, platform_name, account_identifier
