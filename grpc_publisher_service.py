@@ -528,23 +528,17 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     send_to_sentry=True,
                 )
             return platform_info, None
-        
+
         def handle_test_client(content_parts):
-            sms_sent_time_str = request.metadata.get("Date")
-            sms_received_time_str = request.metadata.get("Date_sent")
             sms_routed_time = datetime.datetime.now()
 
             try:
-                sms_sent_time = (
-                    datetime.datetime.fromisoformat(sms_sent_time_str)
-                    if sms_sent_time_str
-                    else None
-                )
-                sms_received_time = (
-                    datetime.datetime.fromisoformat(sms_received_time_str)
-                    if sms_received_time_str
-                    else None
-                )
+                sms_sent_time, sms_received_time = [                   
+                        datetime.datetime.fromisoformat(request.metadata.get(key))
+                        if request.metadata.get(key)
+                        else None                    
+                    for key in ("Date", "Date_sent")
+                ]
                 test_id = int(content_parts[1])
 
                 test_client = TestClient()
@@ -556,23 +550,27 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
                 if test_error:
-                    return PublisherService.handle_create_grpc_error_response(
+                    return self.handle_create_grpc_error_response(
                         context,
                         response,
                         test_error,
-                        grpc.StatusCode.NOT_FOUND if "not found" in test_error.lower() else grpc.StatusCode.INTERNAL,
+                        (
+                            grpc.StatusCode.NOT_FOUND
+                            if "not found" in test_error.lower()
+                            else grpc.StatusCode.INTERNAL
+                        ),
                         error_prefix="Failed to update reliability test",
                         send_to_sentry=True,
                     )
 
                 return response(
                     message="Reliability test updated successfully in the database.",
-                    publisher_response="Message successfully published to Reliability test Platform.",
+                    publisher_response="Message successfully published to Reliability Test Platform.",
                     success=True,
                 )
 
             except ValueError as e:
-                return PublisherService.handle_create_grpc_error_response(
+                return self.handle_create_grpc_error_response(
                     context,
                     response,
                     f"Invalid input: {str(e)}",
@@ -581,7 +579,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             except Exception as e:
-                return PublisherService.handle_create_grpc_error_response(
+                return self.handle_create_grpc_error_response(
                     context,
                     response,
                     f"Unexpected error: {str(e)}",

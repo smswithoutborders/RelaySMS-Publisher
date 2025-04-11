@@ -54,7 +54,7 @@ class TestClient:
             logger.error("Failed to update test message: %s", str(e))
             return None, str(e)
 
-    def calculate_reliability_score_for_client(msisdn: str) -> float:
+    def calculate_reliability_score_for_client(self, msisdn: str) -> float:
         """
         Calculate the reliability score for a gateway client based on successful SMS routing.
 
