@@ -530,63 +530,56 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             return platform_info, None
 
         def handle_test_client(content_parts):
-            sms_routed_time = datetime.datetime.now()
-
-            try:
-                sms_sent_time, sms_received_time = [                   
-                        datetime.datetime.fromisoformat(request.metadata.get(key))
-                        if request.metadata.get(key)
-                        else None                    
-                    for key in ("Date", "Date_sent")
-                ]
-                test_id = int(content_parts[1])
-
-                test_client = TestClient()
-                _, test_error = test_client.update_reliability_test(
-                    test_id=test_id,
-                    sms_sent_time=sms_sent_time,
-                    sms_received_time=sms_received_time,
-                    sms_routed_time=sms_routed_time,
-                )
-
-                if test_error:
-                    return self.handle_create_grpc_error_response(
-                        context,
-                        response,
-                        test_error,
-                        (
-                            grpc.StatusCode.NOT_FOUND
-                            if "not found" in test_error.lower()
-                            else grpc.StatusCode.INTERNAL
-                        ),
-                        error_prefix="Failed to update reliability test",
-                        send_to_sentry=True,
-                    )
-
-                return response(
-                    message="Reliability test updated successfully in the database.",
-                    publisher_response="Message successfully published to Reliability Test Platform.",
-                    success=True,
-                )
-
-            except ValueError as e:
+            if not request.metadata.get("Date") or not request.metadata.get(
+                "Date_sent"
+            ):
+                missing_fields = []
+                if not request.metadata.get("Date"):
+                    missing_fields.append("Date")
+                if not request.metadata.get("Date_sent"):
+                    missing_fields.append("Date_sent")
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
-                    f"Invalid input: {str(e)}",
+                    ", ".join(missing_fields),
                     grpc.StatusCode.INVALID_ARGUMENT,
-                    error_prefix="Parsing error",
+                    error_prefix="Missing required metadata fields",
                 )
 
-            except Exception as e:
+            sms_routed_time = datetime.datetime.now()
+            sms_sent_time, sms_received_time = [
+                (datetime.datetime.fromisoformat(request.metadata.get(key)))
+                for key in ("Date", "Date_sent")
+            ]
+            test_id = int(content_parts[1])
+
+            test_client = TestClient()
+            _, test_error = test_client.update_reliability_test(
+                test_id=test_id,
+                sms_sent_time=sms_sent_time,
+                sms_received_time=sms_received_time,
+                sms_routed_time=sms_routed_time,
+            )
+
+            if test_error:
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
-                    f"Unexpected error: {str(e)}",
-                    grpc.StatusCode.INTERNAL,
-                    error_prefix="Unhandled exception occurred",
+                    test_error,
+                    (
+                        grpc.StatusCode.NOT_FOUND
+                        if "not found" in test_error.lower()
+                        else grpc.StatusCode.INTERNAL
+                    ),
+                    error_prefix="Failed to update reliability test",
                     send_to_sentry=True,
                 )
+
+            return response(
+                message="Reliability test updated successfully in the database.",
+                publisher_response="Message successfully published to Reliability Test Platform.",
+                success=True,
+            )
 
         def get_access_token(
             device_id, phone_number, platform_name, account_identifier

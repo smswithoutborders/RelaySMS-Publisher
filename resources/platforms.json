@@ -27,7 +27,7 @@
     "support_url_scheme": false
   },
   {
-    "name": "ReliabilityTest",
+    "name": "reliability",
     "shortcode": "r",
     "service_type": "test",
     "protocol_type": "event",
