@@ -56,7 +56,9 @@ class ReliabilityTests(Model):
     sms_received_time = DateTimeField(null=True)
     sms_routed_time = DateTimeField(null=True)
     status = CharField(default="pending")
-    msisdn = ForeignKeyField(GatewayClients, backref="reliability_tests")
+    msisdn = ForeignKeyField(
+        GatewayClients, column_name="msisdn", backref="reliability_tests"
+    )
 
     # pylint: disable=R0903
     class Meta:
