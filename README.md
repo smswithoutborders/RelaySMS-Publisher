@@ -132,3 +132,4 @@ python3 grpc_server.py
    - [Content Format](/docs/specification.md#content-format)
    - [Payload Format](/docs//specification.md#payload-format)
 3. [REST API Documentation](/docs/publisher.md)
+4. [Reliability Test Documentation](/docs/reliability_test.md)
