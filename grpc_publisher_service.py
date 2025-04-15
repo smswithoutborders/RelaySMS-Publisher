@@ -529,7 +529,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return platform_info, None
 
-        def handle_test_client(content_parts):
+        def handle_test_client(test_id):
             if not request.metadata.get("Date") or not request.metadata.get(
                 "Date_sent"
             ):
@@ -551,11 +551,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 (datetime.datetime.fromisoformat(request.metadata.get(key)))
                 for key in ("Date", "Date_sent")
             ]
-            test_id = int(content_parts[1])
 
             test_client = TestClient()
             _, test_error = test_client.update_reliability_test(
-                test_id=test_id,
+                test_id=int(test_id),
                 sms_sent_time=sms_sent_time,
                 sms_received_time=sms_received_time,
                 sms_routed_time=sms_routed_time,
@@ -815,7 +814,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             content_parts = tuple(content_parts)
 
             if platform_info["service_type"] == "test":
-                return handle_test_client(content_parts)
+                return handle_test_client(content_parts[0])
 
             access_token, access_token_error = get_access_token(
                 device_id=device_id_hex,

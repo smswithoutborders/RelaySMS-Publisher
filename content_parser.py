@@ -193,12 +193,8 @@ def extract_content(service_type: str, content: str) -> tuple:
         return (sender, receiver, message), None
 
     if service_type == "test":
-        # Test format: 'sms_sent_time:test_id:msisdn'
-        parts = content.split(":", 2)
-        if len(parts) != 3:
-            return None, "Test content must have exactly 3 parts."
-        sms_sent_time, test_id, msisdn = parts
-        return (sms_sent_time, test_id, msisdn), None
+        # Test format: 'test_id'
+        return (content,), None
 
     return None, "Invalid service_type. Must be 'email', 'text', 'message', or 'test'."
 
