@@ -4,9 +4,8 @@ of the GNU General Public License, v. 3.0. If a copy of the GNU General
 Public License was not distributed with this file, see https://www.gnu.org/licenses/.
 """
 
-import datetime
 from logutils import get_logger
-from db_models import ReliabilityTests
+from db_models import ReliabilityTests, GatewayClients
 from db import connect
 
 logger = get_logger(__name__)
@@ -25,7 +24,6 @@ class TestClient:
         self, test_id, sms_sent_time, sms_received_time, sms_routed_time
     ):
         try:
-            
             with database.atomic():
                 test_record = ReliabilityTests.get(ReliabilityTests.id == test_id)
 
@@ -39,11 +37,9 @@ class TestClient:
                     test_record.msisdn
                 )
 
-                rows_updated = (
-                    ReliabilityTests.update(reliability_score=reliability_score)
-                    .where(ReliabilityTests.id == test_record.id)
-                    .execute()
-                )
+                GatewayClients.update(reliability=reliability_score).where(
+                    GatewayClients.msisdn == test_record.msisdn
+                ).execute()
 
             return None, None
         except ReliabilityTests.DoesNotExist:

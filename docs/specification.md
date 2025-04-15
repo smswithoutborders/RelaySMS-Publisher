@@ -23,7 +23,7 @@ The Publisher supports four formats of content:
 
    - Example: Telegram
 
-4. **Test format**: `test_start_time:test_id:msisdn`
+4. **Test format**: `test_id`
 
    - Example: reliability
      [ReliabilityTest Specification](/docs/reliability_test.md)

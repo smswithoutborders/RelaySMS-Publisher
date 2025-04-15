@@ -5,7 +5,7 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 import datetime
-from peewee import Model, CharField, DateTimeField, DecimalField
+from peewee import Model, CharField, DateTimeField, DecimalField, ForeignKeyField
 from db import connect
 from utils import create_tables
 
@@ -56,8 +56,7 @@ class ReliabilityTests(Model):
     sms_received_time = DateTimeField(null=True)
     sms_routed_time = DateTimeField(null=True)
     status = CharField(default="pending")
-    msisdn = CharField()
-    reliability_score = DecimalField(max_digits=5, decimal_places=2, null=True) 
+    msisdn = ForeignKeyField(GatewayClients, backref="reliability_tests")
 
     # pylint: disable=R0903
     class Meta:

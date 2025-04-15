@@ -45,14 +45,12 @@ The test is saved in the database with a `pending` status.
 Send the ideal payload format to the gateway client using the regular publish flow:
 
 ```
-test_start_time:test_id:msisdn
+test_id
 ```
 
 Where:
 
-- `test_start_time` is the Unix timestamp returned from the API
-- `id` is the Test ID returned from the API
-- `msisdn` is the gateway client number
+- `test_id` is the Test ID returned from the API
 
 ---
 
