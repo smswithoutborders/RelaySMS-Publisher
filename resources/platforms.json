@@ -31,8 +31,8 @@
     "shortcode": "r",
     "service_type": "test",
     "protocol_type": "event",
-    "icon_svg": "",
-    "icon_png": "",
+    "icon_svg": "https://raw.githubusercontent.com/smswithoutborders/SMSWithoutBorders-Publisher/main/resources/icons/reliability.svg",
+    "icon_png": "https://raw.githubusercontent.com/smswithoutborders/SMSWithoutBorders-Publisher/main/resources/icons/reliability.png",
     "support_url_scheme": false
   }
 ]

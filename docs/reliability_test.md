@@ -22,7 +22,7 @@ Send a request to the gateway server using the endpoint:
 
 ```json
 {
-  "test_start_time": "2025-04-08T01:25:00"
+  "test_start_time": 1746799899 //Epoch time
 }
 ```
 
@@ -31,8 +31,8 @@ Send a request to the gateway server using the endpoint:
 ```json
 {
   "message": "Test started successfully",
-  "test_id": "1",
-  "test_start_time": "1746799899"
+  "test_id": 1,
+  "test_start_time": 1746799899
 }
 ```
 
