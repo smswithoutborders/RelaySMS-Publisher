@@ -26,8 +26,20 @@ class TestClient:
     ):
         try:
             self.timeout_tests()
+
             with database.atomic():
                 test_record = ReliabilityTests.get(ReliabilityTests.id == test_id)
+
+                if test_record.status in ["success", "timedout"]:
+                    logger.info(
+                        "Test ID %d is already marked as '%s'. Ignoring update.",
+                        test_id,
+                        test_record.status,
+                    )
+                    return (
+                        None,
+                        f"Test ID {test_id} is already marked as '{test_record.status}'.",
+                    )
 
                 test_record.sms_sent_time = sms_sent_time
                 test_record.sms_received_time = sms_received_time
@@ -99,7 +111,6 @@ class TestClient:
 
         return round(reliability, 2)
 
-
     def timeout_tests(self):
         """
         Update the status of tests to 'timedout' if they are older than 10 minutes.
@@ -110,12 +121,9 @@ class TestClient:
         try:
             expiration_time = datetime.now() - timedelta(minutes=10)
 
-            timedout_tests_query = (
-                ReliabilityTests.update(status="timedout")
-                .where(
-                    ReliabilityTests.start_time < expiration_time,
-                    ReliabilityTests.status != "timedout",
-                )
+            timedout_tests_query = ReliabilityTests.update(status="timedout").where(
+                ReliabilityTests.start_time < expiration_time,
+                ReliabilityTests.status != "timedout",
             )
 
             updated_count = timedout_tests_query.execute()
