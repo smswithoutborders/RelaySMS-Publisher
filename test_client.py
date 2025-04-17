@@ -7,6 +7,7 @@ Public License was not distributed with this file, see https://www.gnu.org/licen
 from logutils import get_logger
 from db_models import ReliabilityTests, GatewayClients
 from db import connect
+from datetime import datetime, timedelta
 
 logger = get_logger(__name__)
 database = connect()
@@ -24,6 +25,7 @@ class TestClient:
         self, test_id, sms_sent_time, sms_received_time, sms_routed_time
     ):
         try:
+            self.timeout_tests()
             with database.atomic():
                 test_record = ReliabilityTests.get(ReliabilityTests.id == test_id)
 
@@ -96,3 +98,30 @@ class TestClient:
         reliability = (successful_tests / total_tests) * 100
 
         return round(reliability, 2)
+
+
+    def timeout_tests(self):
+        """
+        Update the status of tests to 'timedout' if they are older than 10 minutes.
+
+        Returns:
+            int: The number of tests updated to 'timedout'.
+        """
+        try:
+            expiration_time = datetime.now() - timedelta(minutes=10)
+
+            timedout_tests_query = (
+                ReliabilityTests.update(status="timedout")
+                .where(
+                    ReliabilityTests.start_time < expiration_time,
+                    ReliabilityTests.status != "timedout",
+                )
+            )
+
+            updated_count = timedout_tests_query.execute()
+
+            logger.info("Expired %d old tests.", updated_count)
+            return updated_count
+        except Exception as e:
+            logger.error("Failed to expire old tests: %s", str(e))
+            return 0

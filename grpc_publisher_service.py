@@ -553,6 +553,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             ]
 
             test_client = TestClient()
+            test_client.timeout_tests()
             _, test_error = test_client.update_reliability_test(
                 test_id=int(test_id),
                 sms_sent_time=sms_sent_time,
