@@ -726,7 +726,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             message = (
                 t("sms_delivery_message")
                 .format(
-                    additional_data=kwargs.get("additional_data"),
+                    additional_data=kwargs.get("additional_data") or "",
                     platform_name=platform_name,
                     delivery_status=(
                         t("delivery_status_failed")
@@ -828,7 +828,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
             publication_response = None
             publication_error = None
-            message_body = ""
 
             if platform_info["service_type"] == "email":
                 publication_response, publication_error = handle_oauth2_email(
@@ -858,7 +857,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     platform_info["name"],
                     status="failed",
                     country_code=decrypted_result.get("country_code"),
-                    additional_data=message_body,
                     language=decoded_payload.get("language"),
                 )
                 return response(
@@ -876,7 +874,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 platform_info["name"],
                 status="published",
                 country_code=decrypted_result.get("country_code"),
-                additional_data=message_body,
                 language=decoded_payload.get("language"),
             )
             return response(
