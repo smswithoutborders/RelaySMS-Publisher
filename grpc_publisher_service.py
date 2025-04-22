@@ -33,6 +33,7 @@ from grpc_vault_entity_client import (
 from notification_dispatcher import dispatch_notifications
 from logutils import get_logger
 from translations import Localization
+from test_client import TestClient
 
 MOCK_DELIVERY_SMS = (
     get_configs("MOCK_DELIVERY_SMS", default_value="true") or ""
@@ -528,6 +529,58 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return platform_info, None
 
+        def handle_test_client(test_id):
+            if not request.metadata.get("Date") or not request.metadata.get(
+                "Date_sent"
+            ):
+                missing_fields = []
+                if not request.metadata.get("Date"):
+                    missing_fields.append("Date")
+                if not request.metadata.get("Date_sent"):
+                    missing_fields.append("Date_sent")
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    ", ".join(missing_fields),
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    error_prefix="Missing required metadata fields",
+                )
+
+            sms_routed_time = datetime.datetime.now()
+            sms_sent_time, sms_received_time = [
+                datetime.datetime.fromtimestamp(int(request.metadata.get(key)) / 1000)
+                for key in ("Date_sent", "Date")
+            ]
+
+            test_client = TestClient()
+            test_client.timeout_tests()
+            _, test_error = test_client.update_reliability_test(
+                test_id=int(test_id),
+                sms_sent_time=sms_sent_time,
+                sms_received_time=sms_received_time,
+                sms_routed_time=sms_routed_time,
+            )
+
+            if test_error:
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    test_error,
+                    (
+                        grpc.StatusCode.NOT_FOUND
+                        if "not found" in test_error.lower()
+                        else grpc.StatusCode.INTERNAL
+                    ),
+                    error_prefix="Failed to update reliability test",
+                    send_to_sentry=True,
+                )
+
+            return response(
+                message="Reliability test updated successfully in the database.",
+                publisher_response="Message successfully published to Reliability Test Platform.",
+                success=True,
+            )
+
         def get_access_token(
             device_id, phone_number, platform_name, account_identifier
         ):
@@ -760,6 +813,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             content_parts = list(content_parts)
             content_parts[0] = content_parts[0].replace("\n", "")
             content_parts = tuple(content_parts)
+
+            if platform_info["service_type"] == "test":
+                return handle_test_client(content_parts[0])
 
             access_token, access_token_error = get_access_token(
                 device_id=device_id_hex,

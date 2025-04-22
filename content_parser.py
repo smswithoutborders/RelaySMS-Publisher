@@ -192,7 +192,11 @@ def extract_content(service_type: str, content: str) -> tuple:
         sender, receiver, message = parts
         return (sender, receiver, message), None
 
-    return None, "Invalid service_type. Must be 'email', 'text', or 'message'."
+    if service_type == "test":
+        # Test format: 'test_id'
+        return (content,), None
+
+    return None, "Invalid service_type. Must be 'email', 'text', 'message', or 'test'."
 
 
 def is_v0_payload(payload):

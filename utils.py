@@ -246,7 +246,7 @@ def parse_content(service_type, content):
         sender, receiver, message = parts
         return (sender, receiver, message), None
 
-    return None, "Invalid service_type. Must be 'email', 'text', or 'message'."
+    return None, "Invalid service_type. Must be 'email', 'text' or 'message'."
 
 
 def mask_sensitive_info(value):

@@ -7,7 +7,7 @@
 
 ## Content Format
 
-The Publisher supports three formats of content:
+The Publisher supports four formats of content:
 
 1. **Email format**: `from:to:cc:bcc:subject:body[:access_token:refresh_token]`
 
@@ -22,6 +22,11 @@ The Publisher supports three formats of content:
 3. **Message format**: `sender:receiver:message`
 
    - Example: Telegram
+
+4. **Test format**: `test_id`
+
+   - Example: reliability
+     [ReliabilityTest Specification](/docs/reliability_test.md)
 
 ## Supported Payload Versions
 
