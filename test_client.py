@@ -7,6 +7,7 @@ Public License was not distributed with this file, see https://www.gnu.org/licen
 from logutils import get_logger
 from db_models import ReliabilityTests, GatewayClients
 from db import connect
+from datetime import datetime, timedelta
 
 logger = get_logger(__name__)
 database = connect()
@@ -24,8 +25,21 @@ class TestClient:
         self, test_id, sms_sent_time, sms_received_time, sms_routed_time
     ):
         try:
+            self.timeout_tests()
+
             with database.atomic():
                 test_record = ReliabilityTests.get(ReliabilityTests.id == test_id)
+
+                if test_record.status in ["success", "timedout"]:
+                    logger.info(
+                        "Test ID %d is already marked as '%s'. Ignoring update.",
+                        test_id,
+                        test_record.status,
+                    )
+                    return (
+                        None,
+                        f"Test ID {test_id} is already marked as '{test_record.status}'.",
+                    )
 
                 test_record.sms_sent_time = sms_sent_time
                 test_record.sms_received_time = sms_received_time
@@ -50,7 +64,9 @@ class TestClient:
             logger.error("Failed to update test message: %s", str(e))
             return None, str(e)
 
-    def calculate_reliability_score_for_client(self, msisdn: str) -> float:
+    def calculate_reliability_score_for_client(
+        self, msisdn: str, threshold: int = 5
+    ) -> float:
         """
         Calculate the reliability score for a gateway client based on successful SMS routing.
 
@@ -73,7 +89,13 @@ class TestClient:
             ReliabilityTests.select().where(ReliabilityTests.msisdn == msisdn).count()
         )
 
-        if total_tests == 0:
+        if total_tests < threshold:
+            logger.info(
+                "Not enough tests for MSISDN %s to calculate reliability. Total tests: %d, Threshold: %d",
+                msisdn,
+                total_tests,
+                threshold,
+            )
             return round(0.0, 2)
 
         successful_tests = (
@@ -96,3 +118,26 @@ class TestClient:
         reliability = (successful_tests / total_tests) * 100
 
         return round(reliability, 2)
+
+    def timeout_tests(self):
+        """
+        Update the status of tests to 'timedout' if they are older than 10 minutes.
+
+        Returns:
+            int: The number of tests updated to 'timedout'.
+        """
+        try:
+            expiration_time = datetime.now() - timedelta(minutes=10)
+
+            timedout_tests_query = ReliabilityTests.update(status="timedout").where(
+                ReliabilityTests.start_time < expiration_time,
+                ReliabilityTests.status.not_in(["timedout", "success"]),
+            )
+
+            updated_count = timedout_tests_query.execute()
+
+            logger.info("Expired %d old tests.", updated_count)
+            return updated_count
+        except Exception as e:
+            logger.error("Failed to expire old tests: %s", str(e))
+            return 0

@@ -549,10 +549,11 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             sms_routed_time = datetime.datetime.now()
             sms_sent_time, sms_received_time = [
                 datetime.datetime.fromtimestamp(int(request.metadata.get(key)) / 1000)
-                for key in ("Date", "Date_sent")
+                for key in ("Date_sent", "Date")
             ]
 
             test_client = TestClient()
+            test_client.timeout_tests()
             _, test_error = test_client.update_reliability_test(
                 test_id=int(test_id),
                 sms_sent_time=sms_sent_time,
