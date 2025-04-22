@@ -64,7 +64,9 @@ class TestClient:
             logger.error("Failed to update test message: %s", str(e))
             return None, str(e)
 
-    def calculate_reliability_score_for_client(self, msisdn: str, threshold: int = 5) -> float:
+    def calculate_reliability_score_for_client(
+        self, msisdn: str, threshold: int = 5
+    ) -> float:
         """
         Calculate the reliability score for a gateway client based on successful SMS routing.
 
@@ -129,7 +131,7 @@ class TestClient:
 
             timedout_tests_query = ReliabilityTests.update(status="timedout").where(
                 ReliabilityTests.start_time < expiration_time,
-                ReliabilityTests.status != "timedout",
+                ReliabilityTests.status.not_in(["timedout", "success"]),
             )
 
             updated_count = timedout_tests_query.execute()

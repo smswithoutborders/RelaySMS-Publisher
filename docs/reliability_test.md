@@ -24,21 +24,13 @@ To initiate a reliability test, send a request to the gateway server using the f
 **Endpoint**:  
 `POST /v3/clients/<msisdn>/tests`
 
-#### Request Body:
-```json
-{
-  "test_start_time": 1746799899 // Epoch time (in seconds)
-}
-```
-
 #### Example cURL Command:
 ```bash
 curl -X POST "https://api.example.com/v3/clients/1234567890/tests" \
--H "Content-Type: application/json" \
--d '{
-  "test_start_time": 1746799899
-}'
+-H "Content-Type: application/json"
 ```
+
+The server records the current time as the test start time.
 
 #### Response:
 ```json
