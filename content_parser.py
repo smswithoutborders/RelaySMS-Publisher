@@ -199,13 +199,13 @@ def extract_content_v0(service_type: str, content: str) -> tuple:
     return None, "Invalid service_type. Must be 'email', 'text', 'message', or 'test'."
 
 
-def extract_content_v1(content: bytes, service_type: str) -> tuple:
+def extract_content_v1(service_type: str, content: bytes) -> tuple:
     """
     Extracts components from the packed content for v1 format based on the specified service_type.
 
     Args:
-        content (bytes): The packed binary content to extract.
         service_type (str): The type of the platform (email, text, message).
+        content (bytes): The packed binary content to extract.
 
     Returns:
         tuple: A tuple containing:

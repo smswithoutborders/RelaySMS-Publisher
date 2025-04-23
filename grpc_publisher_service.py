@@ -629,7 +629,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             result = {
-                "payload_plaintext": decrypt_payload_response.payload_plaintext,
+                "payload_plaintext": base64.b64decode(
+                    decrypt_payload_response.payload_plaintext
+                ),
                 "country_code": decrypt_payload_response.country_code,
             }
             return result, None
@@ -803,9 +805,16 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if decrypt_error:
                 return decrypt_error
 
-            content_parts, extraction_error = extract_content_v0(
-                platform_info["service_type"], decrypted_result.get("payload_plaintext")
-            )
+            if "version" in decoded_payload and decoded_payload.get("version") == "v1":
+                content_parts, extraction_error = extract_content_v1(
+                    platform_info["service_type"],
+                    decrypted_result.get("payload_plaintext"),
+                )
+            else:
+                content_parts, extraction_error = extract_content_v0(
+                    platform_info["service_type"],
+                    decrypted_result.get("payload_plaintext").decode("utf-8"),
+                )
 
             if extraction_error:
                 return self.handle_create_grpc_error_response(
