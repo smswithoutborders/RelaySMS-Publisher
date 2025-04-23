@@ -3,11 +3,19 @@
 ## Table of Contents
 
 - [Content Format](#content-format)
-- [Payload Format](#payload-format)
+  - [Content Format V0](#content-format-v0)
+  - [Content Format V1](#content-format-v1)
+- [Payload Format](#supported-payload-versions)
+  - [Payload Format V0](#payload-format-v0)
+  - [Payload Format V1](#payload-format-v1)
 
 ## Content Format
 
-The Publisher supports four formats of content:
+### Content Format V0
+
+> [!NOTE]
+>
+> For detailed instructions on encrypting the content format using the Double Ratchet algorithm, refer to the [smswithoutborders_lib_sig documentation](https://github.com/smswithoutborders/lib_signal_double_ratchet_python?tab=readme-ov-file#double-ratchet-implementations).
 
 1. **Email format**: `from:to:cc:bcc:subject:body[:access_token:refresh_token]`
 
@@ -28,6 +36,76 @@ The Publisher supports four formats of content:
    - Example: reliability
      [ReliabilityTest Specification](/docs/reliability_test.md)
 
+### Content Format V1
+
+> [!NOTE]
+>
+> For detailed instructions on encrypting the content format using the Double Ratchet algorithm, refer to the [smswithoutborders_lib_sig documentation](https://github.com/smswithoutborders/lib_signal_double_ratchet_python?tab=readme-ov-file#double-ratchet-implementations).
+
+> [!NOTE]
+>
+> All service types use the same structure, but fields not applicable to a specific service type will have their length bytes set to `0`, and no value bytes will follow for those fields.
+
+1. **Email format**: Binary-encoded fields with the following structure:
+
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field.
+   - **2 bytes**: Length of `cc` field.
+   - **2 bytes**: Length of `bcc` field.
+   - **1 byte**: Length of `subject` field.
+   - **2 bytes**: Length of `body` field.
+   - **1 byte**: Length of `access_token` field (optional).
+   - **1 byte**: Length of `refresh_token` field (optional).
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `to` field.
+   - **Variable**: Value of `cc` field.
+   - **Variable**: Value of `bcc` field.
+   - **Variable**: Value of `subject` field.
+   - **Variable**: Value of `body` field.
+   - **Variable**: Value of `access_token` field (if present).
+   - **Variable**: Value of `refresh_token` field (if present).
+
+2. **Text format**: Binary-encoded fields with the following structure:
+
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field (set to `0`).
+   - **2 bytes**: Length of `cc` field (set to `0`).
+   - **2 bytes**: Length of `bcc` field (set to `0`).
+   - **1 byte**: Length of `subject` field (set to `0`).
+   - **2 bytes**: Length of `body` field.
+   - **1 byte**: Length of `access_token` field (optional).
+   - **1 byte**: Length of `refresh_token` field (optional).
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `body` field.
+   - **Variable**: Value of `access_token` field (if present).
+   - **Variable**: Value of `refresh_token` field (if present).
+
+3. **Message format**: Binary-encoded fields with the following structure:
+
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field.
+   - **2 bytes**: Length of `cc` field (set to `0`).
+   - **2 bytes**: Length of `bcc` field (set to `0`).
+   - **1 byte**: Length of `subject` field (set to `0`).
+   - **2 bytes**: Length of `body` field.
+   - **1 byte**: Length of `access_token` field (set to `0`).
+   - **1 byte**: Length of `refresh_token` field (set to `0`).
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `to` field.
+   - **Variable**: Value of `body` field.
+
+4. **Test format**: Binary-encoded fields with the following structure:
+
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field (set to `0`).
+   - **2 bytes**: Length of `cc` field (set to `0`).
+   - **2 bytes**: Length of `bcc` field (set to `0`).
+   - **1 byte**: Length of `subject` field (set to `0`).
+   - **2 bytes**: Length of `body` field (set to `0`).
+   - **1 byte**: Length of `access_token` field (set to `0`).
+   - **1 byte**: Length of `refresh_token` field (set to `0`).
+   - **Variable**: Value of `from` field (considered the test ID).
+
 ## Supported Payload Versions
 
 | **Version**              | **Hexadecimal Value** | **Decimal Value** | **Description**                                             |
@@ -44,7 +122,7 @@ The Publisher supports four formats of content:
 - **Format**:
   - **4 bytes**: Ciphertext Length.
   - **1 byte**: Platform shortcode. For a list of supported platforms and their corresponding shortcodes, refer to the [Supported Platforms](/docs/grpc.md#supported-platforms) section.
-  - **Variable**: Ciphertext. (encrypted [Content Format](#content-format)).
+  - **Variable**: Ciphertext. (encrypted [Content Format V0](#content-format-v0)).
   - **Variable**: Device ID.
 
 > [!NOTE]
@@ -83,9 +161,9 @@ print(encoded)
 - **Format**:
   - **1 byte**: Version Marker. [See available versions](#supported-payload-versions).
   - **2 bytes**: Ciphertext Length.
-  - **1 bytes**: Device ID Length.
+  - **1 byte**: Device ID Length.
   - **1 byte**: Platform shortcode.
-  - **Variable**: Ciphertext. (encrypted [Content Format](#content-format)).
+  - **Variable**: Ciphertext. (encrypted [Content Format V1](#content-format-v1)).
   - **Variable**: Device ID.
   - **2 bytes**: Language Code (ISO 639-1 format).
 

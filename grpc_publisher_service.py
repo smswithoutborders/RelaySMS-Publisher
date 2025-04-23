@@ -21,7 +21,7 @@ from utils import (
 from oauth2 import OAuth2Client
 import telegram_client
 from pnba import PNBAClient
-from content_parser import decode_content, extract_content
+from content_parser import decode_content, extract_content_v0, extract_content_v1
 from grpc_vault_entity_client import (
     list_entity_stored_tokens,
     store_entity_token,
@@ -629,7 +629,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             result = {
-                "payload_plaintext": decrypt_payload_response.payload_plaintext,
+                "payload_plaintext": base64.b64decode(
+                    decrypt_payload_response.payload_plaintext
+                ),
                 "country_code": decrypt_payload_response.country_code,
             }
             return result, None
@@ -692,10 +694,15 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             return oauth2_client.send_message(email_message, from_email)
 
         def handle_oauth2_text(platform_name, content_parts, token, **kwargs):
-            sender, text = content_parts
+            sender, text, access_token, refresh_token = content_parts
+            token_data = json.loads(token)
+            if access_token and refresh_token:
+                token_data["access_token"] = access_token
+                token_data["refresh_token"] = refresh_token
+
             oauth2_client = OAuth2Client(
                 platform_name,
-                json.loads(token),
+                token_data,
                 self.create_token_update_handler(
                     device_id=kwargs.get("device_id"),
                     phone_number=kwargs.get("phone_number"),
@@ -703,6 +710,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     platform=platform_name,
                     response_cls=response,
                     grpc_context=context,
+                    skip_token_update=access_token and refresh_token,
                 ),
             )
             return oauth2_client.send_message(text)
@@ -726,7 +734,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             message = (
                 t("sms_delivery_message")
                 .format(
-                    additional_data=kwargs.get("additional_data"),
+                    additional_data=kwargs.get("additional_data") or "",
                     platform_name=platform_name,
                     delivery_status=(
                         t("delivery_status_failed")
@@ -797,9 +805,16 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if decrypt_error:
                 return decrypt_error
 
-            content_parts, extraction_error = extract_content(
-                platform_info["service_type"], decrypted_result.get("payload_plaintext")
-            )
+            if "version" in decoded_payload and decoded_payload.get("version") == "v1":
+                content_parts, extraction_error = extract_content_v1(
+                    platform_info["service_type"],
+                    decrypted_result.get("payload_plaintext"),
+                )
+            else:
+                content_parts, extraction_error = extract_content_v0(
+                    platform_info["service_type"],
+                    decrypted_result.get("payload_plaintext").decode("utf-8"),
+                )
 
             if extraction_error:
                 return self.handle_create_grpc_error_response(
@@ -828,7 +843,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
             publication_response = None
             publication_error = None
-            message_body = ""
 
             if platform_info["service_type"] == "email":
                 publication_response, publication_error = handle_oauth2_email(
@@ -858,7 +872,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     platform_info["name"],
                     status="failed",
                     country_code=decrypted_result.get("country_code"),
-                    additional_data=message_body,
                     language=decoded_payload.get("language"),
                 )
                 return response(
@@ -876,7 +889,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 platform_info["name"],
                 status="published",
                 country_code=decrypted_result.get("country_code"),
-                additional_data=message_body,
                 language=decoded_payload.get("language"),
             )
             return response(
