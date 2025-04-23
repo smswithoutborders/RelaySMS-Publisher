@@ -142,9 +142,9 @@ def decode_content(content: str) -> tuple:
         return None, e
 
 
-def extract_content(service_type: str, content: str) -> tuple:
+def extract_content_v0(service_type: str, content: str) -> tuple:
     """
-    Extracts components based on the specified service_type.
+    Extracts components based on the specified service_type for v0 format.
 
     Args:
         service_type (str): The type of the platform (email, text, message).
@@ -197,6 +197,104 @@ def extract_content(service_type: str, content: str) -> tuple:
         return (content,), None
 
     return None, "Invalid service_type. Must be 'email', 'text', 'message', or 'test'."
+
+
+def extract_content_v1(content: bytes, service_type: str) -> tuple:
+    """
+    Extracts components from the packed content for v1 format based on the specified service_type.
+
+    Args:
+        content (bytes): The packed binary content to extract.
+        service_type (str): The type of the platform (email, text, message).
+
+    Returns:
+        tuple: A tuple containing:
+            - parts (tuple): A tuple with the parsed components based on the service_type.
+            - error (str): An error message if extraction fails, otherwise None.
+    """
+    parsers = [
+        FormatSpec(key="length_from", fmt=1, decoding=None, use_chr=False),
+        FormatSpec(key="length_to", fmt="<H", decoding=None, use_chr=False),
+        FormatSpec(key="length_cc", fmt="<H", decoding=None, use_chr=False),
+        FormatSpec(key="length_bcc", fmt="<H", decoding=None, use_chr=False),
+        FormatSpec(key="length_subject", fmt=1, decoding=None, use_chr=False),
+        FormatSpec(key="length_body", fmt="<H", decoding=None, use_chr=False),
+        FormatSpec(key="length_access_token", fmt=1, decoding=None, use_chr=False),
+        FormatSpec(key="length_refresh_token", fmt=1, decoding=None, use_chr=False),
+        FormatSpec(
+            key="from", fmt=lambda d: d["length_from"], decoding="utf-8", use_chr=False
+        ),
+        FormatSpec(
+            key="to", fmt=lambda d: d["length_to"], decoding="utf-8", use_chr=False
+        ),
+        FormatSpec(
+            key="cc", fmt=lambda d: d["length_cc"], decoding="utf-8", use_chr=False
+        ),
+        FormatSpec(
+            key="bcc", fmt=lambda d: d["length_bcc"], decoding="utf-8", use_chr=False
+        ),
+        FormatSpec(
+            key="subject",
+            fmt=lambda d: d["length_subject"],
+            decoding="utf-8",
+            use_chr=False,
+        ),
+        FormatSpec(
+            key="body", fmt=lambda d: d["length_body"], decoding="utf-8", use_chr=False
+        ),
+        FormatSpec(
+            key="access_token",
+            fmt=lambda d: d["length_access_token"],
+            decoding="utf-8",
+            use_chr=False,
+        ),
+        FormatSpec(
+            key="refresh_token",
+            fmt=lambda d: d["length_refresh_token"],
+            decoding="utf-8",
+            use_chr=False,
+        ),
+    ]
+
+    try:
+        result = parse_payload(content, parsers)
+
+        if service_type == "email":
+            return (
+                result["from"],
+                result["to"],
+                result["cc"],
+                result["bcc"],
+                result["subject"],
+                result["body"],
+                result.get("access_token"),
+                result.get("refresh_token"),
+            ), None
+
+        if service_type == "text":
+            return (
+                result["from"],
+                result["body"],
+                result.get("access_token"),
+                result.get("refresh_token"),
+            ), None
+
+        if service_type == "message":
+            return (
+                result["from"],
+                result["to"],
+                result["body"],
+            ), None
+
+        if service_type == "test":
+            return (result["from"],), None
+
+        return (
+            None,
+            "Invalid service_type. Must be 'email', 'text', 'message', or 'test'.",
+        )
+    except Exception as e:
+        return None, e
 
 
 def is_v0_payload(payload):

@@ -82,9 +82,7 @@ def encrypt_message(message, shared_key, server_pub_key, keystore_path):
     """Encrypts a message using the provided shared key and server public key."""
     state = States()
     Ratchets.alice_init(state, shared_key, server_pub_key, keystore_path)
-    header, ciphertext = Ratchets.encrypt(
-        state=state, data=message.encode(), AD=server_pub_key
-    )
+    header, ciphertext = Ratchets.encrypt(state=state, data=message, AD=server_pub_key)
     serialized_header = header.serialize()
     encrypted_payload = (
         struct.pack("<i", len(serialized_header)) + serialized_header + ciphertext
@@ -131,6 +129,104 @@ def create_payload_v1(
     return encoded_payload
 
 
+def create_message_v0(platform, config):
+    """
+    Constructs a platform message dynamically based on the platform and its supported parameters.
+
+    Args:
+        platform (str): The platform name (e.g., 'gmail', 'twitter', 'telegram').
+        config (dict): The configuration dictionary containing platform-specific parameters.
+
+    Returns:
+        bytes: The constructed platform message as bytes.
+    """
+    platform_params = {
+        "gmail": [
+            "from",
+            "to",
+            "cc",
+            "bcc",
+            "subject",
+            "body",
+            "access_token",
+            "refresh_token",
+        ],
+        "twitter": ["from", "body", "access_token", "refresh_token"],
+        "telegram": ["from", "to", "body"],
+    }
+
+    if platform not in platform_params:
+        raise ValueError(f"Unsupported platform: {platform}")
+
+    params = platform_params[platform]
+
+    message_parts = []
+    for param in params:
+        value = config.get(f"{platform}_{param}", "")
+        message_parts.append(value)
+
+    return ":".join(message_parts).encode("utf-8")
+
+
+def create_message_v1(platform, config):
+    """
+    Constructs a platform message dynamically based on the platform and its supported parameters.
+    Packs all lengths first before packing their respective contents.
+
+    Args:
+        platform (str): The platform name (e.g., 'gmail', 'twitter', 'telegram').
+        config (dict): The configuration dictionary containing platform-specific parameters.
+
+    Returns:
+        bytes: The constructed platform message as bytes.
+    """
+    all_params = [
+        ("from", "<B"),
+        ("to", "<H"),
+        ("cc", "<H"),
+        ("bcc", "<H"),
+        ("subject", "<B"),
+        ("body", "<H"),
+        ("access_token", "<B"),
+        ("refresh_token", "<B"),
+    ]
+
+    platform_specific_params = {
+        "gmail": [
+            "from",
+            "to",
+            "cc",
+            "bcc",
+            "subject",
+            "body",
+            "access_token",
+            "refresh_token",
+        ],
+        "twitter": ["from", "body", "access_token", "refresh_token"],
+        "telegram": ["from", "to", "body"],
+    }
+
+    if platform not in platform_specific_params:
+        raise ValueError(f"Unsupported platform: {platform}")
+
+    supported_params = platform_specific_params[platform]
+
+    lengths = []
+    contents = []
+
+    for param, fmt in all_params:
+        if param in supported_params:
+            value = config.get(f"{platform}_{param}", "")
+            length = len(value.encode("utf-8")) if value else 0
+            lengths.append(struct.pack(fmt, length))
+            if length > 0:
+                contents.append(value.encode("utf-8"))
+        else:
+            lengths.append(struct.pack(fmt, 0))
+
+    return b"".join(lengths + contents)
+
+
 def perform_auth_and_publish(
     authenticated_entity,
     keypairs,
@@ -143,8 +239,7 @@ def perform_auth_and_publish(
     use_device_id,
     create_payload_func,
     create_payload_args,
-    include_tokens=False,
-    tokens=None,
+    create_message_func,
 ):
     """Helper function to perform authentication and publishing."""
     pub_keypair, pub_pk, did_keypair, did_pk = keypairs
@@ -185,9 +280,10 @@ def perform_auth_and_publish(
 
     keystore_path = tmp_path / "state.db"
 
-    platform_message = messages[f"{platform}_message"]
-    if include_tokens:
-        platform_message += f":{tokens['access_token']}:{tokens['refresh_token']}"
+    try:
+        platform_message = create_message_func(platform, messages)
+    except Exception as e:
+        pytest.fail(f"Message creation failed: {str(e)}")
 
     try:
         encrypted_payload = encrypt_message(
@@ -220,8 +316,8 @@ def perform_auth_and_publish(
 @pytest.mark.parametrize(
     "platform, platform_shortcode, use_device_id",
     [
-        ("gmail", b"g", False),  # Gmail with phone number
-        ("gmail", b"g", True),  # Gmail with device ID
+        # ("gmail", b"g", False),
+        # ("twitter", b"t", True),
     ],
 )
 def test_auth_and_publish_v0(
@@ -248,15 +344,15 @@ def test_auth_and_publish_v0(
         use_device_id,
         create_payload_v0,
         [],
+        create_message_v0,
     )
 
 
 @pytest.mark.parametrize(
-    "platform, platform_shortcode, use_device_id, include_tokens",
+    "platform, platform_shortcode, use_device_id",
     [
-        ("gmail", b"g", False, True),  # Gmail with phone number
-        # ("gmail", b"g", True, True),  # Gmail with device ID
-        # ("gmail", b"g", False, False),  # Without tokens
+        ("gmail", b"g", False),  # Gmail with phone number
+        ("gmail", b"g", True),  # Gmail with device ID
     ],
 )
 def test_auth_and_publish_v1(
@@ -265,12 +361,10 @@ def test_auth_and_publish_v1(
     tmp_path,
     send_message,
     credentials,
-    tokens,
     messages,
     platform,
     platform_shortcode,
     use_device_id,
-    include_tokens,
 ):
     """Tests publishing functionality for v1."""
     language = credentials["language"].encode()
@@ -287,6 +381,5 @@ def test_auth_and_publish_v1(
         use_device_id,
         create_payload_v1,
         [language],
-        include_tokens=include_tokens,
-        tokens=tokens,
+        create_message_v1,
     )

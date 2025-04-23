@@ -21,7 +21,7 @@ from utils import (
 from oauth2 import OAuth2Client
 import telegram_client
 from pnba import PNBAClient
-from content_parser import decode_content, extract_content
+from content_parser import decode_content, extract_content_v0, extract_content_v1
 from grpc_vault_entity_client import (
     list_entity_stored_tokens,
     store_entity_token,
@@ -692,10 +692,15 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             return oauth2_client.send_message(email_message, from_email)
 
         def handle_oauth2_text(platform_name, content_parts, token, **kwargs):
-            sender, text = content_parts
+            sender, text, access_token, refresh_token = content_parts
+            token_data = json.loads(token)
+            if access_token and refresh_token:
+                token_data["access_token"] = access_token
+                token_data["refresh_token"] = refresh_token
+
             oauth2_client = OAuth2Client(
                 platform_name,
-                json.loads(token),
+                token_data,
                 self.create_token_update_handler(
                     device_id=kwargs.get("device_id"),
                     phone_number=kwargs.get("phone_number"),
@@ -703,6 +708,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     platform=platform_name,
                     response_cls=response,
                     grpc_context=context,
+                    skip_token_update=access_token and refresh_token,
                 ),
             )
             return oauth2_client.send_message(text)
@@ -797,7 +803,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if decrypt_error:
                 return decrypt_error
 
-            content_parts, extraction_error = extract_content(
+            content_parts, extraction_error = extract_content_v0(
                 platform_info["service_type"], decrypted_result.get("payload_plaintext")
             )
 

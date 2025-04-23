@@ -5,6 +5,7 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 import configparser
+from datetime import datetime
 import grpc
 import pytest
 import requests
@@ -56,12 +57,6 @@ def credentials(test_config):
 
 
 @pytest.fixture
-def tokens(test_config):
-    """Fixture to provide tokens."""
-    return test_config["tokens"]
-
-
-@pytest.fixture
 def messages(test_config):
     """Fixture to provide messages."""
     return test_config["messages"]
@@ -108,7 +103,12 @@ def send_message(pytestconfig, test_config):
         response = requests.post(
             url,
             timeout=30,
-            json={"address": phone_number, "text": encoded_payload},
+            json={
+                "address": phone_number,
+                "text": encoded_payload,
+                "date": str(int(datetime.now().timestamp())),
+                "date_sent": str(int(datetime.now().timestamp())),
+            },
         )
         return response
 

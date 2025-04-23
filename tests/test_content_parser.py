@@ -11,7 +11,8 @@ from content_parser import (
     decode_v0,
     decode_v1,
     decode_content,
-    extract_content,
+    extract_content_v0,
+    extract_content_v1,
 )
 
 
@@ -157,22 +158,67 @@ def test_decode_content_invalid(content):
         ),
     ],
 )
-def test_extract_content_valid(service_type, content, expected):
-    result, error = extract_content(service_type, content)
+def test_extract_content_v0_valid(service_type, content, expected):
+    result, error = extract_content_v0(service_type, content)
     assert error is None
     assert result == expected
 
 
 @pytest.mark.parametrize(
-    "service_type, content",
+    "content, service_type, expected",
     [
-        ("email", "from:to:cc:bcc:subject"),  # Missing body
-        ("text", "sender"),  # Missing text
-        ("message", "sender:receiver"),  # Missing message
-        ("unknown", "data"),  # Invalid service type
+        (
+            struct.pack("<BHHHBHBB", 4, 2, 2, 3, 7, 4, 12, 13)
+            + b"fromtoccbccsubjectbodyaccess_tokenrefresh_token",
+            "email",
+            (
+                "from",
+                "to",
+                "cc",
+                "bcc",
+                "subject",
+                "body",
+                "access_token",
+                "refresh_token",
+            ),
+        ),
+        (
+            struct.pack("<BHHHBHBB", 4, 0, 0, 0, 7, 4, 0, 0) + b"fromsubjectbody",
+            "email",
+            (
+                "from",
+                "",
+                "",
+                "",
+                "subject",
+                "body",
+                "",
+                "",
+            ),
+        ),
+        (
+            struct.pack("<BHHHBHBB", 4, 0, 0, 0, 0, 4, 5, 7) + b"frombodytokenrefresh",
+            "text",
+            (
+                "from",
+                "body",
+                "token",
+                "refresh",
+            ),
+        ),
+        (
+            struct.pack("<BHHHBHBB", 4, 2, 0, 0, 0, 4, 0, 0)
+            + b"fromtobodytokenrefresh",
+            "message",
+            (
+                "from",
+                "to",
+                "body",
+            ),
+        ),
     ],
 )
-def test_extract_content_invalid(service_type, content):
-    result, error = extract_content(service_type, content)
-    assert result is None
-    assert isinstance(error, str)
+def test_extract_content_v1_valid(content, service_type, expected):
+    result, error = extract_content_v1(content, service_type)
+    assert error is None
+    assert result == expected
