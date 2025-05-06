@@ -6,9 +6,47 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict
+import configparser
+import os
 
 
-class OAuthAdapterInterface(ABC):
+class BaseAdapterInterface(ABC):
+    """Base adapter interface."""
+
+    @property
+    def manifest(self) -> Dict[str, Any]:
+        """
+        Get the manifest data.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the manifest data.
+        """
+        manifest_path = os.path.join(os.path.dirname(__file__), "manifest.ini")
+        if not os.path.exists(manifest_path):
+            raise FileNotFoundError(f"Manifest file not found at {manifest_path}")
+
+        config = configparser.ConfigParser()
+        config.read(manifest_path)
+        return {section: dict(config[section]) for section in config.sections()}
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        """
+        Get the configuration data.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the configuration data.
+        """
+        config_path = os.path.join(os.path.dirname(__file__), "config.ini")
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Config file not found at {config_path}")
+
+        config = configparser.ConfigParser()
+        config.read(config_path)
+        return {section: dict(config[section]) for section in config.sections()}
+
+
+class OAuthAdapterInterface(BaseAdapterInterface):
     """Abstract base class for all oauth adapters."""
 
     @abstractmethod
