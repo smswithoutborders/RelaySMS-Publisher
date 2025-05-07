@@ -4,215 +4,142 @@ of the GNU General Public License, v. 3.0. If a copy of the GNU General
 Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
 """
 
-import sys
 import os
-import importlib.util
+import sys
 import shutil
+import subprocess
 import configparser
 from typing import Optional
 from git import Repo, RemoteProgress
 from tqdm import tqdm
-from platforms.adapter_interfaces import BaseAdapterInterface
+
 from logutils import get_logger
+from utils import get_configs
+
+BASE_DIR = os.path.dirname(__file__)
+adapters_dir = get_configs(
+    "PLATFORMS_ADAPTERS_DIR", default_value=os.path.join(BASE_DIR, "adapters")
+)
+adapters_venv_dir = get_configs(
+    "PLATFORMS_ADAPTERS_VENV_DIR", default_value=os.path.join(BASE_DIR, "adapters_venv")
+)
 
 logger = get_logger(__name__)
 
 
 class AdapterManager:
     """
-    Handles discovery and importing of adapters.
+    Handles discovery, validation, and installation of platform adapters.
     """
 
-    _adapters_dir = os.path.join(os.path.dirname(__file__), "adapters")
+    _adapters_dir = adapters_dir
+    _adapters_venv_dir = adapters_venv_dir
+    _registry = {}
+
+    @classmethod
+    def _populate_registry(cls):
+        cls._registry.clear()
+
+        if not os.path.isdir(cls._adapters_dir):
+            logger.warning("Adapters directory '%s' does not exist.", cls._adapters_dir)
+            return
+
+        for item in os.listdir(cls._adapters_dir):
+            adapter_path = os.path.join(cls._adapters_dir, item)
+            if not os.path.isdir(adapter_path):
+                continue
+
+            manifest_data = cls._load_manifest(adapter_path)
+            if manifest_data and (adapter_name := manifest_data.get("name")):
+                manifest_data["path"] = adapter_path
+                cls._registry[adapter_name] = manifest_data
+                logger.info(
+                    "Registered adapter '%s' from '%s'", adapter_name, adapter_path
+                )
+            else:
+                logger.warning("Skipping invalid adapter directory: '%s'", adapter_path)
+
+        logger.info("Adapter registry populated with %d adapters.", len(cls._registry))
 
     @staticmethod
     def _rollback_directory(path: str):
-        """
-        Deletes a directory and its contents.
-
-        Args:
-            path (str): The path to the directory to delete.
-        """
         try:
             shutil.rmtree(path)
             logger.info("Rolled back and removed directory: %s", path)
         except Exception as e:
-            logger.error("Failed to remove directory %s: %s", path, e)
+            logger.error("Failed to remove directory '%s': %s", path, e)
 
     @staticmethod
     def _validate_adapter_files(path: str) -> bool:
-        """
-        Validates that the required adapter files exist in the given directory.
-
-        Args:
-            path (str): The path to the adapter directory.
-
-        Returns:
-            bool: True if all required files are present, False otherwise.
-        """
-        required_files = ["manifest.ini", "main.py", "config.ini"]
-        missing = [
-            f for f in required_files if not os.path.isfile(os.path.join(path, f))
-        ]
+        required = ["manifest.ini", "main.py", "config.ini"]
+        missing = [f for f in required if not os.path.isfile(os.path.join(path, f))]
         if missing:
-            logger.warning("Missing files in %s: %s", path, ", ".join(missing))
+            logger.warning(
+                "Missing required files in '%s': %s", path, ", ".join(missing)
+            )
             return False
         return True
 
     @staticmethod
-    def import_adapter(
-        path: str,
-        expected_name: str,
-        expected_protocol: str,
-        rollback_on_failure: bool = True,
-    ) -> Optional[BaseAdapterInterface]:
-        """
-        Imports an adapter from the specified path.
+    def _install_adapter_dependencies(requirements_path: str, venv_path: str):
+        try:
+            subprocess.check_call([sys.executable, "-m", "venv", venv_path])
+            pip_path = os.path.join(venv_path, "bin", "pip")
+            subprocess.check_call([pip_path, "install", "-r", requirements_path])
+            logger.info("Dependencies installed in virtual environment: %s", venv_path)
+        except Exception as e:
+            logger.error("Dependency installation failed: %s", e)
+            raise ValueError("Adapter dependency installation failed.") from e
 
-        Args:
-            path (str): The path to the adapter directory.
-            expected_name (str): The expected name of the adapter.
-            expected_protocol (str): The expected protocol of the adapter.
-            rollback_on_failure (bool): Whether to delete the directory on failure.
-
-        Returns:
-            Optional[BaseAdapterInterface]: An instance of the adapter if successful,
-                None otherwise.
-        """
-        if not AdapterManager._validate_adapter_files(path):
-            if rollback_on_failure:
-                AdapterManager._rollback_directory(path)
+    @classmethod
+    def _load_manifest(cls, path: str) -> Optional[dict]:
+        manifest_file = os.path.join(path, "manifest.ini")
+        if not os.path.isfile(manifest_file):
+            logger.error("Missing manifest at '%s'", manifest_file)
             return None
 
-        try:
-            config = configparser.ConfigParser()
-            config.read(os.path.join(path, "manifest.ini"))
+        config = configparser.ConfigParser()
+        config.read(manifest_file)
 
-            name = config.get("platform", "name", fallback="").lower()
-            protocol = config.get("platform", "protocol", fallback="").lower()
+        if "platform" not in config:
+            logger.error("Manifest missing 'platform' section: '%s'", manifest_file)
+            return None
 
-            if name != expected_name.lower() or protocol != expected_protocol.lower():
-                logger.warning(
-                    "Adapter %s/%s does not match manifest. %s",
-                    name,
-                    protocol,
-                    "Rolling back." if rollback_on_failure else "Rollback not enabled.",
-                )
-                if rollback_on_failure:
-                    AdapterManager._rollback_directory(path)
-                return None
+        return dict(config["platform"])
 
-            if path not in sys.path:
-                sys.path.insert(0, path)
+    @classmethod
+    def get_adapter(cls, name: str, protocol: str) -> Optional[str]:
+        if not cls._registry:
+            cls._populate_registry()
 
-            spec = importlib.util.spec_from_file_location(
-                f"platforms.adapters.{os.path.basename(path)}.main",
-                os.path.join(path, "main.py"),
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+        manifest = cls._registry.get(name)
+        if manifest and protocol.lower() in (v.lower() for v in manifest.values()):
+            return manifest.get("path")
 
-            class_name = f"{name}{protocol}Adapter".lower()
-            classes = {cls.lower(): getattr(module, cls) for cls in dir(module)}
-            adapter_cls = classes.get(class_name)
-
-            if adapter_cls:
-                instance = adapter_cls()
-                logger.info("Successfully imported adapter: %s", class_name)
-                return instance
-
-            logger.warning("Adapter class '%s' not found in %s", class_name, path)
-
-        except Exception as e:
-            logger.exception("Error importing adapter from %s: %s", path, e)
-
-        if rollback_on_failure:
-            logger.info("Rolling back due to import error.")
-            AdapterManager._rollback_directory(path)
-        else:
-            logger.info("Rollback not enabled despite import error.")
+        logger.warning("Adapter '%s' with protocol '%s' not found.", name, protocol)
         return None
 
     @classmethod
-    def load_adapter(cls, name: str, protocol: str) -> Optional[BaseAdapterInterface]:
-        """
-        Loads an adapter by name and protocol from the adapters directory.
-
-        Args:
-            name (str): The name of the adapter.
-            protocol (str): The protocol of the adapter.
-
-        Returns:
-            Optional[BaseAdapterInterface]: The adapter class if found, None otherwise.
-
-        Raises:
-            ModuleNotFoundError: If no matching adapter is found.
-        """
-        if not os.path.isdir(cls._adapters_dir):
-            logger.warning("Adapters directory missing: %s", cls._adapters_dir)
-            return None
-
-        for subdir in os.listdir(cls._adapters_dir):
-            path = os.path.join(cls._adapters_dir, subdir)
-            if os.path.isdir(path):
-                adapter = cls.import_adapter(
-                    path, name, protocol, rollback_on_failure=False
-                )
-                if adapter:
-                    return type(adapter)
-
-        raise ModuleNotFoundError(f"No adapter found for {name}/{protocol}")
-
-    @classmethod
     def add_adapter_from_github(cls, url: str):
-        """
-        Clones an adapter repository from GitHub and validates it.
-
-        Args:
-            url (str): The URL of the GitHub repository.
-
-        Raises:
-            ValueError: If the cloned repository is not a valid adapter.
-            Exception: If an error occurs during cloning.
-        """
         os.makedirs(cls._adapters_dir, exist_ok=True)
 
         class CloneProgress(RemoteProgress):
-            """
-            Tracks the progress of a Git repository clone operation.
-            """
-
             def __init__(self):
-                """
-                Initializes the progress tracker.
-                """
                 super().__init__()
                 self.progress_bar = None
 
             def update(self, op_code, cur_count, max_count=None, message=""):
-                """
-                Updates the progress bar.
-
-                Args:
-                    op_code: The operation code.
-                    cur_count: The current count of objects processed.
-                    max_count: The total number of objects (optional).
-                    message: Additional message (optional).
-                """
-                if max_count:
-                    if not self.progress_bar:
-                        self.progress_bar = tqdm(
-                            total=max_count, unit="objects", desc="Cloning", leave=False
-                        )
+                if max_count and not self.progress_bar:
+                    self.progress_bar = tqdm(
+                        total=max_count, unit="objects", desc="Cloning", leave=False
+                    )
+                if self.progress_bar:
                     self.progress_bar.n = cur_count
                     self.progress_bar.refresh()
                 if message:
                     logger.debug("Git progress: %s", message)
 
             def __del__(self):
-                """
-                Cleans up the progress bar.
-                """
                 if self.progress_bar:
                     self.progress_bar.close()
 
@@ -220,21 +147,56 @@ class AdapterManager:
         dest_path = os.path.join(cls._adapters_dir, repo_name)
 
         if os.path.exists(dest_path):
-            logger.info("Repo '%s' already exists at %s", repo_name, dest_path)
+            logger.info("Repository already exists: %s", dest_path)
             return
 
-        try:
-            Repo.clone_from(url, dest_path, progress=CloneProgress())
-            logger.info("Cloned GitHub repo '%s' into '%s'", repo_name, dest_path)
+        Repo.clone_from(url, dest_path, progress=CloneProgress())
+        logger.info("Cloned adapter repository to '%s'", dest_path)
 
-            if not cls._validate_adapter_files(dest_path):
-                logger.error(
-                    "Validation failed for adapter at '%s'. Rolling back.", dest_path
-                )
-                cls._rollback_directory(dest_path)
-                raise ValueError(
-                    f"Cloned repository at {dest_path} is not a valid adapter."
-                )
-        except Exception as e:
-            logger.error("An error occurred while cloning the repository: %s", e)
-            raise
+        if not cls._validate_adapter_files(dest_path):
+            cls._rollback_directory(dest_path)
+            raise ValueError(f"Invalid adapter structure at '{dest_path}'.")
+
+        manifest_data = cls._load_manifest(dest_path)
+        if not manifest_data:
+            cls._rollback_directory(dest_path)
+            raise ValueError(f"Manifest load failed for '{dest_path}'.")
+
+        adapter_name = manifest_data.get("name")
+        protocol = manifest_data.get("protocol")
+
+        if not adapter_name:
+            cls._rollback_directory(dest_path)
+            raise ValueError("Adapter manifest missing 'name'.")
+
+        new_dir_name = f"{adapter_name}_{protocol}".lower()
+        new_dest_path = os.path.join(cls._adapters_dir, new_dir_name)
+
+        if os.path.exists(new_dest_path):
+            cls._rollback_directory(dest_path)
+            raise ValueError(f"Adapter '{new_dir_name}' already exists.")
+
+        os.rename(dest_path, new_dest_path)
+        manifest_data["path"] = new_dest_path
+
+        requirements_path = os.path.join(new_dest_path, "requirements.txt")
+        if os.path.isfile(requirements_path):
+            venv_path = os.path.join(cls._adapters_venv_dir, new_dir_name)
+
+            if os.path.exists(venv_path):
+                raise ValueError(f"Virtual environment already exists: {venv_path}")
+
+            os.makedirs(venv_path, exist_ok=True)
+
+            try:
+                cls._install_adapter_dependencies(requirements_path, venv_path)
+            except ValueError:
+                cls._rollback_directory(new_dest_path)
+                cls._rollback_directory(venv_path)
+                raise
+
+        logger.info(
+            "Adapter '%s' added successfully with protocol '%s'.",
+            adapter_name,
+            protocol,
+        )

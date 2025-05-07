@@ -10,8 +10,8 @@ import configparser
 import os
 
 
-class BaseAdapterInterface(ABC):
-    """Base adapter interface."""
+class BaseProtocolInterface(ABC):
+    """Base protocol interface."""
 
     @property
     def manifest(self) -> Dict[str, Any]:
@@ -46,19 +46,19 @@ class BaseAdapterInterface(ABC):
         return {section: dict(config[section]) for section in config.sections()}
 
 
-class OAuthAdapterInterface(BaseAdapterInterface):
-    """Abstract base class for all oauth adapters."""
+class OAuth2ProtocolInterface(BaseProtocolInterface):
+    """Abstract base class for all oauth2 protocols."""
 
     @abstractmethod
     def get_authorization_url(self, **kwargs) -> Dict[str, Any]:
         """
-        Get the authorization URL for the OAuth flow.
+        Get the authorization URL for the OAuth2 flow.
 
         This method should generate a dictionary containing the authorization URL
-        and additional metadata required for the OAuth flow.
+        and additional metadata required for the OAuth2 flow.
 
         Args:
-            kwargs: Additional parameters required for the OAuth flow.
+            kwargs: Additional parameters required for the OAuth2 flow.
 
         Returns:
             Dict[str, Any]: A dictionary containing the following keys:
@@ -78,7 +78,7 @@ class OAuthAdapterInterface(BaseAdapterInterface):
         Exchange the authorization code for an access token.
 
         Args:
-            code (str): The authorization code received from the OAuth provider.
+            code (str): The authorization code received from the OAuth2 provider.
             kwargs: Additional parameters required for the token exchange.
 
         Returns:
