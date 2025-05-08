@@ -9,6 +9,7 @@ import sys
 import shutil
 import subprocess
 import configparser
+import hashlib
 from typing import Optional
 from git import Repo, RemoteProgress
 from tqdm import tqdm
@@ -35,9 +36,53 @@ class AdapterManager:
     _adapters_dir = adapters_dir
     _adapters_venv_dir = adapters_venv_dir
     _registry = {}
+    _cache_hash = None
+
+    @classmethod
+    def _calculate_directory_hash(cls) -> str:
+        """
+        Calculate a hash of the current state of the adapters directory.
+
+        Returns:
+            str: The MD5 hash of the adapters directory.
+        """
+        hash_md5 = hashlib.md5()
+        if not os.path.isdir(cls._adapters_dir):
+            return ""
+
+        for root, dirs, files in os.walk(cls._adapters_dir):
+            for name in sorted(dirs + files):
+                path = os.path.join(root, name)
+                hash_md5.update(path.encode("utf-8"))
+                if os.path.isfile(path):
+                    with open(path, "rb") as f:
+                        hash_md5.update(f.read())
+
+        return hash_md5.hexdigest()
+
+    @classmethod
+    def _is_registry_outdated(cls) -> bool:
+        """
+        Check if the registry is outdated by comparing the directory hash.
+
+        Returns:
+            bool: True if the registry is outdated, False otherwise.
+        """
+        current_hash = cls._calculate_directory_hash()
+        if cls._cache_hash != current_hash:
+            cls._cache_hash = current_hash
+            return True
+        return False
 
     @classmethod
     def _populate_registry(cls):
+        """
+        Populate the registry with adapter metadata if there are changes in the adapters directory.
+        """
+        if not cls._is_registry_outdated():
+            logger.info("Registry is up-to-date. No changes detected.")
+            return
+
         cls._registry.clear()
 
         if not os.path.isdir(cls._adapters_dir):
@@ -63,6 +108,12 @@ class AdapterManager:
 
     @staticmethod
     def _rollback_directory(path: str):
+        """
+        Roll back changes by removing a specified directory.
+
+        Args:
+            path (str): The path of the directory to remove.
+        """
         try:
             shutil.rmtree(path)
             logger.info("Rolled back and removed directory: %s", path)
@@ -71,6 +122,15 @@ class AdapterManager:
 
     @staticmethod
     def _validate_adapter_files(path: str) -> bool:
+        """
+        Validate the presence of required files in an adapter directory.
+
+        Args:
+            path (str): The path to the adapter directory.
+
+        Returns:
+            bool: True if all required files are present, False otherwise.
+        """
         required = ["manifest.ini", "main.py", "config.ini"]
         missing = [f for f in required if not os.path.isfile(os.path.join(path, f))]
         if missing:
@@ -82,6 +142,16 @@ class AdapterManager:
 
     @staticmethod
     def _install_adapter_dependencies(requirements_path: str, venv_path: str):
+        """
+        Install adapter dependencies in a virtual environment.
+
+        Args:
+            requirements_path (str): Path to the requirements.txt file.
+            venv_path (str): Path to the virtual environment directory.
+
+        Raises:
+            ValueError: If dependency installation fails.
+        """
         try:
             subprocess.check_call([sys.executable, "-m", "venv", venv_path])
             pip_path = os.path.join(venv_path, "bin", "pip")
@@ -93,6 +163,15 @@ class AdapterManager:
 
     @classmethod
     def _load_manifest(cls, path: str) -> Optional[dict]:
+        """
+        Load the manifest file from an adapter directory.
+
+        Args:
+            path (str): The path to the adapter directory.
+
+        Returns:
+            Optional[dict]: A dictionary containing manifest data, or None if invalid.
+        """
         manifest_file = os.path.join(path, "manifest.ini")
         if not os.path.isfile(manifest_file):
             logger.error("Missing manifest at '%s'", manifest_file)
@@ -108,19 +187,76 @@ class AdapterManager:
         return dict(config["platform"])
 
     @classmethod
-    def get_adapter(cls, name: str, protocol: str) -> Optional[str]:
-        if not cls._registry:
-            cls._populate_registry()
+    def get_adapter(cls, shortcode: Optional[str] = None) -> Optional[dict]:
+        """
+        Retrieve an adapter's manifest based on its shortcode.
+
+        Args:
+            shortcode (Optional[str]): The shortcode of the adapter.
+
+        Returns:
+            Optional[dict]: The adapter's manifest data, or None if not found.
+        """
+        cls._populate_registry()
+
+        if shortcode:
+            for manifest in cls._registry.values():
+                if manifest.get("shortcode") == shortcode:
+                    return manifest
+            logger.warning("Adapter with shortcode '%s' not found.", shortcode)
+            return None
+
+        logger.warning("Shortcode must be provided to get an adapter.")
+        return None
+
+    @classmethod
+    def get_adapter_path(
+        cls, name: str, protocol: str, service_type: str
+    ) -> Optional[tuple]:
+        """
+        Retrieve the adapter's path and virtual environment path.
+
+        Args:
+            name (str): The name of the adapter.
+            protocol (str): The protocol used by the adapter.
+            service_type (str): The service type of the adapter.
+
+        Returns:
+            Optional[tuple]: A tuple containing the adapter path and 
+                virtual environment path, or None if not found.
+        """
+        cls._populate_registry()
 
         manifest = cls._registry.get(name)
-        if manifest and protocol.lower() in (v.lower() for v in manifest.values()):
-            return manifest.get("path")
+        if (
+            manifest
+            and protocol.lower() == manifest.get("protocol", "").lower()
+            and service_type.lower() == manifest.get("service_type", "").lower()
+        ):
+            adapter_path = manifest.get("path")
+            adapter_dir_name = os.path.basename(adapter_path)
+            venv_path = os.path.join(cls._adapters_venv_dir, adapter_dir_name)
+            return adapter_path, venv_path
 
-        logger.warning("Adapter '%s' with protocol '%s' not found.", name, protocol)
+        logger.warning(
+            "Adapter with name '%s', protocol '%s', and service_type '%s' not found.",
+            name,
+            protocol,
+            service_type,
+        )
         return None
 
     @classmethod
     def add_adapter_from_github(cls, url: str):
+        """
+        Add a new adapter by cloning a GitHub repository.
+
+        Args:
+            url (str): The URL of the GitHub repository.
+
+        Raises:
+            ValueError: If the adapter structure is invalid or dependencies fail to install.
+        """
         os.makedirs(cls._adapters_dir, exist_ok=True)
 
         class CloneProgress(RemoteProgress):
