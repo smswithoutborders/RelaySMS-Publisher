@@ -11,6 +11,7 @@ from utils import get_configs
 from logutils import get_logger
 from sentry_config import initialize_sentry, SENTRY_ENABLED
 from grpc_publisher_service import PublisherService
+from platforms.adapter_manager import AdapterManager
 
 logger = get_logger("publisher.grpc.server")
 
@@ -115,6 +116,7 @@ def serve():
         )
 
     grpc_server.start()
+    AdapterManager._populate_registry()
 
     try:
         grpc_server.wait_for_termination()

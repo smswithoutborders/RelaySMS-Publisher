@@ -79,15 +79,18 @@ class AdapterManager:
         """
         Populate the registry with adapter metadata if there are changes in the adapters directory.
         """
+        if not os.path.isdir(cls._adapters_dir):
+            logger.warning(
+                "Adapters directory '%s' does not exist. Creating it.",
+                cls._adapters_dir,
+            )
+            os.makedirs(cls._adapters_dir, exist_ok=True)
+
         if not cls._is_registry_outdated():
-            logger.info("Registry is up-to-date. No changes detected.")
+            logger.debug("Registry is up-to-date. No changes detected.")
             return
 
         cls._registry.clear()
-
-        if not os.path.isdir(cls._adapters_dir):
-            logger.warning("Adapters directory '%s' does not exist.", cls._adapters_dir)
-            return
 
         for item in os.listdir(cls._adapters_dir):
             adapter_path = os.path.join(cls._adapters_dir, item)
@@ -96,10 +99,15 @@ class AdapterManager:
 
             manifest_data = cls._load_manifest(adapter_path)
             if manifest_data and (adapter_name := manifest_data.get("name")):
+                protocol = manifest_data.get("protocol", "").lower()
+                key = f"{adapter_name}_{protocol}".lower()
                 manifest_data["path"] = adapter_path
-                cls._registry[adapter_name] = manifest_data
+                cls._registry[key] = manifest_data
                 logger.info(
-                    "Registered adapter '%s' from '%s'", adapter_name, adapter_path
+                    "Registered adapter '%s' with protocol '%s' from '%s'",
+                    adapter_name,
+                    protocol,
+                    adapter_path,
                 )
             else:
                 logger.warning("Skipping invalid adapter directory: '%s'", adapter_path)
@@ -212,7 +220,7 @@ class AdapterManager:
     @classmethod
     def get_adapter_path(
         cls, name: str, protocol: str, service_type: str
-    ) -> Optional[tuple]:
+    ) -> Optional[dict]:
         """
         Retrieve the adapter's path and virtual environment path.
 
@@ -222,21 +230,20 @@ class AdapterManager:
             service_type (str): The service type of the adapter.
 
         Returns:
-            Optional[tuple]: A tuple containing the adapter path and 
+            Optional[dict]: A dictionary containing the adapter path and
                 virtual environment path, or None if not found.
         """
         cls._populate_registry()
 
-        manifest = cls._registry.get(name)
+        manifest = cls._registry.get(f"{name}_{protocol}".lower())
         if (
             manifest
-            and protocol.lower() == manifest.get("protocol", "").lower()
             and service_type.lower() == manifest.get("service_type", "").lower()
         ):
             adapter_path = manifest.get("path")
             adapter_dir_name = os.path.basename(adapter_path)
             venv_path = os.path.join(cls._adapters_venv_dir, adapter_dir_name)
-            return adapter_path, venv_path
+            return {"path": adapter_path, "venv_path": venv_path}
 
         logger.warning(
             "Adapter with name '%s', protocol '%s', and service_type '%s' not found.",
@@ -336,3 +343,32 @@ class AdapterManager:
             adapter_name,
             protocol,
         )
+
+    @classmethod
+    def remove_adapter(cls, name: str):
+        """
+        Remove an adapter by its name.
+
+        Args:
+            name (str): The name of the adapter to remove.
+
+        Raises:
+            ValueError: If the adapter does not exist.
+        """
+        cls._populate_registry()
+
+        manifest = cls._registry.get(name)
+        if not manifest:
+            raise ValueError(f"Adapter '{name}' does not exist.")
+
+        adapter_path = manifest.get("path")
+        adapter_dir_name = os.path.basename(adapter_path)
+        venv_path = os.path.join(cls._adapters_venv_dir, adapter_dir_name)
+
+        if os.path.exists(adapter_path):
+            cls._rollback_directory(adapter_path)
+
+        if os.path.exists(venv_path):
+            cls._rollback_directory(venv_path)
+
+        logger.info("Adapter '%s' removed successfully.", name)
