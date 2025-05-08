@@ -218,16 +218,13 @@ class AdapterManager:
         return None
 
     @classmethod
-    def get_adapter_path(
-        cls, name: str, protocol: str, service_type: str
-    ) -> Optional[dict]:
+    def get_adapter_path(cls, name: str, protocol: str) -> Optional[dict]:
         """
         Retrieve the adapter's path and virtual environment path.
 
         Args:
             name (str): The name of the adapter.
             protocol (str): The protocol used by the adapter.
-            service_type (str): The service type of the adapter.
 
         Returns:
             Optional[dict]: A dictionary containing the adapter path and
@@ -236,20 +233,16 @@ class AdapterManager:
         cls._populate_registry()
 
         manifest = cls._registry.get(f"{name}_{protocol}".lower())
-        if (
-            manifest
-            and service_type.lower() == manifest.get("service_type", "").lower()
-        ):
+        if manifest:
             adapter_path = manifest.get("path")
             adapter_dir_name = os.path.basename(adapter_path)
             venv_path = os.path.join(cls._adapters_venv_dir, adapter_dir_name)
             return {"path": adapter_path, "venv_path": venv_path}
 
         logger.warning(
-            "Adapter with name '%s', protocol '%s', and service_type '%s' not found.",
+            "Adapter with name '%s' and protocol '%s' not found.",
             name,
             protocol,
-            service_type,
         )
         return None
 

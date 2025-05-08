@@ -34,6 +34,8 @@ from notification_dispatcher import dispatch_notifications
 from logutils import get_logger
 from translations import Localization
 from test_client import TestClient
+from platforms.adapter_manager import AdapterManager
+from platforms.adapter_ipc_handler import AdapterIPCHandler
 
 MOCK_DELIVERY_SMS = (
     get_configs("MOCK_DELIVERY_SMS", default_value="true") or ""
@@ -200,42 +202,58 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 ["platform"],
             )
 
-        def handle_authorization(oauth2_client):
-            extra_params = {
-                "state": getattr(request, "state") or None,
-                "code_verifier": getattr(request, "code_verifier") or None,
-                "autogenerate_code_verifier": getattr(
-                    request, "autogenerate_code_verifier"
-                ),
-            }
-
-            authorization_url, state, code_verifier, client_id, scope, redirect_uri = (
-                oauth2_client.get_authorization_url(**extra_params)
-            )
-
-            return response(
-                authorization_url=authorization_url,
-                state=state,
-                code_verifier=code_verifier,
-                client_id=client_id,
-                scope=scope,
-                redirect_url=redirect_uri,
-                message="Successfully generated authorization url",
-            )
-
         try:
             invalid_fields_response = validate_fields()
             if invalid_fields_response:
                 return invalid_fields_response
 
-            check_platform_supported(request.platform.lower(), "oauth2")
+            adapter = AdapterManager.get_adapter_path(
+                name=request.platform.lower(), protocol="oauth2"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{request.platform.lower()}' with "
+                    "protocol 'oauth2' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
 
-            oauth2_client = OAuth2Client(request.platform)
+            params = {
+                "state": getattr(request, "state") or None,
+                "code_verifier": getattr(request, "code_verifier") or None,
+                "autogenerate_code_verifier": getattr(
+                    request, "autogenerate_code_verifier"
+                ),
+                "redirect_url": getattr(request, "redirect_url") or None,
+            }
 
-            if request.redirect_url:
-                oauth2_client.session.redirect_uri = request.redirect_url
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="get_authorization_url",
+                params=params,
+            )
 
-            return handle_authorization(oauth2_client)
+            if pipe.get("error"):
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    pipe.get("error"),
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    error_type="UNKNOWN",
+                )
+
+            result = pipe.get("result")
+
+            return response(
+                authorization_url=result.get("authorization_url"),
+                state=result.get("state"),
+                code_verifier=result.get("code_verifier"),
+                client_id=result.get("client_id"),
+                scope=result.get("scope"),
+                redirect_url=result.get("redirect_url"),
+                message="Successfully generated authorization url",
+            )
 
         except NotImplementedError as e:
             return self.handle_create_grpc_error_response(
