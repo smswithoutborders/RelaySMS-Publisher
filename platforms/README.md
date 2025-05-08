@@ -50,7 +50,7 @@ This will unregister the adapter and remove it from the system.
 
 ## Developing New Adapters
 
-You can develop new adapters by cloning the template repository and following its instructions.
+You can develop new adapters by cloning the [template repository](https://github.com/smswithoutborders/platform-adapter-template) and following its instructions.
 
 ### Steps:
 
