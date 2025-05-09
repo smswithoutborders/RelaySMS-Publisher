@@ -83,34 +83,22 @@ class OAuth2ProtocolInterface(BaseProtocolInterface):
         """
 
     @abstractmethod
-    def get_access_token(self, code: str, **kwargs) -> Dict[str, Any]:
+    def exchange_code_and_fetch_user_info(self, code: str, **kwargs) -> Dict[str, Any]:
         """
-        Exchange the authorization code for an access token.
+        Exchange the authorization code for an access token and retrieve user information.
 
         Args:
             code (str): The authorization code received from the OAuth2 provider.
-            kwargs: Additional parameters required for the token exchange.
+            kwargs: Additional parameters required for the process.
 
         Returns:
             Dict[str, Any]: A dictionary containing the following keys:
                 - access_token (str): The access token for the user.
                 - refresh_token (str): The refresh token for the user.
                 - id_token (str): The ID token for the user, if applicable.
-        """
-
-    @abstractmethod
-    def get_user_info(self, **kwargs) -> Dict[str, Any]:
-        """
-        Retrieve user information using the access token.
-
-        Args:
-            kwargs: Additional parameters required for retrieving user information.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing the following keys:
-            - account_identifier (str): A unique identifier for the user, such as
-              an email address or username.
-            - name (str, optional): The full name of the user, if available.
+                - account_identifier (str): A unique identifier for the user, such as
+                  an email address or username.
+                - name (str, optional): The full name of the user, if available.
         """
 
     @abstractmethod
