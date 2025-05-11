@@ -436,11 +436,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return get_access_token_response.token, None
 
-        def revoke_token(token):
-            oauth2_client = OAuth2Client(request.platform, json.loads(token))
-            revoke_response = oauth2_client.revoke_token()
-            return revoke_response
-
         def delete_token():
             delete_token_response, delete_token_error = delete_entity_token(
                 request.long_lived_token, request.platform, request.account_identifier
@@ -467,13 +462,33 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if invalid_fields_response:
                 return invalid_fields_response
 
-            check_platform_supported(request.platform.lower(), "oauth2")
+            adapter = AdapterManager.get_adapter_path(
+                name=request.platform.lower(), protocol="oauth2"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{request.platform.lower()}' with "
+                    "protocol 'oauth2' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
 
             access_token, access_token_error = get_access_token()
             if access_token_error:
                 return access_token_error
 
-            revoke_token(access_token)
+            params = {"token": json.loads(access_token)}
+
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="revoke_token",
+                params=params,
+            )
+
+            if pipe.get("error"):
+                logger.error(pipe.get("error"))
+
             return delete_token()
 
         except NotImplementedError as e:
