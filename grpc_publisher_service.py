@@ -300,41 +300,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return list_response, None
 
-        def fetch_token_and_profile():
-            oauth2_client = OAuth2Client(request.platform)
-
-            if request.redirect_url:
-                oauth2_client.session.redirect_uri = request.redirect_url
-
-            extra_params = {"code_verifier": getattr(request, "code_verifier") or None}
-            token, scope = oauth2_client.fetch_token(
-                code=request.authorization_code, **extra_params
-            )
-
-            if not token.get("refresh_token"):
-                return None, self.handle_create_grpc_error_response(
-                    context,
-                    response,
-                    "invalid token: No refresh token present.",
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                )
-
-            fetched_scopes = set(token.get("scope", "").split())
-            expected_scopes = set(scope)
-
-            if not expected_scopes.issubset(fetched_scopes):
-                return None, self.handle_create_grpc_error_response(
-                    context,
-                    response,
-                    "invalid token: Scopes do not match. Expected: "
-                    f"{expected_scopes}, Received: {fetched_scopes}",
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                )
-
-            profile = oauth2_client.fetch_userinfo()
-            return (token, profile), None
-
-        def store_token(token, profile):
+        def store_token(token, userinfo):
             local_tokens = {}
 
             if request.store_on_device:
@@ -347,9 +313,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             store_response, store_error = store_entity_token(
                 long_lived_token=request.long_lived_token,
                 platform=request.platform,
-                account_identifier=profile.get("email")
-                or profile.get("username")
-                or profile.get("data", {}).get("username"),
+                account_identifier=userinfo.get("account_identifier"),
                 token=json.dumps(token),
             )
 
@@ -378,26 +342,47 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if invalid_fields_response:
                 return invalid_fields_response
 
-            check_platform_supported(request.platform.lower(), "oauth2")
+            adapter = AdapterManager.get_adapter_path(
+                name=request.platform.lower(), protocol="oauth2"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{request.platform.lower()}' with "
+                    "protocol 'oauth2' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
 
             _, token_list_error = list_tokens()
             if token_list_error:
                 return token_list_error
 
-            fetched_data, fetch_token_error = fetch_token_and_profile()
+            params = {
+                "code": request.authorization_code,
+                "code_verifier": getattr(request, "code_verifier") or None,
+                "redirect_url": getattr(request, "redirect_url") or None,
+            }
 
-            if fetch_token_error:
-                return fetch_token_error
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="exchange_code_and_fetch_user_info",
+                params=params,
+            )
 
-            return store_token(*fetched_data)
+            if pipe.get("error"):
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    pipe.get("error"),
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    error_type="UNKNOWN",
+                )
 
-        except OAuthError as e:
-            return self.handle_create_grpc_error_response(
-                context,
-                response,
-                str(e),
-                grpc.StatusCode.INVALID_ARGUMENT,
-                error_type="UNKNOWN",
+            result = pipe.get("result")
+
+            return store_token(
+                token=result.get("token"), userinfo=result.get("userinfo")
             )
 
         except NotImplementedError as e:

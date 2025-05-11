@@ -7,6 +7,9 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 import os
 import json
 import subprocess
+from logutils import get_logger
+
+logger = get_logger(__name__)
 
 
 class AdapterIPCHandler:
@@ -33,6 +36,12 @@ class AdapterIPCHandler:
             FileNotFoundError: If the Python executable is not found.
             RuntimeError: For subprocess failures or invalid adapter responses.
         """
+        logger.debug(
+            "Invoking adapter: %s, Method: %s, Params: %s",
+            os.path.basename(adapter_path),
+            method,
+            params,
+        )
         python_exec = os.path.join(venv_path, "bin", "python3")
         adapter_main_path = os.path.join(adapter_path, "main.py")
         if not os.path.isfile(python_exec):
@@ -40,39 +49,59 @@ class AdapterIPCHandler:
 
         command = [python_exec, adapter_main_path]
         payload = json.dumps({"method": method, "params": params or {}})
+        logger.debug("Command: %s", " ".join(command))
+        logger.info(
+            "Starting subprocess for: %s on %s", method, os.path.basename(adapter_path)
+        )
 
         try:
-            process = subprocess.Popen(
+            with subprocess.Popen(
                 command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
-            )
+            ) as process:
+                logger.info("Subprocess started for: %s", method)
 
-            stdout, stderr = process.communicate(input=payload, timeout=15)
+                stdout, stderr = process.communicate(input=payload, timeout=15)
+                logger.debug("Subprocess response: %s", stdout.strip())
 
-            if process.returncode != 0:
-                raise RuntimeError(
-                    f"Adapter subprocess exited with error:\n{stderr.strip()}"
+                if process.returncode != 0:
+                    logger.error(
+                        "Subprocess failed. Code: %s, Error: %s",
+                        process.returncode,
+                        stderr.strip(),
+                    )
+                    raise RuntimeError(
+                        f"Adapter subprocess exited with error:\n{stderr.strip()}"
+                    )
+
+                if not stdout.strip():
+                    logger.error("No response from adapter.")
+                    return {"result": None, "error": "No response from adapter."}
+
+                try:
+                    response = json.loads(stdout.strip())
+                except json.JSONDecodeError:
+                    logger.error("Invalid JSON: %s", stdout.strip())
+                    return {
+                        "result": None,
+                        "error": f"Invalid JSON from adapter: {stdout.strip()}",
+                    }
+                logger.info(
+                    "Completed: %s on %s", method, os.path.basename(adapter_path)
                 )
-
-            if not stdout.strip():
-                return {"result": None, "error": "Empty response from adapter."}
-
-            try:
-                response = json.loads(stdout.strip())
-            except json.JSONDecodeError:
                 return {
-                    "result": None,
-                    "error": f"Invalid JSON from adapter: {stdout.strip()}",
+                    "result": response.get("result"),
+                    "error": response.get("error"),
                 }
-
-            return {"result": response.get("result"), "error": response.get("error")}
 
         except subprocess.TimeoutExpired as exc:
             process.kill()
+            logger.error("Invocation timed out.")
             raise RuntimeError("Adapter invocation timed out.") from exc
-        except Exception as e:
-            raise RuntimeError(f"Failed to invoke adapter: {e}") from e
+        except Exception:
+            process.kill()
+            raise
