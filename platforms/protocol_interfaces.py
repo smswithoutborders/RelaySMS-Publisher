@@ -107,14 +107,19 @@ class OAuth2ProtocolInterface(BaseProtocolInterface):
         """
 
     @abstractmethod
-    def revoke_token(self, **kwargs) -> bool:
+    def revoke_token(self, token: Dict[str, str], **kwargs) -> bool:
         """
         Revoke the access token.
 
-        This method should invalidate the access token, ensuring it can no longer
+        This method invalidates the provided tokens, ensuring they can no longer
         be used for authentication.
 
         Args:
+            token (Dict[str, str]): A dictionary containing token details:
+                - access_token (str): The token to be revoked.
+                - refresh_token (str): The refresh token to be invalidated.
+                - id_token (str, optional): The ID token, if applicable.
+                - other metadata as provided by the platform.
             kwargs: Additional parameters required for token revocation.
 
         Returns:
