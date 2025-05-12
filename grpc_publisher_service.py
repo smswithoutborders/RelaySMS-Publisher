@@ -702,7 +702,14 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 },
             }
 
+            if service_type not in service_handlers:
+                raise NotImplementedError(
+                    f"The service type '{service_type}' for '{platform_name}' "
+                    "is not supported. Please contact the developers for more information."
+                )
+
             data = service_handlers[service_type](content_parts)
+            user_sent_tokens = bool(data["access_token"] and data["refresh_token"])
 
             adapter = AdapterManager.get_adapter_path(
                 name=platform_name.lower(), protocol="oauth2"
@@ -725,7 +732,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 return {"response": token_error, "error": None, "message": None}
 
             token_data = json.loads(token)
-            if data["access_token"] and data["refresh_token"]:
+            if user_sent_tokens:
                 token_data.update(
                     {
                         "access_token": data["access_token"],
@@ -745,7 +752,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 return {"response": None, "error": pipe.get("error"), "message": None}
 
             result = pipe.get("result")
-            if bool(data["access_token"] and data["refresh_token"]):
+            if not user_sent_tokens:
                 handle_token_update(
                     token=result.get("refreshed_token"),
                     device_id=kwargs.get("device_id"),
