@@ -534,18 +534,16 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             return decoded_result, None
 
         def get_platform_info(platform_letter):
-            platform_info, platform_err = get_platform_details_by_shortcode(
-                platform_letter
-            )
-            if platform_info is None:
+            adapter = AdapterManager.get_adapter(platform_letter)
+            if not adapter:
                 return None, self.handle_create_grpc_error_response(
                     context,
                     response,
-                    platform_err,
+                    f"No platform found for shortcode '{platform_letter}'.",
                     grpc.StatusCode.INVALID_ARGUMENT,
                     send_to_sentry=True,
                 )
-            return platform_info, None
+            return adapter, None
 
         def handle_test_client(test_id):
             if not request.metadata.get("Date") or not request.metadata.get(
@@ -654,84 +652,113 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             }
             return result, None
 
-        # def encrypt_message(device_id, plaintext):
-        #     encrypt_payload_response, encrypt_payload_error = encrypt_payload(
-        #         device_id.hex(), plaintext
-        #     )
-        #     if encrypt_payload_error:
-        #         return None, self.handle_create_grpc_error_response(
-        #             context,
-        #             response,
-        #             encrypt_payload_error.details(),
-        #             encrypt_payload_error.code(),
-        #         )
-        #     if not encrypt_payload_response.success:
-        #         return None, response(
-        #             message=encrypt_payload_response.message,
-        #             success=encrypt_payload_response.success,
-        #         )
-        #     return encrypt_payload_response.payload_ciphertext, None
-
-        def handle_oauth2_email(platform_name, content_parts, token, **kwargs):
-            (
-                from_email,
-                to_email,
-                cc_email,
-                bcc_email,
-                subject,
-                body,
-                access_token,
-                refresh_token,
-            ) = content_parts
-            email_message = create_email_message(
-                from_email,
-                to_email,
-                subject,
-                body,
-                cc_email=cc_email,
-                bcc_email=bcc_email,
+        def handle_token_update(
+            token, device_id, phone_number, account_identifier, platform
+        ):
+            update_response, update_error = update_entity_token(
+                device_id=device_id,
+                phone_number=phone_number,
+                token=json.dumps(token),
+                account_identifier=account_identifier,
+                platform=platform,
             )
-            token_data = json.loads(token)
-            if access_token and refresh_token:
-                token_data["access_token"] = access_token
-                token_data["refresh_token"] = refresh_token
 
-            oauth2_client = OAuth2Client(
-                platform_name,
-                token_data,
-                self.create_token_update_handler(
+            if update_error:
+                logger.error(
+                    "Failed to update token: %s - %s",
+                    update_error.code(),
+                    update_error.details(),
+                )
+                return False
+
+            if not update_response.success:
+                logger.error("Failed to update token: %s", update_response.message)
+                return False
+
+            return True
+
+        def handle_oauth2_publication(
+            service_type, platform_name, content_parts, **kwargs
+        ):
+            service_handlers = {
+                "email": lambda parts: {
+                    "sender_id": parts[0],
+                    "message": create_email_message(
+                        parts[0],
+                        parts[1],
+                        parts[4],
+                        parts[5],
+                        cc_email=parts[2],
+                        bcc_email=parts[3],
+                    ),
+                    "access_token": parts[6],
+                    "refresh_token": parts[7],
+                },
+                "text": lambda parts: {
+                    "sender_id": parts[0],
+                    "message": parts[1],
+                    "access_token": parts[2],
+                    "refresh_token": parts[3],
+                },
+            }
+
+            data = service_handlers[service_type](content_parts)
+
+            adapter = AdapterManager.get_adapter_path(
+                name=platform_name.lower(), protocol="oauth2"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{platform_name.lower()}' with "
+                    "protocol 'oauth2' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
+
+            token, token_error = get_access_token(
+                device_id=device_id_hex,
+                phone_number=request.metadata["From"],
+                platform_name=platform_info["name"],
+                account_identifier=content_parts[0],
+            )
+            if token_error:
+                return {"response": token_error, "error": None, "message": None}
+
+            token_data = json.loads(token)
+            if data["access_token"] and data["refresh_token"]:
+                token_data.update(
+                    {
+                        "access_token": data["access_token"],
+                        "refresh_token": data["refresh_token"],
+                    }
+                )
+            params = {"token": token_data, "message": data["message"]}
+
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="send_message",
+                params=params,
+            )
+
+            if pipe.get("error"):
+                return {"response": None, "error": pipe.get("error"), "message": None}
+
+            result = pipe.get("result")
+            if bool(data["access_token"] and data["refresh_token"]):
+                handle_token_update(
+                    token=result.get("refreshed_token"),
                     device_id=kwargs.get("device_id"),
                     phone_number=kwargs.get("phone_number"),
-                    account_id=from_email,
-                    platform=platform_name,
-                    response_cls=response,
-                    grpc_context=context,
-                    skip_token_update=access_token and refresh_token,
-                ),
-            )
-            return oauth2_client.send_message(email_message, from_email)
+                    account_identifier=data["sender_id"],
+                    platform=platform_name.lower(),
+                )
 
-        def handle_oauth2_text(platform_name, content_parts, token, **kwargs):
-            sender, text, access_token, refresh_token = content_parts
-            token_data = json.loads(token)
-            if access_token and refresh_token:
-                token_data["access_token"] = access_token
-                token_data["refresh_token"] = refresh_token
-
-            oauth2_client = OAuth2Client(
-                platform_name,
-                token_data,
-                self.create_token_update_handler(
-                    device_id=kwargs.get("device_id"),
-                    phone_number=kwargs.get("phone_number"),
-                    account_id=sender,
-                    platform=platform_name,
-                    response_cls=response,
-                    grpc_context=context,
-                    skip_token_update=access_token and refresh_token,
-                ),
-            )
-            return oauth2_client.send_message(text)
+            return {
+                "response": None,
+                "error": None,
+                "message": "Successfully sent message",
+            }
 
         def handle_pnba_message(platform_name, content_parts, token):
             _, receiver, message = content_parts
@@ -850,59 +877,45 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if platform_info["service_type"] == "test":
                 return handle_test_client(content_parts[0])
 
-            access_token, access_token_error = get_access_token(
-                device_id=device_id_hex,
-                phone_number=request.metadata["From"],
-                platform_name=platform_info["name"],
-                account_identifier=content_parts[0],
-            )
-            if access_token_error:
-                return access_token_error
-
             publication_response = None
             publication_error = None
 
-            if platform_info["service_type"] == "email":
-                publication_response, publication_error = handle_oauth2_email(
+            if platform_info["protocol"] == "oauth2":
+                publication_response = handle_oauth2_publication(
+                    service_type=platform_info["service_type"],
+                    platform_name=platform_info["name"],
+                    content_parts=content_parts,
                     device_id=device_id_hex,
                     phone_number=request.metadata["From"],
-                    platform_name=platform_info["name"],
-                    content_parts=content_parts,
-                    token=access_token,
                 )
-            elif platform_info["service_type"] == "text":
-                publication_response, publication_error = handle_oauth2_text(
-                    device_id=device_id_hex,
-                    phone_number=request.metadata["From"],
-                    platform_name=platform_info["name"],
-                    content_parts=content_parts,
-                    token=access_token,
-                )
-            elif platform_info["service_type"] == "message":
-                publication_response, publication_error = handle_pnba_message(
-                    platform_name=platform_info["name"],
-                    content_parts=content_parts,
-                    token=access_token,
-                )
+            elif platform_info["protocol"] == "pnba":
+                if platform_info["service_type"] == "message":
+                    publication_response, publication_error = handle_pnba_message(
+                        platform_name=platform_info["name"],
+                        content_parts=content_parts,
+                        token="access_token",
+                    )
+            elif platform_info["service_type"] == "test":
+                publication_response = handle_test_client(content_parts[0])
 
-            if publication_error:
+            if publication_response["response"]:
+                return publication_response["response"]
+
+            if publication_response["error"]:
                 handle_publication_notifications(
                     platform_info["name"],
                     status="failed",
                     country_code=decrypted_result.get("country_code"),
                     language=decoded_payload.get("language"),
                 )
-                return response(
-                    message=f"Failed to publish {platform_info['name']} message",
-                    publisher_response=publication_error,
-                    success=False,
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    publication_response["error"],
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    send_to_sentry=True,
                 )
 
-            # payload_ciphertext, encrypt_payload_error = encrypt_message(
-            #     device_id, message_response
-            # )
-            # if encrypt_payload_error:
-            #     return encrypt_payload_error
             handle_publication_notifications(
                 platform_info["name"],
                 status="published",
@@ -911,27 +924,19 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             )
             return response(
                 message=f"Successfully published {platform_info['name']} message",
-                publisher_response=publication_response,
+                publisher_response=publication_response["message"],
                 success=True,
             )
 
-        except telegram_client.Errors.RPCError as exc:
-            handle_publication_notifications(
-                platform_info["name"],
-                status="failed",
-                country_code=decrypted_result.get("country_code"),
-                language=decoded_payload.get("language"),
-            )
+        except NotImplementedError as e:
             return self.handle_create_grpc_error_response(
                 context,
                 response,
-                exc,
-                grpc.StatusCode.INVALID_ARGUMENT,
-                error_type="UNKNOWN",
-                send_to_sentry=True,
+                str(e),
+                grpc.StatusCode.UNIMPLEMENTED,
             )
 
-        except OAuthError as exc:
+        except telegram_client.Errors.RPCError as exc:
             handle_publication_notifications(
                 platform_info["name"],
                 status="failed",
