@@ -127,7 +127,9 @@ class OAuth2ProtocolInterface(BaseProtocolInterface):
         """
 
     @abstractmethod
-    def send_message(self, token: Dict[str, str], message: str, **kwargs) -> bool:
+    def send_message(
+        self, token: Dict[str, str], message: str, **kwargs
+    ) -> Dict[str, Any]:
         """
         Send a message to the specified recipient.
 
@@ -141,5 +143,11 @@ class OAuth2ProtocolInterface(BaseProtocolInterface):
             kwargs: Additional parameters required for sending the message.
 
         Returns:
-            bool: True if the message was sent successfully, False otherwise.
+            Dict[str, Any]: A dictionary containing:
+                - success (bool): True if the message was sent successfully, False otherwise.
+                - refreshed_token (Dict[str, Any]): A dictionary containing:
+                    - access_token (str): The access token for the user.
+                    - refresh_token (str): The refresh token for the user.
+                    - id_token (str, optional): The ID token for the user, if applicable.
+                    - other metadata as provided by the platform.
         """
