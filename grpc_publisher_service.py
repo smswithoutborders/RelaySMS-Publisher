@@ -6,19 +6,12 @@ import traceback
 import json
 import grpc
 
-from authlib.integrations.base_client import OAuthError
 import sentry_sdk
 
 import publisher_pb2
 import publisher_pb2_grpc
 
-from utils import (
-    create_email_message,
-    check_platform_supported,
-    get_platform_details_by_shortcode,
-    get_configs,
-)
-from oauth2 import OAuth2Client
+from utils import check_platform_supported, get_configs
 import telegram_client
 from pnba import PNBAClient
 from content_parser import decode_content, extract_content_v0, extract_content_v1
@@ -683,14 +676,12 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             service_handlers = {
                 "email": lambda parts: {
                     "sender_id": parts[0],
-                    "message": create_email_message(
-                        parts[0],
-                        parts[1],
-                        parts[4],
-                        parts[5],
-                        cc_email=parts[2],
-                        bcc_email=parts[3],
-                    ),
+                    "from_email": parts[0],
+                    "to_email": parts[1],
+                    "cc_email": parts[2],
+                    "bcc_email": parts[3],
+                    "subject": parts[4],
+                    "message": parts[5],
                     "access_token": parts[6],
                     "refresh_token": parts[7],
                 },
@@ -739,7 +730,14 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                         "refresh_token": data["refresh_token"],
                     }
                 )
-            params = {"token": token_data, "message": data["message"]}
+            params = {"token": token_data}
+            params.update(
+                {
+                    k: v
+                    for k, v in data.items()
+                    if k not in ["access_token", "refresh_token"]
+                }
+            )
 
             pipe = AdapterIPCHandler.invoke(
                 adapter_path=adapter["path"],
