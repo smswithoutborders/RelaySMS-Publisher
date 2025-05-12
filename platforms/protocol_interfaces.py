@@ -127,11 +127,16 @@ class OAuth2ProtocolInterface(BaseProtocolInterface):
         """
 
     @abstractmethod
-    def send_message(self, message: str, **kwargs) -> bool:
+    def send_message(self, token: Dict[str, str], message: str, **kwargs) -> bool:
         """
         Send a message to the specified recipient.
 
         Args:
+            token (Dict[str, str]): A dictionary containing token details:
+                - access_token (str): The token to be revoked.
+                - refresh_token (str): The refresh token to be invalidated.
+                - id_token (str, optional): The ID token, if applicable.
+                - other metadata as provided by the platform.
             message (str): The content of the message to be sent.
             kwargs: Additional parameters required for sending the message.
 
