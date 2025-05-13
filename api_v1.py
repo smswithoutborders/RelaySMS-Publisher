@@ -5,15 +5,55 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 import datetime
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
-from api_schemas import PublicationsRead, PublicationsResponse, Pagination
+from typing import Optional, List
+from pathlib import Path
+from fastapi import APIRouter, HTTPException, Query, Depends, Path as FastAPIPath
+from fastapi.responses import FileResponse
+from api_schemas import (
+    PublicationsRead,
+    PublicationsResponse,
+    Pagination,
+    PlatformIconQuery,
+    PlatformManifest,
+)
 from publications import fetch_publication
+from platforms.adapter_manager import AdapterManager
 from logutils import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+ALLOWED_PLATFORM_ICON_EXTENSIONS = ["png", "svg"]
+ALLOWED_PLATFORM_MANIFEST_KEYS = [
+    "name",
+    "shortcode",
+    "protocol",
+    "service_type",
+    "icons_dir",
+]
+
+
+def add_icon_urls(manifest: dict, platform_name: str) -> dict:
+    """
+    Add icon URLs to the platform manifest if icons are available.
+
+    Args:
+        manifest (dict): The platform manifest containing metadata about the platform.
+        platform_name (str): The name of the platform.
+
+    Returns:
+        dict: The updated platform manifest with icon URLs added, if applicable.
+    """
+    icons_dir = Path(manifest.pop("icons_dir")).resolve()
+    if icons_dir and icons_dir.is_dir():
+        for ext in ALLOWED_PLATFORM_ICON_EXTENSIONS:
+            icon_path = icons_dir / f"{platform_name}.{ext}"
+            if icon_path.is_file():
+                manifest[f"{ext}_icon_url"] = (
+                    f"/platforms/{platform_name}/icons?ext={ext}"
+                )
+    return manifest
 
 
 @router.get("/metrics/publications", response_model=PublicationsResponse)
@@ -66,3 +106,88 @@ def get_publication(
     except Exception as e:
         logger.error(f"Error fetching publications: {e}")
         raise HTTPException(status_code=500, detail="Error fetching publications")
+
+
+@router.get("/platforms")
+def get_platforms() -> List[PlatformManifest]:
+    """
+    Retrieve a list of platform adapter manifests.
+    """
+    AdapterManager._populate_registry()
+    platforms = []
+    for manifest in AdapterManager._registry.values():
+        manifest_copy = {
+            key: value
+            for key, value in manifest.items()
+            if key in ALLOWED_PLATFORM_MANIFEST_KEYS
+        }
+        platform_name = manifest_copy["name"]
+        manifest_copy = add_icon_urls(manifest_copy, platform_name)
+        platforms.append(manifest_copy)
+    return platforms
+
+
+@router.get("/platforms/{platform_name}")
+def get_platform_data(
+    platform_name: str = FastAPIPath(
+        ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
+    )
+) -> PlatformManifest:
+    """Retrieve the manifest of a platform adapter."""
+    AdapterManager._populate_registry()
+    adapter = next(
+        (
+            manifest
+            for manifest in AdapterManager._registry.values()
+            if manifest["name"].lower() == platform_name.lower()
+        ),
+        None,
+    )
+    if not adapter:
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+    adapter_copy = {
+        key: value
+        for key, value in adapter.items()
+        if key in ALLOWED_PLATFORM_MANIFEST_KEYS
+    }
+    adapter_copy = add_icon_urls(adapter_copy, platform_name)
+    return adapter_copy
+
+
+@router.get("/platforms/{platform_name}/icons")
+def get_platform_icon(
+    query: PlatformIconQuery = Depends(),
+    platform_name: str = FastAPIPath(
+        ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
+    ),
+) -> FileResponse:
+    """
+    Retrieve the icon of a platform adapter in the specified format.
+    """
+    AdapterManager._populate_registry()
+    adapter = next(
+        (
+            manifest
+            for manifest in AdapterManager._registry.values()
+            if manifest["name"].lower() == platform_name.lower()
+        ),
+        None,
+    )
+    if not adapter:
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+    icon_name = f"{platform_name}.{query.ext}"
+    icons_dir = Path(adapter.get("icons_dir")).resolve()
+    icon_path = (icons_dir / icon_name).resolve()
+
+    try:
+        icon_path.relative_to(icons_dir)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid icon path") from exc
+
+    if not icon_path.is_file():
+        raise HTTPException(status_code=404, detail="Icon not found")
+
+    media_type = "image/svg+xml" if query.ext == "svg" else "image/png"
+    return FileResponse(str(icon_path), media_type=media_type)

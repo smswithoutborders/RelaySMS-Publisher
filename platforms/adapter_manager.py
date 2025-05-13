@@ -24,6 +24,10 @@ adapters_dir = get_configs(
 adapters_venv_dir = get_configs(
     "PLATFORMS_ADAPTERS_VENV_DIR", default_value=os.path.join(BASE_DIR, "adapters_venv")
 )
+adapters_assets_dir = get_configs(
+    "PLATFORMS_ADAPTERS_ASSETS_DIR",
+    default_value=os.path.join(BASE_DIR, "adapters_assets"),
+)
 
 logger = get_logger(__name__)
 
@@ -35,6 +39,7 @@ class AdapterManager:
 
     _adapters_dir = adapters_dir
     _adapters_venv_dir = adapters_venv_dir
+    _adapters_assets_dir = adapters_assets_dir
     _registry = {}
     _cache_hash = None
 
@@ -75,6 +80,31 @@ class AdapterManager:
         return False
 
     @classmethod
+    def _load_ini_file(cls, path: str, section: str) -> Optional[dict]:
+        """
+        Load a specified section from an .ini file.
+
+        Args:
+            path (str): The path to the .ini file.
+            section (str): The section to load from the .ini file.
+
+        Returns:
+            Optional[dict]: A dictionary containing the section data, or None if invalid.
+        """
+        if not os.path.isfile(path):
+            logger.error("Missing .ini file at '%s'", path)
+            return None
+
+        config = configparser.ConfigParser()
+        config.read(path)
+
+        if section not in config:
+            logger.error("Section '%s' missing in .ini file: '%s'", section, path)
+            return None
+
+        return dict(config[section])
+
+    @classmethod
     def _populate_registry(cls):
         """
         Populate the registry with adapter metadata if there are changes in the adapters directory.
@@ -97,11 +127,36 @@ class AdapterManager:
             if not os.path.isdir(adapter_path):
                 continue
 
-            manifest_data = cls._load_manifest(adapter_path)
+            manifest_path = os.path.join(adapter_path, "manifest.ini")
+            manifest_data = cls._load_ini_file(manifest_path, "platform")
             if manifest_data and (adapter_name := manifest_data.get("name")):
                 protocol = manifest_data.get("protocol", "").lower()
                 key = f"{adapter_name}_{protocol}".lower()
+                adapter_dir_name = os.path.basename(adapter_path)
                 manifest_data["path"] = adapter_path
+                manifest_data["venv_path"] = os.path.join(
+                    cls._adapters_venv_dir, adapter_dir_name
+                )
+                manifest_data["assets_path"] = os.path.join(
+                    cls._adapters_assets_dir, adapter_dir_name
+                )
+
+                config_path = os.path.join(adapter_path, "config.ini")
+                config_data = cls._load_ini_file(config_path, "static_assets")
+                if config_data:
+                    icons_path = config_data.get("icons_dir_path")
+                    if icons_path:
+                        icons_dir = os.path.join(
+                            adapter_path,
+                            (
+                                icons_path[2:]
+                                if icons_path.startswith("./")
+                                else icons_path
+                            ),
+                        )
+
+                        manifest_data["icons_dir"] = icons_dir
+
                 cls._registry[key] = manifest_data
                 logger.info(
                     "Registered adapter '%s' with protocol '%s' from '%s'",
@@ -170,31 +225,6 @@ class AdapterManager:
             raise ValueError("Adapter dependency installation failed.") from e
 
     @classmethod
-    def _load_manifest(cls, path: str) -> Optional[dict]:
-        """
-        Load the manifest file from an adapter directory.
-
-        Args:
-            path (str): The path to the adapter directory.
-
-        Returns:
-            Optional[dict]: A dictionary containing manifest data, or None if invalid.
-        """
-        manifest_file = os.path.join(path, "manifest.ini")
-        if not os.path.isfile(manifest_file):
-            logger.error("Missing manifest at '%s'", manifest_file)
-            return None
-
-        config = configparser.ConfigParser()
-        config.read(manifest_file)
-
-        if "platform" not in config:
-            logger.error("Manifest missing 'platform' section: '%s'", manifest_file)
-            return None
-
-        return dict(config["platform"])
-
-    @classmethod
     def get_adapter(cls, shortcode: Optional[str] = None) -> Optional[dict]:
         """
         Retrieve an adapter's manifest based on its shortcode.
@@ -220,24 +250,25 @@ class AdapterManager:
     @classmethod
     def get_adapter_path(cls, name: str, protocol: str) -> Optional[dict]:
         """
-        Retrieve the adapter's path and virtual environment path.
+        Retrieve the adapter's path, virtual environment path, and assets path.
 
         Args:
             name (str): The name of the adapter.
             protocol (str): The protocol used by the adapter.
 
         Returns:
-            Optional[dict]: A dictionary containing the adapter path and
-                virtual environment path, or None if not found.
+            Optional[dict]: A dictionary containing the adapter path,
+                virtual environment path, and assets path, or None if not found.
         """
         cls._populate_registry()
 
         manifest = cls._registry.get(f"{name}_{protocol}".lower())
         if manifest:
-            adapter_path = manifest.get("path")
-            adapter_dir_name = os.path.basename(adapter_path)
-            venv_path = os.path.join(cls._adapters_venv_dir, adapter_dir_name)
-            return {"path": adapter_path, "venv_path": venv_path}
+            return {
+                "path": manifest.get("path"),
+                "venv_path": manifest.get("venv_path"),
+                "assets_path": manifest.get("assets_path"),
+            }
 
         logger.warning(
             "Adapter with name '%s' and protocol '%s' not found.",
@@ -293,7 +324,8 @@ class AdapterManager:
             cls._rollback_directory(dest_path)
             raise ValueError(f"Invalid adapter structure at '{dest_path}'.")
 
-        manifest_data = cls._load_manifest(dest_path)
+        manifest_path = os.path.join(dest_path, "manifest.ini")
+        manifest_data = cls._load_ini_file(manifest_path, "platform")
         if not manifest_data:
             cls._rollback_directory(dest_path)
             raise ValueError(f"Manifest load failed for '{dest_path}'.")
@@ -314,6 +346,16 @@ class AdapterManager:
 
         os.rename(dest_path, new_dest_path)
         manifest_data["path"] = new_dest_path
+
+        config_path = os.path.join(new_dest_path, "config.ini")
+        config_data = cls._load_ini_file(config_path, "persistent_assets")
+        assets_dest_dir = os.path.join(cls._adapters_assets_dir, new_dir_name)
+        for asset_path in config_data.values():
+            dest_asset_path = os.path.join(
+                assets_dest_dir,
+                asset_path[2:] if asset_path.startswith("./") else asset_path,
+            )
+            os.makedirs(dest_asset_path, exist_ok=True)
 
         requirements_path = os.path.join(new_dest_path, "requirements.txt")
         if os.path.isfile(requirements_path):
