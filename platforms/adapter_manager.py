@@ -345,17 +345,6 @@ class AdapterManager:
             raise ValueError(f"Adapter '{new_dir_name}' already exists.")
 
         os.rename(dest_path, new_dest_path)
-        manifest_data["path"] = new_dest_path
-
-        config_path = os.path.join(new_dest_path, "config.ini")
-        config_data = cls._load_ini_file(config_path, "persistent_assets")
-        assets_dest_dir = os.path.join(cls._adapters_assets_dir, new_dir_name)
-        for asset_path in config_data.values():
-            dest_asset_path = os.path.join(
-                assets_dest_dir,
-                asset_path[2:] if asset_path.startswith("./") else asset_path,
-            )
-            os.makedirs(dest_asset_path, exist_ok=True)
 
         requirements_path = os.path.join(new_dest_path, "requirements.txt")
         if os.path.isfile(requirements_path):
