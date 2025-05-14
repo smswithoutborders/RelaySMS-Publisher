@@ -151,3 +151,90 @@ class OAuth2ProtocolInterface(BaseProtocolInterface):
                     - id_token (str, optional): The ID token for the user, if applicable.
                     - other metadata as provided by the platform.
         """
+
+
+class PNBAProtocolInterface(BaseProtocolInterface):
+    """Abstract base class for all PNBA protocols."""
+
+    @abstractmethod
+    def send_authorization_code(self, phone_number: str, **kwargs) -> Dict[str, Any]:
+        """
+        Send an authorization code to the specified phone number.
+
+        Args:
+            phone_number (str): The phone number to which the authorization code is sent.
+            kwargs: Additional parameters required for the process.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing:
+                - success (bool): True if the code was sent successfully, False otherwise.
+                - message (str): A response message.
+        """
+
+    @abstractmethod
+    def validate_code(self, phone_number: str, code: str, **kwargs) -> Dict[str, Any]:
+        """
+        Validate the authorization code sent to the phone number.
+
+        Args:
+            phone_number (str): The phone number to which the code was sent.
+            code (str): The authorization code received.
+            kwargs: Additional parameters required for the process.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing:
+                - two_step_verification_enabled (bool): True if two-step verification is
+                  enabled, False otherwise.
+                - userinfo (Dict[str, Any]): A dictionary containing:
+                    - account_identifier (str): A unique identifier for the user, such as
+                      a phonenumber or username.
+                    - name (str, optional): The full name of the user, if available.
+        """
+
+    @abstractmethod
+    def validate_password(
+        self, phone_number: str, password: str, **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Validate the password for two-step verification.
+
+        Args:
+            phone_number (str): The phone number associated with the account.
+            password (str): The password for two-step verification.
+            kwargs: Additional parameters required for the process.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing:
+                - userinfo (Dict[str, Any]): A dictionary containing:
+                    - account_identifier (str): A unique identifier for the user, such as
+                      a phonenumber or username.
+                    - name (str, optional): The full name of the user, if available.
+        """
+
+    @abstractmethod
+    def revoke_token(self, phone_number: str, **kwargs) -> bool:
+        """
+        Revoke the token associated with the phone number.
+
+        Args:
+            phone_number (str): The phone number associated with the token.
+
+        Returns:
+            bool: True if the token was successfully revoked, False otherwise.
+        """
+
+    @abstractmethod
+    def send_message(
+        self, phone_number: str, recipient: str, message: str, **kwargs
+    ) -> bool:
+        """
+        Send a message to the specified recipient.
+
+        Args:
+            phone_number (str): The phone number associated with the account.
+            recipient (str): The recipient's phone number.
+            message (str): The content of the message to be sent.
+
+        Returns:
+            bool: True if the message was sent successfully, False otherwise.
+        """
