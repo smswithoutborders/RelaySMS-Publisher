@@ -141,22 +141,6 @@ class AdapterManager:
                     cls._adapters_assets_dir, adapter_dir_name
                 )
 
-                config_path = os.path.join(adapter_path, "config.ini")
-                config_data = cls._load_ini_file(config_path, "static_assets")
-                if config_data:
-                    icons_path = config_data.get("icons_dir_path")
-                    if icons_path:
-                        icons_dir = os.path.join(
-                            adapter_path,
-                            (
-                                icons_path[2:]
-                                if icons_path.startswith("./")
-                                else icons_path
-                            ),
-                        )
-
-                        manifest_data["icons_dir"] = icons_dir
-
                 cls._registry[key] = manifest_data
                 logger.info(
                     "Registered adapter '%s' with protocol '%s' from '%s'",

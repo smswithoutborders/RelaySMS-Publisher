@@ -5,8 +5,8 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 import datetime
-from typing import Optional, List, Literal
-from pydantic import BaseModel, Field
+from typing import Optional
+from pydantic import BaseModel
 
 
 class PublicationsCreate(BaseModel):
@@ -37,17 +37,11 @@ class PublicationsResponse(BaseModel):
     pagination: Optional[Pagination] = None
 
 
-class PlatformIconQuery(BaseModel):
-    ext: Literal["png", "svg"] = Field(
-        default="svg",
-        description="The file extension of the icon. Supported values are 'png' and 'svg'.",
-    )
-
-
 class PlatformManifest(BaseModel):
     name: str
     shortcode: str
     protocol: str
     service_type: str
-    png_icon_url: Optional[str] = None
-    svg_icon_url: Optional[str] = None
+    icon_svg: Optional[str] = None
+    icon_png: Optional[str] = None
+    support_url_scheme: Optional[bool] = None
