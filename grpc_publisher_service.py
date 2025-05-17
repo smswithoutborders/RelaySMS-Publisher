@@ -12,8 +12,6 @@ import publisher_pb2
 import publisher_pb2_grpc
 
 from utils import get_configs
-import telegram_client
-from pnba import PNBAClient
 from content_parser import decode_content, extract_content_v0, extract_content_v1
 from grpc_vault_entity_client import (
     list_entity_stored_tokens,
