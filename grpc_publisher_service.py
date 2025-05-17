@@ -714,10 +714,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
 
             token, token_error = get_access_token(
-                device_id=device_id_hex,
+                device_id=kwargs.get("device_id"),
                 phone_number=request.metadata["From"],
                 platform_name=platform_info["name"],
-                account_identifier=content_parts[0],
+                account_identifier=data["sender_id"],
             )
             if token_error:
                 return {"response": token_error, "error": None, "message": None}
@@ -754,7 +754,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 handle_token_update(
                     token=result.get("refreshed_token"),
                     device_id=kwargs.get("device_id"),
-                    phone_number=kwargs.get("phone_number"),
+                    phone_number=request.metadata["From"],
                     account_identifier=data["sender_id"],
                     platform=platform_name.lower(),
                 )
@@ -765,10 +765,67 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 "message": "Successfully sent message",
             }
 
-        def handle_pnba_message(platform_name, content_parts, token):
-            _, receiver, message = content_parts
-            pnba_client = PNBAClient(platform_name, json.loads(token))
-            return pnba_client.send_message(message=message, recipient=receiver)
+        def handle_pnba_publication(
+            service_type, platform_name, content_parts, **kwargs
+        ):
+            service_handlers = {
+                "message": lambda parts: {
+                    "sender_id": parts[0],
+                    "recipient": parts[1],
+                    "message": parts[2],
+                }
+            }
+
+            if service_type not in service_handlers:
+                raise NotImplementedError(
+                    f"The service type '{service_type}' for '{platform_name}' "
+                    "is not supported. Please contact the developers for more information."
+                )
+
+            data = service_handlers[service_type](content_parts)
+
+            adapter = AdapterManager.get_adapter_path(
+                name=platform_name.lower(), protocol="pnba"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{platform_name.lower()}' with "
+                    "protocol 'pnba' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
+
+            token, token_error = get_access_token(
+                device_id=kwargs.get("device_id"),
+                phone_number=request.metadata["From"],
+                platform_name=platform_info["name"],
+                account_identifier=data["sender_id"],
+            )
+            if token_error:
+                return {"response": token_error, "error": None, "message": None}
+
+            params = {
+                "phone_number": json.loads(token),
+                "recipient": data["recipient"],
+                "message": data["message"],
+                "base_path": adapter["assets_path"],
+            }
+
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="send_message",
+                params=params,
+            )
+
+            if pipe.get("error"):
+                return {"response": None, "error": pipe.get("error"), "message": None}
+
+            return {
+                "response": None,
+                "error": None,
+                "message": "Successfully sent message",
+            }
 
         def handle_publication_notifications(
             platform_name, status="failed", country_code=None, **kwargs
@@ -883,7 +940,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 return handle_test_client(content_parts[0])
 
             publication_response = None
-            publication_error = None
 
             if platform_info["protocol"] == "oauth2":
                 publication_response = handle_oauth2_publication(
@@ -891,15 +947,14 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     platform_name=platform_info["name"],
                     content_parts=content_parts,
                     device_id=device_id_hex,
-                    phone_number=request.metadata["From"],
                 )
             elif platform_info["protocol"] == "pnba":
-                if platform_info["service_type"] == "message":
-                    publication_response, publication_error = handle_pnba_message(
-                        platform_name=platform_info["name"],
-                        content_parts=content_parts,
-                        token="access_token",
-                    )
+                publication_response = handle_pnba_publication(
+                    service_type=platform_info["service_type"],
+                    platform_name=platform_info["name"],
+                    content_parts=content_parts,
+                    device_id=device_id_hex,
+                )
             elif platform_info["service_type"] == "test":
                 publication_response = handle_test_client(content_parts[0])
 
@@ -939,22 +994,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 response,
                 str(e),
                 grpc.StatusCode.UNIMPLEMENTED,
-            )
-
-        except telegram_client.Errors.RPCError as exc:
-            handle_publication_notifications(
-                platform_info["name"],
-                status="failed",
-                country_code=decrypted_result.get("country_code"),
-                language=decoded_payload.get("language"),
-            )
-            return self.handle_create_grpc_error_response(
-                context,
-                response,
-                exc,
-                grpc.StatusCode.INVALID_ARGUMENT,
-                error_type="UNKNOWN",
-                send_to_sentry=True,
             )
 
         except Exception as exc:
