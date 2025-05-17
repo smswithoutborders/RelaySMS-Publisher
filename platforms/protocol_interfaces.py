@@ -172,9 +172,11 @@ class PNBAProtocolInterface(BaseProtocolInterface):
         """
 
     @abstractmethod
-    def validate_code(self, phone_number: str, code: str, **kwargs) -> Dict[str, Any]:
+    def validate_code_and_fetch_user_info(
+        self, phone_number: str, code: str, **kwargs
+    ) -> Dict[str, Any]:
         """
-        Validate the authorization code sent to the phone number.
+        Validate the authorization code sent to the phone number and retrieve user information.
 
         Args:
             phone_number (str): The phone number to which the code was sent.
@@ -192,11 +194,11 @@ class PNBAProtocolInterface(BaseProtocolInterface):
         """
 
     @abstractmethod
-    def validate_password(
+    def validate_password_and_fetch_user_info(
         self, phone_number: str, password: str, **kwargs
     ) -> Dict[str, Any]:
         """
-        Validate the password for two-step verification.
+        Validate the password for two-step verification and retrieve user information.
 
         Args:
             phone_number (str): The phone number associated with the account.
