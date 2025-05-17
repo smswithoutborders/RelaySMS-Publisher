@@ -214,15 +214,16 @@ class PNBAProtocolInterface(BaseProtocolInterface):
         """
 
     @abstractmethod
-    def revoke_token(self, phone_number: str, **kwargs) -> bool:
+    def invalidate_session(self, phone_number: str, **kwargs) -> bool:
         """
-        Revoke the token associated with the phone number.
+        Invalidate the session associated with the phone number.
 
         Args:
-            phone_number (str): The phone number associated with the token.
+            phone_number (str): The phone number associated with the session.
+            kwargs: Additional parameters required for the process.
 
         Returns:
-            bool: True if the token was successfully revoked, False otherwise.
+            bool: True if the session was successfully invalidated, False otherwise.
         """
 
     @abstractmethod
