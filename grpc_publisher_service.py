@@ -11,7 +11,7 @@ import sentry_sdk
 import publisher_pb2
 import publisher_pb2_grpc
 
-from utils import check_platform_supported, get_configs
+from utils import get_configs
 import telegram_client
 from pnba import PNBAClient
 from content_parser import decode_content, extract_content_v0, extract_content_v1
@@ -992,22 +992,49 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if invalid_fields_response:
                 return invalid_fields_response
 
-            check_platform_supported(request.platform.lower(), "pnba")
+            adapter = AdapterManager.get_adapter_path(
+                name=request.platform.lower(), protocol="pnba"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{request.platform.lower()}' with "
+                    "protocol 'pnba' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
 
-            pnba_client = PNBAClient(request.platform, request.phone_number)
+            params = {
+                "phone_number": request.phone_number,
+                "base_path": adapter["assets_path"],
+            }
 
-            pnba_response = pnba_client.authorization()
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="send_authorization_code",
+                params=params,
+            )
 
-            if pnba_response.get("error"):
+            if pipe.get("error"):
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
-                    pnba_response["error"],
+                    pipe.get("error"),
                     grpc.StatusCode.INVALID_ARGUMENT,
                     error_type="UNKNOWN",
                 )
 
-            return response(success=True, message=pnba_response["response"])
+            result = pipe.get("result")
+
+            if not result.get("success"):
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    result.get("message"),
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                )
+
+            return response(success=True, message=result.get("message"))
 
         except NotImplementedError as e:
             return self.handle_create_grpc_error_response(
@@ -1054,41 +1081,12 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return list_response, None
 
-        def fetch_token_and_profile():
-            pnba_client = PNBAClient(request.platform, request.phone_number)
-
-            if request.password:
-                pnba_response = pnba_client.password_validation(request.password)
-            else:
-                pnba_response = pnba_client.validation(request.authorization_code)
-
-            if pnba_response.get("two_step_verification_enabled"):
-                return None, response(
-                    success=True,
-                    two_step_verification_enabled=True,
-                    message="two-steps verification is enabled and a password is required",
-                )
-
-            if pnba_response.get("error"):
-                return None, self.handle_create_grpc_error_response(
-                    context,
-                    response,
-                    pnba_response["error"],
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    error_type="UNKNOWN",
-                )
-
-            token = pnba_response["response"]["token"]
-            profile = pnba_response["response"]["profile"]
-
-            return (token, profile), None
-
-        def store_token(token, profile):
+        def store_token(userinfo):
             store_response, store_error = store_entity_token(
                 long_lived_token=request.long_lived_token,
                 platform=request.platform,
-                account_identifier=profile.get("unique_id"),
-                token=json.dumps(token),
+                account_identifier=userinfo.get("account_identifier"),
+                token=json.dumps(userinfo.get("account_identifier")),
             )
 
             if store_error:
@@ -1114,18 +1112,61 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if invalid_fields_response:
                 return invalid_fields_response
 
-            check_platform_supported(request.platform.lower(), "pnba")
+            adapter = AdapterManager.get_adapter_path(
+                name=request.platform.lower(), protocol="pnba"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{request.platform.lower()}' with "
+                    "protocol 'pnba' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
 
             _, token_list_error = list_tokens()
             if token_list_error:
                 return token_list_error
 
-            fetched_data, fetch_token_error = fetch_token_and_profile()
+            params = {
+                "code": request.authorization_code,
+                "phone_number": request.phone_number,
+                "base_path": adapter["assets_path"],
+                "password": getattr(request, "password") or None,
+            }
 
-            if fetch_token_error:
-                return fetch_token_error
+            if params.get("password"):
+                pipe = AdapterIPCHandler.invoke(
+                    adapter_path=adapter["path"],
+                    venv_path=adapter["venv_path"],
+                    method="validate_password_and_fetch_user_info",
+                    params=params,
+                )
+            else:
+                pipe = AdapterIPCHandler.invoke(
+                    adapter_path=adapter["path"],
+                    venv_path=adapter["venv_path"],
+                    method="validate_code_and_fetch_user_info",
+                    params=params,
+                )
 
-            return store_token(*fetched_data)
+            if pipe.get("error"):
+                return self.handle_create_grpc_error_response(
+                    context,
+                    response,
+                    pipe.get("error"),
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    error_type="UNKNOWN",
+                )
+
+            result = pipe.get("result")
+            if result.get("two_step_verification_enabled"):
+                return response(
+                    success=True,
+                    two_step_verification_enabled=True,
+                    message="two-steps verification is enabled and a password is required",
+                )
+
+            return store_token(userinfo=result.get("userinfo"))
 
         except NotImplementedError as e:
             return self.handle_create_grpc_error_response(
@@ -1178,11 +1219,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return get_access_token_response.token, None
 
-        def revoke_token(token):
-            pnba_client = PNBAClient(request.platform, json.loads(token))
-            revoke_response = pnba_client.invalidation()
-            return revoke_response
-
         def delete_token():
             delete_token_response, delete_token_error = delete_entity_token(
                 request.long_lived_token, request.platform, request.account_identifier
@@ -1209,13 +1245,36 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if invalid_fields_response:
                 return invalid_fields_response
 
-            check_platform_supported(request.platform.lower(), "pnba")
+            adapter = AdapterManager.get_adapter_path(
+                name=request.platform.lower(), protocol="pnba"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{request.platform.lower()}' with "
+                    "protocol 'pnba' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
 
             access_token, access_token_error = get_access_token()
             if access_token_error:
                 return access_token_error
 
-            revoke_token(access_token)
+            params = {
+                "phone_number": json.loads(access_token),
+                "base_path": adapter["assets_path"],
+            }
+
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="invalidate_session",
+                params=params,
+            )
+
+            if pipe.get("error"):
+                logger.error(pipe.get("error"))
+
             return delete_token()
 
         except NotImplementedError as e:
