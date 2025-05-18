@@ -243,8 +243,8 @@ class PNBAProtocolInterface(BaseProtocolInterface):
         """
 
 
-class TestProtocolInterface(BaseProtocolInterface):
-    """Abstract base class for all test protocols."""
+class EventProtocolInterface(BaseProtocolInterface):
+    """Abstract base class for all event protocols."""
 
     @abstractmethod
     def create(self, data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
