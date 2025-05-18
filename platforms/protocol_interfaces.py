@@ -247,12 +247,11 @@ class EventProtocolInterface(BaseProtocolInterface):
     """Abstract base class for all event protocols."""
 
     @abstractmethod
-    def create(self, data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+    def create(self, **kwargs) -> Dict[str, Any]:
         """
         Create a new resource.
 
         Args:
-            data (Dict[str, Any]): The data for the new resource.
             kwargs: Additional parameters required for the process.
 
         Returns:
@@ -273,15 +272,12 @@ class EventProtocolInterface(BaseProtocolInterface):
         """
 
     @abstractmethod
-    def update(
-        self, resource_id: str, data: Dict[str, Any], **kwargs
-    ) -> Dict[str, Any]:
+    def update(self, resource_id: str, **kwargs) -> Dict[str, Any]:
         """
         Update an existing resource.
 
         Args:
             resource_id (str): The ID of the resource to update.
-            data (Dict[str, Any]): The updated data for the resource.
             kwargs: Additional parameters required for the process.
 
         Returns:
