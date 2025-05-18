@@ -318,6 +318,7 @@ def perform_auth_and_publish(
     [
         # ("gmail", b"g", False),
         # ("twitter", b"t", True),
+        # ("telegram", b"T", False),
     ],
 )
 def test_auth_and_publish_v0(
@@ -351,8 +352,9 @@ def test_auth_and_publish_v0(
 @pytest.mark.parametrize(
     "platform, platform_shortcode, use_device_id",
     [
-        # ("gmail", b"g", False),
-        # ("twitter", b"t", True),
+        ("gmail", b"g", False),
+        ("twitter", b"t", True),
+        ("telegram", b"T", False),
     ],
 )
 def test_auth_and_publish_v1(
