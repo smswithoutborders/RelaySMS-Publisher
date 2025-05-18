@@ -241,3 +241,62 @@ class PNBAProtocolInterface(BaseProtocolInterface):
         Returns:
             bool: True if the message was sent successfully, False otherwise.
         """
+
+
+class TestProtocolInterface(BaseProtocolInterface):
+    """Abstract base class for all test protocols."""
+
+    @abstractmethod
+    def create(self, data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        """
+        Create a new resource.
+
+        Args:
+            data (Dict[str, Any]): The data for the new resource.
+            kwargs: Additional parameters required for the process.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the created resource.
+        """
+
+    @abstractmethod
+    def read(self, resource_id: str, **kwargs) -> Dict[str, Any]:
+        """
+        Read an existing resource.
+
+        Args:
+            resource_id (str): The ID of the resource to read.
+            kwargs: Additional parameters required for the process.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the resource.
+        """
+
+    @abstractmethod
+    def update(
+        self, resource_id: str, data: Dict[str, Any], **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Update an existing resource.
+
+        Args:
+            resource_id (str): The ID of the resource to update.
+            data (Dict[str, Any]): The updated data for the resource.
+            kwargs: Additional parameters required for the process.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the updated resource.
+        """
+
+    @abstractmethod
+    def delete(self, resource_id: str, **kwargs) -> bool:
+        """
+        Delete an existing resource.
+
+        Args:
+            resource_id (str): The ID of the resource to delete.
+            kwargs: Additional parameters required for the process.
+
+        Returns:
+            bool: True if the resource was successfully deleted, False otherwise.
+        """
