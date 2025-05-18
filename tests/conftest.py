@@ -101,7 +101,7 @@ def send_message(pytestconfig, test_config):
 
     def _send_message(phone_number, encoded_payload):
         response = requests.post(
-            url,
+            f"{url}/publish",
             timeout=30,
             json={
                 "address": phone_number,
@@ -113,3 +113,21 @@ def send_message(pytestconfig, test_config):
         return response
 
     return _send_message
+
+
+@pytest.fixture
+def start_test(pytestconfig, test_config):
+    """Fixture to start a reliability test and return the test ID."""
+    environment = pytestconfig.getoption("--env")
+    config = test_config[environment]
+    client_number = config["reliability_test_client_number"]
+    url = f"{config['gateway_server_http_url']}/clients/{client_number}/tests"
+
+    def _start_test():
+        response = requests.post(url, timeout=30)
+        response.raise_for_status()
+        if response.json().get("error"):
+            raise RuntimeError(f"Error starting test: {response.json().get('error')}")
+        return response.json().get("test_id")
+
+    return _start_test
