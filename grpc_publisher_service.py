@@ -24,7 +24,6 @@ from grpc_vault_entity_client import (
 from notification_dispatcher import dispatch_notifications
 from logutils import get_logger
 from translations import Localization
-from test_client import TestClient
 from platforms.adapter_manager import AdapterManager
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 
@@ -536,58 +535,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 )
             return adapter, None
 
-        def handle_test_client(test_id):
-            if not request.metadata.get("Date") or not request.metadata.get(
-                "Date_sent"
-            ):
-                missing_fields = []
-                if not request.metadata.get("Date"):
-                    missing_fields.append("Date")
-                if not request.metadata.get("Date_sent"):
-                    missing_fields.append("Date_sent")
-                return self.handle_create_grpc_error_response(
-                    context,
-                    response,
-                    ", ".join(missing_fields),
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    error_prefix="Missing required metadata fields",
-                )
-
-            sms_routed_time = datetime.datetime.now()
-            sms_sent_time, sms_received_time = [
-                datetime.datetime.fromtimestamp(int(request.metadata.get(key)) / 1000)
-                for key in ("Date_sent", "Date")
-            ]
-
-            test_client = TestClient()
-            test_client.timeout_tests()
-            _, test_error = test_client.update_reliability_test(
-                test_id=int(test_id),
-                sms_sent_time=sms_sent_time,
-                sms_received_time=sms_received_time,
-                sms_routed_time=sms_routed_time,
-            )
-
-            if test_error:
-                return self.handle_create_grpc_error_response(
-                    context,
-                    response,
-                    test_error,
-                    (
-                        grpc.StatusCode.NOT_FOUND
-                        if "not found" in test_error.lower()
-                        else grpc.StatusCode.INTERNAL
-                    ),
-                    error_prefix="Failed to update reliability test",
-                    send_to_sentry=True,
-                )
-
-            return response(
-                message="Reliability test updated successfully in the database.",
-                publisher_response="Message successfully published to Reliability Test Platform.",
-                success=True,
-            )
-
         def get_access_token(
             device_id, phone_number, platform_name, account_identifier
         ):
@@ -825,6 +772,68 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 "message": "Successfully sent message",
             }
 
+        def handle_test_publication(service_type, platform_name, content_parts):
+            service_handlers = {"test": lambda parts: {"test_id": parts[0]}}
+
+            if service_type not in service_handlers:
+                raise NotImplementedError(
+                    f"The service type '{service_type}' for '{platform_name}' "
+                    "is not supported. Please contact the developers for more information."
+                )
+
+            data = service_handlers[service_type](content_parts)
+
+            adapter = AdapterManager.get_adapter_path(
+                name=platform_name.lower(), protocol="event"
+            )
+            if not adapter:
+                raise NotImplementedError(
+                    f"The platform '{platform_name.lower()}' with "
+                    "protocol 'event' is currently not supported. "
+                    "Please contact the developers for more information on when "
+                    "this platform will be implemented."
+                )
+
+            params = {
+                "resource_id": data["test_id"],
+                "sms_sent_timestamp": request.metadata.get("Date_sent"),
+                "sms_received_timestamp": request.metadata.get("Date"),
+            }
+
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="update",
+                params=params,
+            )
+
+            if pipe.get("error"):
+                return {"response": None, "error": pipe.get("error"), "message": None}
+
+            result = pipe.get("result")
+
+            if not result.get("success"):
+                return {
+                    "response": self.handle_create_grpc_error_response(
+                        context,
+                        response,
+                        result.get("message"),
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                    ),
+                    "error": None,
+                    "message": None,
+                }
+
+            return {
+                "response": response(
+                    message=f"Successfully published {platform_name.lower()} message",
+                    publisher_response=result.get("message"),
+                    success=True,
+                ),
+                "error": None,
+                "message": None,
+            }
+
         def handle_publication_notifications(
             platform_name, status="failed", country_code=None, **kwargs
         ):
@@ -934,9 +943,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             content_parts[0] = content_parts[0].replace("\n", "")
             content_parts = tuple(content_parts)
 
-            if platform_info["service_type"] == "test":
-                return handle_test_client(content_parts[0])
-
             publication_response = None
 
             if platform_info["protocol"] == "oauth2":
@@ -953,8 +959,12 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     content_parts=content_parts,
                     device_id=device_id_hex,
                 )
-            elif platform_info["service_type"] == "test":
-                publication_response = handle_test_client(content_parts[0])
+            elif platform_info["protocol"] == "event":
+                publication_response = handle_test_publication(
+                    service_type=platform_info["service_type"],
+                    platform_name=platform_info["name"],
+                    content_parts=content_parts,
+                )
 
             if publication_response["response"]:
                 return publication_response["response"]

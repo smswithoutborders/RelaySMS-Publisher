@@ -6,10 +6,9 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 
 import base64
 import struct
-import types
 from collections import namedtuple
 
-FormatSpec = namedtuple("FormatSpec", ["key", "fmt", "decoding", "use_chr"])
+FormatSpec = namedtuple("FormatSpec", ["key", "fmt", "decoding"])
 
 
 def parse_payload(payload: bytes, format_spec: list) -> dict:
@@ -23,28 +22,30 @@ def parse_payload(payload: bytes, format_spec: list) -> dict:
     Returns:
         dict: Parsed key-value pairs from the payload.
     """
-    result = {}
-    offset = 0
+    result, offset = {}, 0
+    total_len = len(payload)
 
     for spec in format_spec:
-        fmt = spec.fmt
-        if isinstance(fmt, types.FunctionType):
-            fmt = fmt(result)
-
+        fmt = spec.fmt(result) if callable(spec.fmt) else spec.fmt
         if isinstance(fmt, int):
-            value = payload[offset] if fmt == 1 else payload[offset : offset + fmt]
-            offset += fmt
-            if fmt == 1 and spec.use_chr:
-                value = chr(value)
-        else:
-            size = struct.calcsize(fmt)
-            value = struct.unpack(fmt, payload[offset : offset + size])[0]
-            offset += size
+            fmt = f"{fmt}s"
 
-        if spec.decoding:
+        size = struct.calcsize(fmt)
+        if offset + size > total_len:
+            break
+
+        (value,) = struct.unpack_from(fmt, payload, offset)
+        offset += size
+
+        if spec.decoding and isinstance(value, (bytes, bytearray)):
             value = value.decode(spec.decoding)
 
         result[spec.key] = value
+
+    for spec in format_spec:
+        if spec.key not in result:
+            default = "" if spec.decoding else b""
+            result[spec.key] = default
 
     return result
 
@@ -59,19 +60,13 @@ def decode_v0(payload: bytes) -> tuple:
         tuple: A dictionary of parsed values and an optional error.
     """
     parsers = [
-        FormatSpec(key="len_ciphertext", fmt="<i", decoding=None, use_chr=False),
-        FormatSpec(key="platform_shortcode", fmt=1, decoding=None, use_chr=True),
-        FormatSpec(
-            key="ciphertext",
-            fmt=lambda d: d["len_ciphertext"],
-            decoding=None,
-            use_chr=False,
-        ),
+        FormatSpec(key="len_ciphertext", fmt="<i", decoding=None),
+        FormatSpec(key="platform_shortcode", fmt=1, decoding="ascii"),
+        FormatSpec(key="ciphertext", fmt=lambda d: d["len_ciphertext"], decoding=None),
         FormatSpec(
             key="device_id",
             fmt=lambda d: len(payload) - (5 + d["len_ciphertext"]),
             decoding=None,
-            use_chr=False,
         ),
     ]
 
@@ -93,27 +88,12 @@ def decode_v1(payload: bytes) -> tuple:
     """
     version = f"v{payload[0]}"
     parsers = [
-        FormatSpec(key="len_ciphertext", fmt="<H", decoding=None, use_chr=False),
-        FormatSpec(key="len_device_id", fmt=1, decoding=None, use_chr=False),
-        FormatSpec(key="platform_shortcode", fmt=1, decoding=None, use_chr=True),
-        FormatSpec(
-            key="ciphertext",
-            fmt=lambda d: d["len_ciphertext"],
-            decoding=None,
-            use_chr=False,
-        ),
-        FormatSpec(
-            key="device_id",
-            fmt=lambda d: d["len_device_id"],
-            decoding=None,
-            use_chr=False,
-        ),
-        FormatSpec(
-            key="language",
-            fmt=2,
-            decoding="utf-8",
-            use_chr=False,
-        ),
+        FormatSpec(key="len_ciphertext", fmt="<H", decoding=None),
+        FormatSpec(key="len_device_id", fmt="<B", decoding=None),
+        FormatSpec(key="platform_shortcode", fmt=1, decoding="ascii"),
+        FormatSpec(key="ciphertext", fmt=lambda d: d["len_ciphertext"], decoding=None),
+        FormatSpec(key="device_id", fmt=lambda d: d["len_device_id"], decoding=None),
+        FormatSpec(key="language", fmt=2, decoding="ascii"),
     ]
 
     try:
@@ -213,46 +193,27 @@ def extract_content_v1(service_type: str, content: bytes) -> tuple:
             - error (str): An error message if extraction fails, otherwise None.
     """
     parsers = [
-        FormatSpec(key="length_from", fmt=1, decoding=None, use_chr=False),
-        FormatSpec(key="length_to", fmt="<H", decoding=None, use_chr=False),
-        FormatSpec(key="length_cc", fmt="<H", decoding=None, use_chr=False),
-        FormatSpec(key="length_bcc", fmt="<H", decoding=None, use_chr=False),
-        FormatSpec(key="length_subject", fmt=1, decoding=None, use_chr=False),
-        FormatSpec(key="length_body", fmt="<H", decoding=None, use_chr=False),
-        FormatSpec(key="length_access_token", fmt=1, decoding=None, use_chr=False),
-        FormatSpec(key="length_refresh_token", fmt=1, decoding=None, use_chr=False),
+        FormatSpec(key="length_from", fmt="<B", decoding=None),
+        FormatSpec(key="length_to", fmt="<H", decoding=None),
+        FormatSpec(key="length_cc", fmt="<H", decoding=None),
+        FormatSpec(key="length_bcc", fmt="<H", decoding=None),
+        FormatSpec(key="length_subject", fmt="<B", decoding=None),
+        FormatSpec(key="length_body", fmt="<H", decoding=None),
+        FormatSpec(key="length_access_token", fmt="<B", decoding=None),
+        FormatSpec(key="length_refresh_token", fmt="<B", decoding=None),
+        FormatSpec(key="from", fmt=lambda d: d["length_from"], decoding="utf-8"),
+        FormatSpec(key="to", fmt=lambda d: d["length_to"], decoding="utf-8"),
+        FormatSpec(key="cc", fmt=lambda d: d["length_cc"], decoding="utf-8"),
+        FormatSpec(key="bcc", fmt=lambda d: d["length_bcc"], decoding="utf-8"),
+        FormatSpec(key="subject", fmt=lambda d: d["length_subject"], decoding="utf-8"),
+        FormatSpec(key="body", fmt=lambda d: d["length_body"], decoding="utf-8"),
         FormatSpec(
-            key="from", fmt=lambda d: d["length_from"], decoding="utf-8", use_chr=False
-        ),
-        FormatSpec(
-            key="to", fmt=lambda d: d["length_to"], decoding="utf-8", use_chr=False
-        ),
-        FormatSpec(
-            key="cc", fmt=lambda d: d["length_cc"], decoding="utf-8", use_chr=False
-        ),
-        FormatSpec(
-            key="bcc", fmt=lambda d: d["length_bcc"], decoding="utf-8", use_chr=False
-        ),
-        FormatSpec(
-            key="subject",
-            fmt=lambda d: d["length_subject"],
-            decoding="utf-8",
-            use_chr=False,
-        ),
-        FormatSpec(
-            key="body", fmt=lambda d: d["length_body"], decoding="utf-8", use_chr=False
-        ),
-        FormatSpec(
-            key="access_token",
-            fmt=lambda d: d["length_access_token"],
-            decoding="utf-8",
-            use_chr=False,
+            key="access_token", fmt=lambda d: d["length_access_token"], decoding="utf-8"
         ),
         FormatSpec(
             key="refresh_token",
             fmt=lambda d: d["length_refresh_token"],
             decoding="utf-8",
-            use_chr=False,
         ),
     ]
 
