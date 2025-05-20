@@ -153,6 +153,7 @@ def create_message_v0(platform, config):
         ],
         "twitter": ["from", "body", "access_token", "refresh_token"],
         "telegram": ["from", "to", "body"],
+        "reliability": ["from"],
     }
 
     if platform not in platform_params:
@@ -204,6 +205,7 @@ def create_message_v1(platform, config):
         ],
         "twitter": ["from", "body", "access_token", "refresh_token"],
         "telegram": ["from", "to", "body"],
+        "reliability": ["from"],
     }
 
     if platform not in platform_specific_params:
@@ -316,8 +318,12 @@ def perform_auth_and_publish(
 @pytest.mark.parametrize(
     "platform, platform_shortcode, use_device_id",
     [
-        # ("gmail", b"g", False),
-        # ("twitter", b"t", True),
+        ("gmail", b"g", False),
+        ("twitter", b"t", True),
+        ("telegram", b"T", False),
+        ("telegram", b"T", True),
+        ("reliability", b"r", False),
+        ("reliability", b"r", True),
     ],
 )
 def test_auth_and_publish_v0(
@@ -325,6 +331,7 @@ def test_auth_and_publish_v0(
     keypairs,
     tmp_path,
     send_message,
+    start_test,
     credentials,
     messages,
     platform,
@@ -332,6 +339,10 @@ def test_auth_and_publish_v0(
     use_device_id,
 ):
     """Tests publishing functionality for v0."""
+    if platform == "reliability":
+        test_id = start_test()
+        messages["reliability_from"] = str(test_id)
+
     perform_auth_and_publish(
         authenticated_entity,
         keypairs,
@@ -351,8 +362,12 @@ def test_auth_and_publish_v0(
 @pytest.mark.parametrize(
     "platform, platform_shortcode, use_device_id",
     [
-        # ("gmail", b"g", False),
-        # ("twitter", b"t", True),
+        ("gmail", b"g", False),
+        ("twitter", b"t", True),
+        ("telegram", b"T", False),
+        ("telegram", b"T", True),
+        ("reliability", b"r", False),
+        ("reliability", b"r", True),
     ],
 )
 def test_auth_and_publish_v1(
@@ -360,6 +375,7 @@ def test_auth_and_publish_v1(
     keypairs,
     tmp_path,
     send_message,
+    start_test,
     credentials,
     messages,
     platform,
@@ -367,6 +383,10 @@ def test_auth_and_publish_v1(
     use_device_id,
 ):
     """Tests publishing functionality for v1."""
+    if platform == "reliability":
+        test_id = start_test()
+        messages["reliability_from"] = str(test_id)
+
     language = credentials["language"].encode()
 
     perform_auth_and_publish(

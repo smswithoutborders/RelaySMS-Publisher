@@ -5,9 +5,8 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 import datetime
-from peewee import Model, CharField, DateTimeField, DecimalField, ForeignKeyField
+from peewee import Model, CharField, DateTimeField
 from db import connect
-from utils import create_tables
 
 database = connect()
 
@@ -29,43 +28,4 @@ class Publications(Model):
         table_name = "publications"
 
 
-class GatewayClients(Model):
-    """Model representing Gateway Clients."""
-
-    msisdn = CharField(primary_key=True)
-    country = CharField()
-    operator = CharField()
-    operator_code = CharField()
-    protocols = CharField()
-    reliability = DecimalField(max_digits=5, decimal_places=2, default=0.00)
-    last_published_date = DateTimeField(default=datetime.datetime.now)
-
-    # pylint: disable=R0903
-    class Meta:
-        """Meta class to define database connection."""
-
-        database = database
-        table_name = "gateway_clients"
-
-
-class ReliabilityTests(Model):
-    """Model representing Gateway Clients Reliability Tests."""
-
-    start_time = DateTimeField(default=datetime.datetime.now)
-    sms_sent_time = DateTimeField(null=True)
-    sms_received_time = DateTimeField(null=True)
-    sms_routed_time = DateTimeField(null=True)
-    status = CharField(default="pending")
-    msisdn = ForeignKeyField(
-        GatewayClients, column_name="msisdn", backref="reliability_tests"
-    )
-
-    # pylint: disable=R0903
-    class Meta:
-        """Meta class to define database connection."""
-
-        database = database
-        table_name = "reliability_tests"
-
-
-create_tables([Publications, ReliabilityTests, GatewayClients])
+database.create_tables([Publications], safe=True)

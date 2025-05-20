@@ -35,3 +35,13 @@ class PublicationsResponse(BaseModel):
     total_failed: int
     data: list[PublicationsRead]
     pagination: Optional[Pagination] = None
+
+
+class PlatformManifest(BaseModel):
+    name: str
+    shortcode: str
+    protocol: str
+    service_type: str
+    icon_svg: Optional[str] = None
+    icon_png: Optional[str] = None
+    support_url_scheme: Optional[bool] = None

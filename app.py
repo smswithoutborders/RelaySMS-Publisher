@@ -6,7 +6,10 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 
 from fastapi import FastAPI
 from api_v1 import router
+from platforms.adapter_manager import AdapterManager
 
 app = FastAPI()
 
 app.include_router(router, prefix="/v1")
+
+AdapterManager._populate_registry()

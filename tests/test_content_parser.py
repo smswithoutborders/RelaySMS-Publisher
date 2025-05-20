@@ -20,9 +20,9 @@ from content_parser import (
     "payload, expected",
     [
         (
-            struct.pack("<i", 4) + b"key1",
+            struct.pack("<i", 3) + b"key1",
             {
-                "len_ciphertext": 4,
+                "len_ciphertext": 3,
                 "platform_shortcode": "k",
                 "ciphertext": b"ey1",
                 "device_id": b"",
@@ -219,6 +219,6 @@ def test_extract_content_v0_valid(service_type, content, expected):
     ],
 )
 def test_extract_content_v1_valid(content, service_type, expected):
-    result, error = extract_content_v1(content, service_type)
+    result, error = extract_content_v1(service_type, content)
     assert error is None
     assert result == expected

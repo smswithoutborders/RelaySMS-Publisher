@@ -5,15 +5,31 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 import datetime
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
-from api_schemas import PublicationsRead, PublicationsResponse, Pagination
+from typing import Optional, List
+from fastapi import APIRouter, HTTPException, Query, Path
+from api_schemas import (
+    PublicationsRead,
+    PublicationsResponse,
+    Pagination,
+    PlatformManifest,
+)
 from publications import fetch_publication
+from platforms.adapter_manager import AdapterManager
 from logutils import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+ALLOWED_PLATFORM_MANIFEST_KEYS = [
+    "name",
+    "shortcode",
+    "protocol",
+    "service_type",
+    "icon_svg",
+    "icon_png",
+    "support_url_scheme",
+]
 
 
 @router.get("/metrics/publications", response_model=PublicationsResponse)
@@ -66,3 +82,47 @@ def get_publication(
     except Exception as e:
         logger.error(f"Error fetching publications: {e}")
         raise HTTPException(status_code=500, detail="Error fetching publications")
+
+
+@router.get("/platforms")
+def get_platforms() -> List[PlatformManifest]:
+    """
+    Retrieve a list of platform adapter manifests.
+    """
+    AdapterManager._populate_registry()
+    platforms = []
+    for manifest in AdapterManager._registry.values():
+        manifest_copy = {
+            key: value
+            for key, value in manifest.items()
+            if key in ALLOWED_PLATFORM_MANIFEST_KEYS
+        }
+        platforms.append(manifest_copy)
+    return platforms
+
+
+@router.get("/platforms/{platform_name}")
+def get_platform_data(
+    platform_name: str = Path(
+        ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
+    )
+) -> PlatformManifest:
+    """Retrieve the manifest of a platform adapter."""
+    AdapterManager._populate_registry()
+    adapter = next(
+        (
+            manifest
+            for manifest in AdapterManager._registry.values()
+            if manifest["name"].lower() == platform_name.lower()
+        ),
+        None,
+    )
+    if not adapter:
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+    adapter_copy = {
+        key: value
+        for key, value in adapter.items()
+        if key in ALLOWED_PLATFORM_MANIFEST_KEYS
+    }
+    return adapter_copy
