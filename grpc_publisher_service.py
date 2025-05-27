@@ -695,6 +695,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 return {"response": None, "error": pipe.get("error"), "message": None}
 
             result = pipe.get("result")
+            refresh_alert = None
             if not user_sent_tokens:
                 handle_token_update(
                     token=result.get("refreshed_token"),
@@ -703,11 +704,19 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     account_identifier=data["sender_id"],
                     platform=platform_name.lower(),
                 )
+            else:
+                refreshed_token = result.get("refreshed_token", {})
+                if refreshed_token.get("refresh_token") != data["refresh_token"]:
+                    refresh_alert = (
+                        f"\n\nPlease paste this message in your RelaySMS app\n"
+                        f"{base64.b64encode(refreshed_token['refresh_token']).decode('utf-8')}"
+                    )
 
             return {
                 "response": None,
                 "error": None,
                 "message": "Successfully sent message",
+                "refresh_alert": refresh_alert,
             }
 
         def handle_pnba_publication(
@@ -989,6 +998,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 status="published",
                 country_code=decrypted_result.get("country_code"),
                 language=decoded_payload.get("language"),
+                additional_data=publication_response.get("refresh_alert"),
             )
             return response(
                 message=f"Successfully published {platform_info['name']} message",
