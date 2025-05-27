@@ -709,7 +709,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 if refreshed_token.get("refresh_token") != data["refresh_token"]:
                     refresh_alert = (
                         f"\n\nPlease paste this message in your RelaySMS app\n"
-                        f"{base64.b64encode(refreshed_token['refresh_token']).decode('utf-8')}"
+                        f"{base64.b64encode(
+                            refreshed_token.get('refresh_token').encode()
+                            ).decode('utf-8')}"
                     )
 
             return {
