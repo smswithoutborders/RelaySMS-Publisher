@@ -36,7 +36,7 @@ def keypairs(tmp_path):
 
 
 @pytest.fixture
-def authenticated_entity(grpc_stub):
+def authenticated_entity(pytestconfig, grpc_stub):
     """Fixture to authenticate an entity using gRPC."""
 
     class GrpcError:
@@ -59,13 +59,20 @@ def authenticated_entity(grpc_stub):
         )
 
         try:
+            if pytestconfig.getoption("env") == "prod":
+                ownership_proof_response = input(
+                    "Enter ownership proof response: "
+                ).strip()
+            else:
+                ownership_proof_response = kwargs.get("ownership_proof_response")
+
             stub = grpc_stub(vault_pb2_grpc.EntityStub)
             request = vault_pb2.AuthenticateEntityRequest(
                 phone_number=kwargs.get("phone_number"),
                 password=kwargs.get("password"),
                 client_publish_pub_key=pub_pk,
                 client_device_id_pub_key=did_pk,
-                ownership_proof_response=kwargs.get("ownership_proof_response"),
+                ownership_proof_response=ownership_proof_response,
             )
             response = stub.AuthenticateEntity(request)
             error = None
