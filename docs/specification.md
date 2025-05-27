@@ -1,82 +1,201 @@
-# Publisher Specifications Documentation
+# Publisher Specifications
 
 ## Table of Contents
 
 - [Content Format](#content-format)
-- [Payload Format](#payload-format)
+  - [Content Format V0](#content-format-v0)
+  - [Content Format V1](#content-format-v1)
+- [Payload Format](#supported-payload-versions)
+  - [Payload Format V0](#payload-format-v0)
+  - [Payload Format V1](#payload-format-v1)
 
 ## Content Format
 
-The Publisher supports three formats of content:
+### Content Format V0
 
-1. **Email format**: `from:to:cc:bcc:subject:body`
+> [!NOTE]
+>
+> For detailed instructions on encrypting the content format using the Double Ratchet algorithm, refer to the [smswithoutborders_lib_sig documentation](https://github.com/smswithoutborders/lib_signal_double_ratchet_python?tab=readme-ov-file#double-ratchet-implementations).
+
+1. **Email format**: `from:to:cc:bcc:subject:body[:access_token:refresh_token]`
 
    - Example: Gmail
+   - Square brackets (`[]`) indicate optional fields.
 
-2. **Text format**: `sender:text`
+2. **Text format**: `sender:text[:access_token:refresh_token]`
 
    - Example: Twitter
+   - Square brackets (`[]`) indicate optional fields.
 
 3. **Message format**: `sender:receiver:message`
+
    - Example: Telegram
 
-## Payload Format
+4. **Test format**: `test_id`
 
-The payload consists of three parts:
+   - Example: reliability
+     [ReliabilityTest Specification](/docs/reliability_test.md)
 
-1. **Platform Letter**: A shortcode used to identify the target platform. For a
-   list of supported platforms and their corresponding shortcodes, refer to the
-   [Supported Platforms](/docs/grpc.md#supported-platforms) section.
-2. **Encrypted Content**: The content to be published, encrypted by an entity.
-3. **Device ID**: A unique device identifier for the requesting device.
+### Content Format V1
 
-### Structure of the Payload
+> [!NOTE]
+>
+> For detailed instructions on encrypting the content format using the Double Ratchet algorithm, refer to the [smswithoutborders_lib_sig documentation](https://github.com/smswithoutborders/lib_signal_double_ratchet_python?tab=readme-ov-file#double-ratchet-implementations).
 
-- The first 4 bytes represent the length of the encrypted content.
-- The 5th byte is the platform letter.
-- The next `length of the encrypted content` bytes contain the encrypted
-  content.
-- The remaining bytes after the encrypted content represent the device ID.
+> [!NOTE]
+>
+> All service types use the same structure, but fields not applicable to a specific service type will have their length bytes set to `0`, and no value bytes will follow for those fields.
 
-### Detailed Byte Layout
+1. **Email format**: Binary-encoded fields with the following structure:
 
-1. **Length of Encrypted Content** (4 bytes)
-2. **Platform Letter** (1 byte)
-3. **Encrypted Content** (variable length, as indicated by the first 4 bytes)
-4. **Device ID** (remaining bytes)
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field.
+   - **2 bytes**: Length of `cc` field.
+   - **2 bytes**: Length of `bcc` field.
+   - **1 byte**: Length of `subject` field.
+   - **2 bytes**: Length of `body` field.
+   - **1 byte**: Length of `access_token` field (optional).
+   - **1 byte**: Length of `refresh_token` field (optional).
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `to` field.
+   - **Variable**: Value of `cc` field.
+   - **Variable**: Value of `bcc` field.
+   - **Variable**: Value of `subject` field.
+   - **Variable**: Value of `body` field.
+   - **Variable**: Value of `access_token` field (if present).
+   - **Variable**: Value of `refresh_token` field (if present).
 
-### Example Layout
+2. **Text format**: Binary-encoded fields with the following structure:
 
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field (set to `0`).
+   - **2 bytes**: Length of `cc` field (set to `0`).
+   - **2 bytes**: Length of `bcc` field (set to `0`).
+   - **1 byte**: Length of `subject` field (set to `0`).
+   - **2 bytes**: Length of `body` field.
+   - **1 byte**: Length of `access_token` field (optional).
+   - **1 byte**: Length of `refresh_token` field (optional).
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `body` field.
+   - **Variable**: Value of `access_token` field (if present).
+   - **Variable**: Value of `refresh_token` field (if present).
+
+3. **Message format**: Binary-encoded fields with the following structure:
+
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field.
+   - **2 bytes**: Length of `cc` field (set to `0`).
+   - **2 bytes**: Length of `bcc` field (set to `0`).
+   - **1 byte**: Length of `subject` field (set to `0`).
+   - **2 bytes**: Length of `body` field.
+   - **1 byte**: Length of `access_token` field (set to `0`).
+   - **1 byte**: Length of `refresh_token` field (set to `0`).
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `to` field.
+   - **Variable**: Value of `body` field.
+
+4. **Test format**: Binary-encoded fields with the following structure:
+
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field (set to `0`).
+   - **2 bytes**: Length of `cc` field (set to `0`).
+   - **2 bytes**: Length of `bcc` field (set to `0`).
+   - **1 byte**: Length of `subject` field (set to `0`).
+   - **2 bytes**: Length of `body` field (set to `0`).
+   - **1 byte**: Length of `access_token` field (set to `0`).
+   - **1 byte**: Length of `refresh_token` field (set to `0`).
+   - **Variable**: Value of `from` field (considered the test ID).
+
+## Supported Payload Versions
+
+| **Version**              | **Hexadecimal Value** | **Decimal Value** | **Description**                                             |
+| ------------------------ | --------------------- | ----------------- | ----------------------------------------------------------- |
+| [v0](#payload-format-v0) | `None`                | `None`            | No explicit version marker, backward-compatible formats.    |
+| [v1](#payload-format-v1) | `0x01`                | `1`               | Includes a version marker as the first byte of the payload. |
+
+## Payload Format V0
+
+> [See available versions](#supported-payload-versions)
+
+### Message Payload
+
+- **Format**:
+  - **4 bytes**: Ciphertext Length.
+  - **1 byte**: Platform shortcode. For a list of supported platforms and their corresponding shortcodes, refer to the [Supported Platforms](/docs/grpc.md#supported-platforms) section.
+  - **Variable**: Ciphertext. (encrypted [Content Format V0](#content-format-v0)).
+  - **Variable**: Device ID.
+
+> [!NOTE]
+>
+> For detailed instructions on using the Double Ratchet algorithm to create ciphertext, refer to the [smswithoutborders_lib_sig documentation](https://github.com/smswithoutborders/lib_signal_double_ratchet_python?tab=readme-ov-file#double-ratchet-implementations).
+
+#### Visual Representation:
+
+```plaintext
++-------------------+--------------------+-------------------+-----------------+
+| Ciphertext Length | Platform shortcode | Ciphertext        | Device ID       |
+| (4 bytes)         | (1 byte)           | (Variable size)   | (Variable size) |
++-------------------+--------------------+-------------------+-----------------+
 ```
-+---------------------+---------------+-------------------------+-----------------+
-| 4 bytes             | 1 byte        | Variable length         | Remaining bytes |
-| Length of encrypted | Platform      | Encrypted content       | Device ID       |
-| content             | Letter        |                         |                 |
-+---------------------+---------------+-------------------------+-----------------+
-```
-
-### Code Example (Python)
-
-**Encoding Example:**
 
 ```python
-import struct
-import base64
+platform_shortcode = b'g'
+encrypted_content = b'...'
+device_id = b'...'
 
-platform_letter = b'g'
-encrypted_content=b'...'
-device_id=b'...'
-
-payload = struct.pack("<i", len(encrypted_content)) + pl + encrypted_content + device_id
-incoming_payload = base64.b64encode(payload)
+payload = struct.pack("<i", len(encrypted_content)) + platform_shortcode + encrypted_content + device_id
+encoded = base64.b64encode(payload).decode("utf-8")
+print(encoded)
 ```
 
-**Decoding Example:**
+## Payload Format V1
+
+> [See available versions](#supported-payload-versions)
+
+| **Payload Type**                    | **Description**              |
+| ----------------------------------- | ---------------------------- |
+| [Message Payload](#message-payload) | Contains a client public key |
+
+### Message Payload
+
+- **Format**:
+  - **1 byte**: Version Marker. [See available versions](#supported-payload-versions).
+  - **2 bytes**: Ciphertext Length.
+  - **1 byte**: Device ID Length.
+  - **1 byte**: Platform shortcode.
+  - **Variable**: Ciphertext. (encrypted [Content Format V1](#content-format-v1)).
+  - **Variable**: Device ID.
+  - **2 bytes**: Language Code (ISO 639-1 format).
+
+> [!NOTE]
+>
+> For detailed instructions on using the Double Ratchet algorithm to create ciphertext, refer to the [smswithoutborders_lib_sig documentation](https://github.com/smswithoutborders/lib_signal_double_ratchet_python?tab=readme-ov-file#double-ratchet-implementations).
+
+#### Visual Representation:
+
+```plaintext
++----------------+-------------------+------------------+--------------------+-----------------+-----------------+---------------+
+| Version Marker | Ciphertext Length | Device ID Length | Platform shortcode | Ciphertext      | Device ID       | Language Code |
+| (1 byte)       | (2 bytes)         | (1 byte)         | (1 byte)           | (Variable size) | (Variable size) | (2 bytes)     |
++----------------+-------------------+------------------+--------------------+-----------------+-----------------+---------------+
+```
 
 ```python
-payload = base64.b64decode(incoming_payload)
-len_enc_content = struct.unpack("<i", payload[:4])[0]
-platform_letter = chr(payload[4])
-encrypted_content = payload[5 : 5 + len_enc_content]
-device_id = payload[5 + len_enc_content :]
+version_marker = b'\x01'
+platform_shortcode = b'g'
+language_code = b'en'
+device_id = b'...'
+encrypted_content = b'...'
+
+payload = (
+   version_marker +
+   struct.pack("<H", len(encrypted_content)) +
+   bytes([len(device_id)]) +
+   platform_shortcode +
+   encrypted_content +
+   device_id +
+   language_code
+)
+encoded = base64.b64encode(payload).decode("utf-8")
+print(encoded)
 ```

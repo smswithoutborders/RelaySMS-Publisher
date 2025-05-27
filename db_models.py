@@ -7,7 +7,6 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 import datetime
 from peewee import Model, CharField, DateTimeField
 from db import connect
-from utils import create_tables
 
 database = connect()
 
@@ -29,4 +28,4 @@ class Publications(Model):
         table_name = "publications"
 
 
-create_tables([Publications])
+database.create_tables([Publications], safe=True)

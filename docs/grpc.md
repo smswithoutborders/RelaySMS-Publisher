@@ -86,6 +86,7 @@ start the OAuth2 flow.
 > | ------------- | --------- | ------------ | -------- | -------- |
 > | Gmail         | g         | Email        | OAuth2   | Optional |
 > | Twitter       | t         | Text         | OAuth2   | Required |
+> | Reliability   | r         | Test         | event    | N/A      |
 
 ---
 
@@ -268,10 +269,11 @@ tokens in the vault.
 
 Optional fields:
 
-| Field         | Type   | Description                                          |
-| ------------- | ------ | ---------------------------------------------------- |
-| code_verifier | string | A cryptographic random string used in the PKCE flow. |
-| redirect_url  | string | The redirect URL for the OAuth2 application.         |
+| Field           | Type   | Description                                                                 |
+| --------------- | ------ | --------------------------------------------------------------------------- |
+| code_verifier   | string | A cryptographic random string used in the PKCE flow.                        |
+| redirect_url    | string | The redirect URL for the OAuth2 application.                                |
+| store_on_device | bool   | Indicates if the token should be stored on the device instead of the cloud. |
 
 ---
 
@@ -284,10 +286,11 @@ Optional fields:
 > The table lists only the fields that are populated for this step. Other fields
 > may be empty, omitted, or false.
 
-| Field   | Type   | Description                                |
-| ------- | ------ | ------------------------------------------ |
-| success | bool   | Indicates if the operation was successful. |
-| message | string | A response message from the server.        |
+| Field   | Type                | Description                                                                                             |
+| ------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
+| success | bool                | Indicates if the operation was successful.                                                              |
+| message | string              | A response message from the server.                                                                     |
+| tokens  | map<string, string> | Contains the access, refresh, and ID tokens with keys: `access_token`, `refresh_token`, and `id_token`. |
 
 ---
 
@@ -318,7 +321,8 @@ localhost:6000 publisher.v1.Publisher/ExchangeOAuth2CodeAndStore <payload.json
   "long_lived_token": "long_lived_token",
   "platform": "gmail",
   "authorization_code": "auth_code",
-  "code_verifier": "abcdef"
+  "code_verifier": "abcdef",
+  "store_on_device": false
 }
 ```
 
@@ -329,6 +333,7 @@ localhost:6000 publisher.v1.Publisher/ExchangeOAuth2CodeAndStore <payload.json
 ```json
 {
   "message": "Successfully fetched and stored tokens.",
+  "tokens": {},
   "success": true
 }
 ```
