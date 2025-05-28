@@ -66,6 +66,12 @@ class AdapterIPCHandler:
                 logger.info("Subprocess started for: %s", method)
 
                 stdout, stderr = process.communicate(input=payload, timeout=60)
+                logger.debug(
+                    "\n\n=========== SUBPROCESS STREAM OUTPUT ==========="
+                    "\n%s\n"
+                    "=========== SUBPROCESS STREAM OUTPUT ===========\n\n",
+                    stderr.strip(),
+                )
                 logger.debug("Subprocess response: %s", stdout.strip())
 
                 if process.returncode != 0:
