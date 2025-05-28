@@ -710,7 +710,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     refresh_alert = (
                         f"\n\nPlease paste this message in your RelaySMS app\n"
                         f"{base64.b64encode(
-                            refreshed_token.get('refresh_token').encode()
+                            f"{data["sender_id"]}:{refreshed_token.get('refresh_token')}".encode()
                             ).decode('utf-8')}"
                     )
 
