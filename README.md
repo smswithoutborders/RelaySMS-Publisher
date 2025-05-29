@@ -39,7 +39,7 @@ RelaySMS Publisher allows users to publish content to online platforms (like Gma
 
 ## Supported Platforms
 
-The list of supported platforms is available in [platforms.json](resources/platforms.json) and can also be retrieved from the REST API at [https://publisher.smswithoutborders.com/platforms](https://publisher.smswithoutborders.com/platforms).
+The list of supported platforms is available in [platforms.json](resources/platforms.json) and can also be retrieved from the REST API at [https://publisher.smswithoutborders.com/v1/platforms](https://publisher.smswithoutborders.com/v1/platforms).
 
 ## Testing
 

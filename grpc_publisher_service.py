@@ -691,13 +691,26 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 params=params,
             )
 
-            if pipe.get("error"):
-                return {"response": None, "error": pipe.get("error"), "message": None}
+            if error := pipe.get("error"):
+                return {"response": None, "error": error, "message": None}
 
-            result = pipe.get("result")
+            result = pipe.get("result", {})
+            refreshed_token = result.get("refreshed_token", {})
+            new_refresh_token = refreshed_token.get("refresh_token")
+            old_refresh_token = data.get("refresh_token")
+            is_refresh_token_updated = new_refresh_token != old_refresh_token
+
+            refresh_alert = None
+            if is_refresh_token_updated and user_sent_tokens:
+                refresh_token_msg = f"{data['sender_id']}:{new_refresh_token}"
+                refresh_alert = (
+                    "\n\nPlease paste this message in your RelaySMS app\n"
+                    f"{base64.b64encode(refresh_token_msg.encode()).decode('utf-8')}"
+                )
+
             if not user_sent_tokens:
                 handle_token_update(
-                    token=result.get("refreshed_token"),
+                    token=refreshed_token,
                     device_id=kwargs.get("device_id"),
                     phone_number=request.metadata["From"],
                     account_identifier=data["sender_id"],
@@ -706,8 +719,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
             return {
                 "response": None,
-                "error": None,
+                "error": result.get("message") if not result.get("success") else None,
                 "message": "Successfully sent message",
+                "refresh_alert": refresh_alert,
             }
 
         def handle_pnba_publication(
@@ -975,6 +989,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     status="failed",
                     country_code=decrypted_result.get("country_code"),
                     language=decoded_payload.get("language"),
+                    additional_data=publication_response.get("refresh_alert"),
                 )
                 return self.handle_create_grpc_error_response(
                     context,
@@ -989,6 +1004,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 status="published",
                 country_code=decrypted_result.get("country_code"),
                 language=decoded_payload.get("language"),
+                additional_data=publication_response.get("refresh_alert"),
             )
             return response(
                 message=f"Successfully published {platform_info['name']} message",
