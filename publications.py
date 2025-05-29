@@ -54,9 +54,13 @@ def fetch_publication(
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
 
-    query = Publications.select().where(
-        (Publications.date_created >= start_datetime)
-        & (Publications.date_created <= end_datetime)
+    query = (
+        Publications.select()
+        .where(
+            (Publications.date_created >= start_datetime)
+            & (Publications.date_created <= end_datetime)
+        )
+        .order_by(Publications.date_created.desc())
     )
 
     for key, value in filters.items():
