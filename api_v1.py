@@ -45,10 +45,19 @@ def get_publication(
     page_size: int = Query(10, ge=1, le=100),
 ):
     """Retrieve metrics with optional filters."""
-    logger.info(
-        f"Fetching metrics with filters: start_date={start_date}, end_date={end_date}, "
-        f"country_code={country_code}, platform_name={platform_name}, source={source}, "
-        f"status={status}, gateway_client={gateway_client}, page={page}, page_size={page_size}"
+    logger.debug(
+        "Fetching metrics with filters: start_date=%s, end_date=%s, "
+        "country_code=%s, platform_name=%s, source=%s, status=%s, "
+        "gateway_client=%s, page=%s, page_size=%s",
+        start_date,
+        end_date,
+        country_code,
+        platform_name,
+        source,
+        status,
+        gateway_client,
+        page,
+        page_size,
     )
 
     filters = {
