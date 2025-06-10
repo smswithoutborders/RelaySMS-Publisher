@@ -19,7 +19,6 @@ updates:
       - dependency-type: "indirect"
     labels:
       - "dependencies"
-      - "python"
     groups:
       production-dependencies:
         dependency-type: "production"
