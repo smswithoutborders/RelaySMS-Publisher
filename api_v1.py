@@ -5,13 +5,17 @@ Public License was not distributed with this file, see <https://www.gnu.org/lice
 """
 
 import datetime
+import json
+from pathlib import Path as PathLib
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi import APIRouter, HTTPException, Query, Path, Request
+from fastapi.responses import HTMLResponse
 from api_schemas import (
     PublicationsRead,
     PublicationsResponse,
     Pagination,
     PlatformManifest,
+    OAuthClientMetadata,
 )
 from publications import fetch_publication
 from platforms.adapter_manager import AdapterManager
@@ -30,6 +34,7 @@ ALLOWED_PLATFORM_MANIFEST_KEYS = [
     "icon_png",
     "support_url_scheme",
 ]
+ALLOWED_PLATFORMS_WITH_CLIENT_METADATA = ["bluesky"]
 
 
 @router.get("/metrics/publications", response_model=PublicationsResponse)
@@ -135,3 +140,95 @@ def get_platform_data(
         if key in ALLOWED_PLATFORM_MANIFEST_KEYS
     }
     return adapter_copy
+
+
+@router.get("/platforms/{platform_name}/oauth/client-metadata.json")
+def get_platform_oauth_client_metadata(
+    platform_name: str = Path(
+        ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
+    )
+) -> OAuthClientMetadata:
+    """Retrieve the OAuth client metadata for a platform adapter."""
+    AdapterManager._populate_registry()
+    adapter = next(
+        (
+            manifest
+            for manifest in AdapterManager._registry.values()
+            if manifest["name"].lower() == platform_name.lower()
+        ),
+        None,
+    )
+    if not adapter:
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+    if not platform_name.lower() in ALLOWED_PLATFORMS_WITH_CLIENT_METADATA:
+        raise HTTPException(
+            status_code=404,
+            detail="OAuth client metadata not available for this platform",
+        )
+
+    adapter_credentials = PathLib(adapter.get("path")) / "credentials.json"
+
+    if not adapter_credentials.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="OAuth client metadata file not found for this platform",
+        )
+
+    try:
+        with open(adapter_credentials, "r", encoding="utf-8") as file:
+            creds = file.read()
+            client_metadata = OAuthClientMetadata(**json.loads(creds))
+        return client_metadata
+    except FileNotFoundError as exc:
+        logger.error("OAuth client metadata file not found")
+        raise HTTPException(
+            status_code=404, detail="OAuth client metadata file not found"
+        ) from exc
+
+
+@router.get("/platforms/{platform_name}/oauth/callback")
+async def oauth_callback(
+    request: Request,
+    platform_name: str = Path(
+        ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
+    ),
+) -> HTMLResponse:
+    """
+    Handle the OAuth callback from the platform.
+    """
+    AdapterManager._populate_registry()
+    adapter = next(
+        (
+            manifest
+            for manifest in AdapterManager._registry.values()
+            if manifest["name"].lower() == platform_name.lower()
+        ),
+        None,
+    )
+    if not adapter:
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+    if not platform_name.lower() in ALLOWED_PLATFORMS_WITH_CLIENT_METADATA:
+        raise HTTPException(
+            status_code=404,
+            detail="OAuth client metadata not available for this platform",
+        )
+
+    table_rows = ""
+    for key, value in request.query_params.items():
+        table_rows += f"<tr><td>{key}</td><td>{value}</td></tr>"
+
+    html_content = f"""
+    <html>
+        <head><title>{platform_name.capitalize()} OAuth Callback Params</title></head>
+        <body>
+            <h2>{platform_name.capitalize()}'s Callback Params</h2>
+            <table border="1">
+                <tr><th>Parameter</th><th>Value</th></tr>
+                {table_rows}
+            </table>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)

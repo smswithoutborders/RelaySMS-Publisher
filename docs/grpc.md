@@ -269,11 +269,14 @@ tokens in the vault.
 
 Optional fields:
 
-| Field           | Type   | Description                                                                 |
-| --------------- | ------ | --------------------------------------------------------------------------- |
-| code_verifier   | string | A cryptographic random string used in the PKCE flow.                        |
-| redirect_url    | string | The redirect URL for the OAuth2 application.                                |
-| store_on_device | bool   | Indicates if the token should be stored on the device instead of the cloud. |
+| Field                 | Type   | Description                                                                                |
+| --------------------- | ------ | ------------------------------------------------------------------------------------------ |
+| code_verifier         | string | A cryptographic random string used in the PKCE flow.                                       |
+| redirect_url          | string | The redirect URL for the OAuth2 application.                                               |
+| store_on_device       | bool   | Indicates if the token should be stored on the device instead of the cloud.                |
+| dpop_private_jwk      | string | The private JWK (JSON Web Key) used for DPoP (Demonstration of Proof-of-Possession) flows. |
+| dpop_authserver_nonce | string | The nonce value provided by the authorization server for DPoP requests.                    |
+| authserver_iss        | string | The issuer identifier (`iss`) of the authorization server, used for validation.            |
 
 ---
 

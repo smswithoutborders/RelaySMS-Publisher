@@ -351,6 +351,10 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 "code": request.authorization_code,
                 "code_verifier": getattr(request, "code_verifier") or None,
                 "redirect_url": getattr(request, "redirect_url") or None,
+                "dpop_private_jwk": getattr(request, "dpop_private_jwk") or None,
+                "dpop_authserver_nonce": getattr(request, "dpop_authserver_nonce")
+                or None,
+                "authserver_iss": getattr(request, "authserver_iss") or None,
             }
 
             pipe = AdapterIPCHandler.invoke(
