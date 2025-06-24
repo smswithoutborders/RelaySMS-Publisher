@@ -40,7 +40,7 @@ class PublicationsResponse(BaseModel):
 class PlatformManifest(BaseModel):
     name: str
     shortcode: str
-    protocol: str
+    protocol_type: str
     service_type: str
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None

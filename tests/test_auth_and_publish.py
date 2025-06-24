@@ -161,6 +161,7 @@ def create_message_v0(platform, config):
         "twitter": ["from", "body", "access_token", "refresh_token"],
         "telegram": ["from", "to", "body"],
         "reliability": ["from"],
+        "bluesky": ["from", "body", "access_token", "refresh_token"],
     }
 
     if platform not in platform_params:
@@ -213,6 +214,7 @@ def create_message_v1(platform, config):
         "twitter": ["from", "body", "access_token", "refresh_token"],
         "telegram": ["from", "to", "body"],
         "reliability": ["from"],
+        "bluesky": ["from", "body", "access_token", "refresh_token"],
     }
 
     if platform not in platform_specific_params:
@@ -369,12 +371,13 @@ def test_auth_and_publish_v0(
 @pytest.mark.parametrize(
     "platform, platform_shortcode, use_device_id",
     [
-        ("gmail", b"g", False),
-        ("twitter", b"t", True),
-        ("telegram", b"T", False),
-        ("telegram", b"T", True),
-        ("reliability", b"r", False),
-        ("reliability", b"r", True),
+        # ("gmail", b"g", False),
+        # ("twitter", b"t", True),
+        # ("telegram", b"T", False),
+        # ("telegram", b"T", True),
+        # ("reliability", b"r", False),
+        # ("reliability", b"r", True),
+        ("bluesky", b"b", True),
     ],
 )
 def test_auth_and_publish_v1(

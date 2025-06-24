@@ -128,15 +128,18 @@ Optional fields:
 > The table lists only the fields that are populated for this step. Other fields
 > may be empty, omitted, or false.
 
-| Field             | Type   | Description                                                          |
-| ----------------- | ------ | -------------------------------------------------------------------- |
-| authorization_url | string | The generated authorization URL.                                     |
-| state             | string | The state parameter sent in the request, if provided.                |
-| code_verifier     | string | The code verifier used in the PKCE flow, if provided/generated.      |
-| message           | string | A response message from the server.                                  |
-| scope             | string | The scope of the authorization request, as a comma-separated string. |
-| client_id         | string | The client ID for the OAuth2 application.                            |
-| redirect_url      | string | The redirect URL for the OAuth2 application.                         |
+| Field                 | Type   | Description                                                                                |
+| --------------------- | ------ | ------------------------------------------------------------------------------------------ |
+| authorization_url     | string | The generated authorization URL.                                                           |
+| state                 | string | The state parameter sent in the request, if provided.                                      |
+| code_verifier         | string | The code verifier used in the PKCE flow, if provided/generated.                            |
+| message               | string | A response message from the server.                                                        |
+| scope                 | string | The scope of the authorization request, as a comma-separated string.                       |
+| client_id             | string | The client ID for the OAuth2 application.                                                  |
+| redirect_url          | string | The redirect URL for the OAuth2 application.                                               |
+| dpop_private_jwk      | string | The private JWK (JSON Web Key) used for DPoP (Demonstration of Proof-of-Possession) flows. |
+| dpop_authserver_nonce | string | The nonce value provided by the authorization server for DPoP requests.                    |
+| authserver_iss        | string | The issuer identifier (`iss`) of the authorization server, used for validation.            |
 
 ---
 
@@ -183,7 +186,10 @@ localhost:6000 publisher.v1.Publisher/GetOAuth2AuthorizationUrl <payload.json
   "client_id": "your_client_id",
   "scope": "openid,https://www.googleapis.com/auth/gmail.send",
   "redirect_url": "https://example.com/callback",
-  "message": "Successfully generated authorization url"
+  "message": "Successfully generated authorization url",
+  "dpop_private_jwk": "",
+  "dpop_authserver_nonce": "",
+  "authserver_iss": ""
 }
 ```
 

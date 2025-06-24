@@ -28,7 +28,7 @@ router = APIRouter()
 ALLOWED_PLATFORM_MANIFEST_KEYS = [
     "name",
     "shortcode",
-    "protocol",
+    "protocol_type",
     "service_type",
     "icon_svg",
     "icon_png",

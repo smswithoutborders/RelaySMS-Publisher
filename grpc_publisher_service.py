@@ -242,6 +242,9 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 client_id=result.get("client_id"),
                 scope=result.get("scope"),
                 redirect_url=result.get("redirect_url"),
+                dpop_private_jwk=result.get("dpop_private_jwk"),
+                dpop_authserver_nonce=result.get("dpop_authserver_nonce"),
+                authserver_iss=result.get("authserver_iss"),
                 message="Successfully generated authorization url",
             )
 
@@ -963,21 +966,21 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
             publication_response = None
 
-            if platform_info["protocol"] == "oauth2":
+            if platform_info["protocol_type"] == "oauth2":
                 publication_response = handle_oauth2_publication(
                     service_type=platform_info["service_type"],
                     platform_name=platform_info["name"],
                     content_parts=content_parts,
                     device_id=device_id_hex,
                 )
-            elif platform_info["protocol"] == "pnba":
+            elif platform_info["protocol_type"] == "pnba":
                 publication_response = handle_pnba_publication(
                     service_type=platform_info["service_type"],
                     platform_name=platform_info["name"],
                     content_parts=content_parts,
                     device_id=device_id_hex,
                 )
-            elif platform_info["protocol"] == "event":
+            elif platform_info["protocol_type"] == "event":
                 publication_response = handle_test_publication(
                     service_type=platform_info["service_type"],
                     platform_name=platform_info["name"],

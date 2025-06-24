@@ -130,7 +130,7 @@ class AdapterManager:
             manifest_path = os.path.join(adapter_path, "manifest.ini")
             manifest_data = cls._load_ini_file(manifest_path, "platform")
             if manifest_data and (adapter_name := manifest_data.get("name")):
-                protocol = manifest_data.get("protocol", "").lower()
+                protocol = manifest_data.get("protocol_type", "").lower()
                 key = f"{adapter_name}_{protocol}".lower()
                 adapter_dir_name = os.path.basename(adapter_path)
                 manifest_data["path"] = adapter_path
@@ -315,7 +315,7 @@ class AdapterManager:
             raise ValueError(f"Manifest load failed for '{dest_path}'.")
 
         adapter_name = manifest_data.get("name")
-        protocol = manifest_data.get("protocol")
+        protocol = manifest_data.get("protocol_type")
 
         if not adapter_name:
             cls._rollback_directory(dest_path)
@@ -380,3 +380,60 @@ class AdapterManager:
             cls._rollback_directory(venv_path)
 
         logger.info("Adapter '%s' removed successfully.", name)
+
+    @classmethod
+    def update_adapter(cls, name: Optional[str] = None, install: bool = False):
+        """
+        Update adapters by pulling the latest changes from their Git repositories.
+
+        Args:
+            name (Optional[str]): The name of the adapter to update. If None, update all adapters.
+            install (bool): Whether to reinstall dependencies after updating.
+
+        Raises:
+            ValueError: If the adapter does not exist or update fails.
+        """
+        cls._populate_registry()
+
+        adapters_to_update = (
+            [cls._registry.get(name)] if name else cls._registry.values()
+        )
+
+        for manifest in adapters_to_update:
+            if not manifest:
+                raise ValueError(f"Adapter '{name}' does not exist.")
+
+            adapter_path = manifest.get("path")
+            adapter_dir_name = os.path.basename(adapter_path)
+            venv_path = os.path.join(cls._adapters_venv_dir, adapter_dir_name)
+            repo = Repo(adapter_path)
+
+            try:
+                repo.git.pull()
+                logger.info(
+                    "Updated adapter '%s' at '%s'.", manifest.get("name"), adapter_path
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to update adapter '%s': %s", manifest.get("name"), e
+                )
+                raise ValueError(
+                    f"Failed to update adapter '{manifest.get('name')}'."
+                ) from e
+
+            if install:
+                requirements_path = os.path.join(adapter_path, "requirements.txt")
+                if os.path.isfile(requirements_path):
+                    try:
+                        cls._install_adapter_dependencies(requirements_path, venv_path)
+                    except ValueError as e:
+                        logger.error(
+                            "Failed to reinstall dependencies for '%s': %s",
+                            manifest.get("name"),
+                            e,
+                        )
+                        raise ValueError(
+                            f"Failed to reinstall dependencies for '{manifest.get('name')}'."
+                        ) from e
+
+        logger.info("Adapter update process completed.")

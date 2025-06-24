@@ -32,6 +32,12 @@ message GetOAuth2AuthorizationUrlResponse {
   string client_id = 6;
   // The redirect URL for the OAuth2 application
   string redirect_url = 7;
+  // The private JWK (JSON Web Key) used for DPoP (Demonstration of Proof-of-Possession) flows
+  string dpop_private_jwk = 8;
+  // The nonce value provided by the authorization server for DPoP requests
+  string dpop_authserver_nonce = 9;
+  // The issuer identifier (`iss`) of the authorization server, used for validation
+  string authserver_iss = 10;
 }
 
 // Request message for exchanging the OAuth2 authorization code for a token
@@ -48,6 +54,12 @@ message ExchangeOAuth2CodeAndStoreRequest {
   string redirect_url = 5;
   // Indicates if the token should be stored on the device instead of the cloud
   bool store_on_device = 6;
+  // Optional private JWK (JSON Web Key) used for DPoP (Demonstration of Proof-of-Possession) flows
+  string dpop_private_jwk = 7;
+  // Optional nonce value provided by the authorization server for DPoP
+  string dpop_authserver_nonce = 8;
+  // Optional issuer identifier (`iss`) of the authorization server, used for validation
+  string authserver_iss = 9;
 }
 
 // Response message for the ExchangeOAuth2Code RPC

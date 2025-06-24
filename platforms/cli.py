@@ -37,5 +37,22 @@ def remove(adapter_name):
         click.echo(f"Unexpected error: {e}")
 
 
+@cli.command
+@click.argument("adapter_name", required=False)
+@click.option("--install", is_flag=True, help="Reinstall dependencies after updating.")
+def update(adapter_name, install):
+    """Update adapters by pulling the latest changes."""
+    try:
+        AdapterManager.update_adapter(name=adapter_name, install=install)
+        if adapter_name:
+            click.echo(f"Adapter '{adapter_name}' updated successfully.")
+        else:
+            click.echo("All adapters updated successfully.")
+    except ValueError as e:
+        click.echo(f"Error: {e}")
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}")
+
+
 if __name__ == "__main__":
     cli()
