@@ -371,12 +371,12 @@ def test_auth_and_publish_v0(
 @pytest.mark.parametrize(
     "platform, platform_shortcode, use_device_id",
     [
-        # ("gmail", b"g", False),
-        # ("twitter", b"t", True),
-        # ("telegram", b"T", False),
-        # ("telegram", b"T", True),
-        # ("reliability", b"r", False),
-        # ("reliability", b"r", True),
+        ("gmail", b"g", False),
+        ("twitter", b"t", True),
+        ("telegram", b"T", False),
+        ("telegram", b"T", True),
+        ("reliability", b"r", False),
+        ("reliability", b"r", True),
         ("bluesky", b"b", True),
     ],
 )
