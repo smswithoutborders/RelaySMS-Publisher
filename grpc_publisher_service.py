@@ -215,6 +215,8 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     request, "autogenerate_code_verifier"
                 ),
                 "redirect_url": getattr(request, "redirect_url") or None,
+                "request_identifier": getattr(request, "request_identifier") or None,
+                "base_path": adapter["assets_path"],
             }
 
             pipe = AdapterIPCHandler.invoke(
@@ -242,9 +244,6 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 client_id=result.get("client_id"),
                 scope=result.get("scope"),
                 redirect_url=result.get("redirect_url"),
-                dpop_private_jwk=result.get("dpop_private_jwk"),
-                dpop_authserver_nonce=result.get("dpop_authserver_nonce"),
-                authserver_iss=result.get("authserver_iss"),
                 message="Successfully generated authorization url",
             )
 
@@ -354,10 +353,8 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 "code": request.authorization_code,
                 "code_verifier": getattr(request, "code_verifier") or None,
                 "redirect_url": getattr(request, "redirect_url") or None,
-                "dpop_private_jwk": getattr(request, "dpop_private_jwk") or None,
-                "dpop_authserver_nonce": getattr(request, "dpop_authserver_nonce")
-                or None,
-                "authserver_iss": getattr(request, "authserver_iss") or None,
+                "request_identifier": getattr(request, "request_identifier") or None,
+                "base_path": adapter["assets_path"],
             }
 
             pipe = AdapterIPCHandler.invoke(
@@ -1076,6 +1073,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             params = {
                 "phone_number": request.phone_number,
                 "base_path": adapter["assets_path"],
+                "request_identifier": getattr(request, "request_identifier") or None,
             }
 
             pipe = AdapterIPCHandler.invoke(
@@ -1202,6 +1200,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 "phone_number": request.phone_number,
                 "base_path": adapter["assets_path"],
                 "password": getattr(request, "password") or None,
+                "request_identifier": getattr(request, "request_identifier") or None,
             }
 
             if params.get("password"):
