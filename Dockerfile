@@ -2,8 +2,8 @@ FROM python:3.13.5-slim
 
 WORKDIR /publisher
 
-RUN --mount=type=cache,target=/var/cache/apt \
-    --mount=type=cache,target=/var/lib/apt \
+RUN --mount=type=cache,sharing=locked,target=/var/cache/apt \
+    --mount=type=cache,sharing=locked,target=/var/lib/apt \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
 
 COPY requirements.txt .
 
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,sharing=locked,target=/root/.cache/pip \
     pip install --disable-pip-version-check --quiet --no-cache-dir -r requirements.txt
 
 COPY . .
