@@ -9,6 +9,7 @@
 - [Payload Format](#supported-payload-versions)
   - [Payload Format V0](#payload-format-v0)
   - [Payload Format V1](#payload-format-v1)
+  - [Payload Format V2](#payload-format-v2)
 
 ## Content Format
 
