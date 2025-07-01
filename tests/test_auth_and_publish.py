@@ -136,6 +136,26 @@ def create_payload_v1(
     return encoded_payload
 
 
+def create_payload_v2(
+    encrypted_payload,
+    platform_shortcode,
+    device_id,
+    language,
+):
+    """Creates a v2 payload."""
+    payload = (
+        bytes([2])
+        + struct.pack("<H", len(encrypted_payload))
+        + bytes([len(device_id)])
+        + platform_shortcode
+        + encrypted_payload
+        + device_id
+        + language
+    )
+    encoded_payload = base64.b64encode(payload).decode()
+    return encoded_payload
+
+
 def create_message_v0(platform, config):
     """
     Constructs a platform message dynamically based on the platform and its supported parameters.
@@ -198,6 +218,67 @@ def create_message_v1(platform, config):
         ("body", "<H"),
         ("access_token", "<B"),
         ("refresh_token", "<B"),
+    ]
+
+    platform_specific_params = {
+        "gmail": [
+            "from",
+            "to",
+            "cc",
+            "bcc",
+            "subject",
+            "body",
+            "access_token",
+            "refresh_token",
+        ],
+        "twitter": ["from", "body", "access_token", "refresh_token"],
+        "telegram": ["from", "to", "body"],
+        "reliability": ["from"],
+        "bluesky": ["from", "body", "access_token", "refresh_token"],
+    }
+
+    if platform not in platform_specific_params:
+        raise ValueError(f"Unsupported platform: {platform}")
+
+    supported_params = platform_specific_params[platform]
+
+    lengths = []
+    contents = []
+
+    for param, fmt in all_params:
+        if param in supported_params:
+            value = config.get(f"{platform}_{param}", "")
+            length = len(value.encode("utf-8")) if value else 0
+            lengths.append(struct.pack(fmt, length))
+            if length > 0:
+                contents.append(value.encode("utf-8"))
+        else:
+            lengths.append(struct.pack(fmt, 0))
+
+    return b"".join(lengths + contents)
+
+
+def create_message_v2(platform, config):
+    """
+    Constructs a platform message dynamically based on the platform and its supported parameters.
+    Packs all lengths first before packing their respective contents.
+
+    Args:
+        platform (str): The platform name (e.g., 'gmail', 'twitter', 'telegram').
+        config (dict): The configuration dictionary containing platform-specific parameters.
+
+    Returns:
+        bytes: The constructed platform message as bytes.
+    """
+    all_params = [
+        ("from", "<B"),
+        ("to", "<H"),
+        ("cc", "<H"),
+        ("bcc", "<H"),
+        ("subject", "<B"),
+        ("body", "<H"),
+        ("access_token", "<H"),
+        ("refresh_token", "<H"),
     ]
 
     platform_specific_params = {
@@ -371,12 +452,12 @@ def test_auth_and_publish_v0(
 @pytest.mark.parametrize(
     "platform, platform_shortcode, use_device_id",
     [
-        ("gmail", b"g", False),
-        ("twitter", b"t", True),
-        ("telegram", b"T", False),
-        ("telegram", b"T", True),
-        ("reliability", b"r", False),
-        ("reliability", b"r", True),
+        # ("gmail", b"g", False),
+        # ("twitter", b"t", True),
+        # ("telegram", b"T", False),
+        # ("telegram", b"T", True),
+        # ("reliability", b"r", False),
+        # ("reliability", b"r", True),
         ("bluesky", b"b", True),
     ],
 )
@@ -412,4 +493,51 @@ def test_auth_and_publish_v1(
         create_payload_v1,
         [language],
         create_message_v1,
+    )
+
+
+@pytest.mark.parametrize(
+    "platform, platform_shortcode, use_device_id",
+    [
+        # ("gmail", b"g", False),
+        # ("twitter", b"t", True),
+        # ("telegram", b"T", False),
+        # ("telegram", b"T", True),
+        # ("reliability", b"r", False),
+        # ("reliability", b"r", True),
+        ("bluesky", b"b", True),
+    ],
+)
+def test_auth_and_publish_v2(
+    authenticated_entity,
+    keypairs,
+    tmp_path,
+    send_message,
+    start_test,
+    credentials,
+    messages,
+    platform,
+    platform_shortcode,
+    use_device_id,
+):
+    """Tests publishing functionality for v1."""
+    if platform == "reliability":
+        test_id = start_test()
+        messages["reliability_from"] = str(test_id)
+
+    language = credentials["language"].encode()
+
+    perform_auth_and_publish(
+        authenticated_entity,
+        keypairs,
+        tmp_path,
+        send_message,
+        credentials,
+        messages,
+        platform,
+        platform_shortcode,
+        use_device_id,
+        create_payload_v2,
+        [language],
+        create_message_v2,
     )

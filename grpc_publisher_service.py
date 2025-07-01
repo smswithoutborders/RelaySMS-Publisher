@@ -12,7 +12,12 @@ import publisher_pb2
 import publisher_pb2_grpc
 
 from utils import get_configs
-from content_parser import decode_content, extract_content_v0, extract_content_v1
+from content_parser import (
+    decode_content,
+    extract_content_v0,
+    extract_content_v1,
+    extract_content_v2,
+)
 from grpc_vault_entity_client import (
     list_entity_stored_tokens,
     store_entity_token,
@@ -937,11 +942,19 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if decrypt_error:
                 return decrypt_error
 
-            if "version" in decoded_payload and decoded_payload.get("version") == "v1":
-                content_parts, extraction_error = extract_content_v1(
-                    platform_info["service_type"],
-                    decrypted_result.get("payload_plaintext"),
-                )
+            extraction_error = None
+            content_parts = None
+            if "version" in decoded_payload:
+                if decoded_payload.get("version") == "v1":
+                    content_parts, extraction_error = extract_content_v1(
+                        platform_info["service_type"],
+                        decrypted_result.get("payload_plaintext"),
+                    )
+                elif decoded_payload.get("version") == "v2":
+                    content_parts, extraction_error = extract_content_v2(
+                        platform_info["service_type"],
+                        decrypted_result.get("payload_plaintext"),
+                    )
             else:
                 content_parts, extraction_error = extract_content_v0(
                     platform_info["service_type"],

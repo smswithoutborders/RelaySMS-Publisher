@@ -13,6 +13,7 @@ from content_parser import (
     decode_content,
     extract_content_v0,
     extract_content_v1,
+    extract_content_v2,
 )
 
 
@@ -220,5 +221,65 @@ def test_extract_content_v0_valid(service_type, content, expected):
 )
 def test_extract_content_v1_valid(content, service_type, expected):
     result, error = extract_content_v1(service_type, content)
+    assert error is None
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "content, service_type, expected",
+    [
+        (
+            struct.pack("<BHHHBHHH", 4, 2, 2, 3, 7, 4, 12, 13)
+            + b"fromtoccbccsubjectbodyaccess_tokenrefresh_token",
+            "email",
+            (
+                "from",
+                "to",
+                "cc",
+                "bcc",
+                "subject",
+                "body",
+                "access_token",
+                "refresh_token",
+            ),
+        ),
+        (
+            struct.pack("<BHHHBHHH", 4, 0, 0, 0, 7, 4, 0, 0) + b"fromsubjectbody",
+            "email",
+            (
+                "from",
+                "",
+                "",
+                "",
+                "subject",
+                "body",
+                "",
+                "",
+            ),
+        ),
+        (
+            struct.pack("<BHHHBHHH", 4, 0, 0, 0, 0, 4, 5, 7) + b"frombodytokenrefresh",
+            "text",
+            (
+                "from",
+                "body",
+                "token",
+                "refresh",
+            ),
+        ),
+        (
+            struct.pack("<BHHHBHHH", 4, 2, 0, 0, 0, 4, 0, 0)
+            + b"fromtobodytokenrefresh",
+            "message",
+            (
+                "from",
+                "to",
+                "body",
+            ),
+        ),
+    ],
+)
+def test_extract_content_v2_valid(content, service_type, expected):
+    result, error = extract_content_v2(service_type, content)
     assert error is None
     assert result == expected
