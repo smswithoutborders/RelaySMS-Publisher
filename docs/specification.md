@@ -47,6 +47,8 @@
 > [!NOTE]
 >
 > All service types use the same structure, but fields not applicable to a specific service type will have their length bytes set to `0`, and no value bytes will follow for those fields.
+>
+> **All 2-byte length fields are encoded as unsigned little-endian.**
 
 1. **Email format**: Binary-encoded fields with the following structure:
 
@@ -117,6 +119,8 @@
 > [!NOTE]
 >
 > All service types use the same structure, but fields not applicable to a specific service type will have their length bytes set to `0`, and no value bytes will follow for those fields.
+>
+> **All 2-byte length fields are encoded as unsigned little-endian.**
 
 1. **Email format**: Binary-encoded fields with the following structure:
 
@@ -225,10 +229,6 @@ print(encoded)
 
 > [See available versions](#supported-payload-versions)
 
-| **Payload Type**                    | **Description**              |
-| ----------------------------------- | ---------------------------- |
-| [Message Payload](#message-payload) | Contains a client public key |
-
 ### Message Payload
 
 - **Format**:
@@ -276,10 +276,6 @@ print(encoded)
 ## Payload Format V2
 
 > [See available versions](#supported-payload-versions)
-
-| **Payload Type**                    | **Description**              |
-| ----------------------------------- | ---------------------------- |
-| [Message Payload](#message-payload) | Contains a client public key |
 
 ### Message Payload
 
