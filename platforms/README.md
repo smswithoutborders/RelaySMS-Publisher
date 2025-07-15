@@ -48,6 +48,37 @@ python3 -m platforms.cli remove example-adapter
 
 This will unregister the adapter and remove it from the system.
 
+## Updating Adapters
+
+You can update adapters by pulling the latest changes from their Git repositories using the CLI.
+
+### Steps:
+
+1. Run the following command from the project root:
+
+```bash
+python3 -m platforms.cli update [ADAPTER_NAME] [--install]
+```
+
+- Replace `[ADAPTER_NAME]` with the name of the adapter you want to update. If omitted, all adapters will be updated.
+- Use the `--install` flag to reinstall dependencies after updating.
+
+### Examples:
+
+Update a specific adapter:
+
+```bash
+python3 -m platforms.cli update example-adapter
+```
+
+Update all adapters and reinstall dependencies:
+
+```bash
+python3 -m platforms.cli update --install
+```
+
+This will pull the latest changes for the specified adapter(s) and optionally reinstall dependencies.
+
 ## Developing New Adapters
 
 You can develop new adapters by cloning the [template repository](https://github.com/smswithoutborders/platform-adapter-template) and following its instructions.

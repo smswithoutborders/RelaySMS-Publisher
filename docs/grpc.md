@@ -86,7 +86,9 @@ start the OAuth2 flow.
 > | ------------- | --------- | ------------ | -------- | -------- |
 > | Gmail         | g         | Email        | OAuth2   | Optional |
 > | Twitter       | t         | Text         | OAuth2   | Required |
+> | Telegram      | T         | Message      | PNBA     | N/A      |
 > | Reliability   | r         | Test         | event    | N/A      |
+> | Bluesky       | b         | Text         | OAuth2   | Required |
 
 ---
 
@@ -110,12 +112,8 @@ Optional fields:
 | state                      | string | An opaque value used to maintain state between the request and the callback. |
 | code_verifier              | string | A cryptographic random string used in the PKCE flow.                         |
 | autogenerate_code_verifier | bool   | If true, a code verifier will be auto-generated if not provided.             |
-
-Optional fields:
-
-| Field        | Type   | Description                                  |
-| ------------ | ------ | -------------------------------------------- |
-| redirect_url | string | The redirect URL for the OAuth2 application. |
+| redirect_url               | string | The redirect URL for the OAuth2 application.                                 |
+| request_identifier         | string | A request identifier for tracking the request                                |
 
 ---
 
@@ -167,7 +165,8 @@ localhost:6000 publisher.v1.Publisher/GetOAuth2AuthorizationUrl <payload.json
   "platform": "gmail",
   "state": "",
   "code_verifier": "",
-  "autogenerate_code_verifier": true
+  "autogenerate_code_verifier": true,
+  "request_identifier": ""
 }
 ```
 
@@ -269,11 +268,12 @@ tokens in the vault.
 
 Optional fields:
 
-| Field           | Type   | Description                                                                 |
-| --------------- | ------ | --------------------------------------------------------------------------- |
-| code_verifier   | string | A cryptographic random string used in the PKCE flow.                        |
-| redirect_url    | string | The redirect URL for the OAuth2 application.                                |
-| store_on_device | bool   | Indicates if the token should be stored on the device instead of the cloud. |
+| Field              | Type   | Description                                                                 |
+| ------------------ | ------ | --------------------------------------------------------------------------- |
+| code_verifier      | string | A cryptographic random string used in the PKCE flow.                        |
+| redirect_url       | string | The redirect URL for the OAuth2 application.                                |
+| store_on_device    | bool   | Indicates if the token should be stored on the device instead of the cloud. |
+| request_identifier | string | A request identifier for tracking the request                               |
 
 ---
 
@@ -322,7 +322,8 @@ localhost:6000 publisher.v1.Publisher/ExchangeOAuth2CodeAndStore <payload.json
   "platform": "gmail",
   "authorization_code": "auth_code",
   "code_verifier": "abcdef",
-  "store_on_device": false
+  "store_on_device": false,
+  "request_identifier": ""
 }
 ```
 
@@ -441,6 +442,12 @@ This method sends a one-time passcode (OTP) to the user's phone number for authe
 | phone_number | string | The phone number to which the OTP is sent.                                                 |
 | platform     | string | The platform identifier for which the authorization code is generated. (e.g., "telegram"). |
 
+Optional fields:
+
+| Field              | Type   | Description                                   |
+| ------------------ | ------ | --------------------------------------------- |
+| request_identifier | string | A request identifier for tracking the request |
+
 ---
 
 ##### Response
@@ -482,7 +489,8 @@ localhost:6000 publisher.v1.Publisher/GetPNBACode <payload.json
 ```json
 {
   "phone_number": "+1234567890",
-  "platform": "telegram"
+  "platform": "telegram",
+  "request_identifier": ""
 }
 ```
 
@@ -520,9 +528,10 @@ This method exchanges the one-time passcode (OTP) for an access token and stores
 
 Optional fields:
 
-| Field    | Type   | Description                             |
-| -------- | ------ | --------------------------------------- |
-| password | string | The password for two-step verification. |
+| Field              | Type   | Description                                   |
+| ------------------ | ------ | --------------------------------------------- |
+| password           | string | The password for two-step verification.       |
+| request_identifier | string | A request identifier for tracking the request |
 
 ---
 
@@ -569,7 +578,8 @@ localhost:6000 publisher.v1.Publisher/ExchangePNBACodeAndStore <payload.json
   "long_lived_token": "long_lived_token",
   "password": "",
   "phone_number": "+1234567890",
-  "platform": "telegram"
+  "platform": "telegram",
+  "request_identifier": ""
 }
 ```
 

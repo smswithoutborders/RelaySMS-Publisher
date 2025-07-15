@@ -40,8 +40,21 @@ class PublicationsResponse(BaseModel):
 class PlatformManifest(BaseModel):
     name: str
     shortcode: str
-    protocol: str
+    protocol_type: str
     service_type: str
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None
     support_url_scheme: Optional[bool] = None
+
+
+class OAuthClientMetadata(BaseModel):
+    client_id: str
+    dpop_bound_access_tokens: bool
+    application_type: str
+    redirect_uris: list[str]
+    grant_types: list[str]
+    response_types: list[str]
+    scope: str
+    token_endpoint_auth_method: str
+    client_name: str
+    client_uri: str

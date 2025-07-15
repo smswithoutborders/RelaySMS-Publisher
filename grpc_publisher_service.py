@@ -12,7 +12,12 @@ import publisher_pb2
 import publisher_pb2_grpc
 
 from utils import get_configs
-from content_parser import decode_content, extract_content_v0, extract_content_v1
+from content_parser import (
+    decode_content,
+    extract_content_v0,
+    extract_content_v1,
+    extract_content_v2,
+)
 from grpc_vault_entity_client import (
     list_entity_stored_tokens,
     store_entity_token,
@@ -215,6 +220,8 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     request, "autogenerate_code_verifier"
                 ),
                 "redirect_url": getattr(request, "redirect_url") or None,
+                "request_identifier": getattr(request, "request_identifier") or None,
+                "base_path": adapter["assets_path"],
             }
 
             pipe = AdapterIPCHandler.invoke(
@@ -351,6 +358,8 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 "code": request.authorization_code,
                 "code_verifier": getattr(request, "code_verifier") or None,
                 "redirect_url": getattr(request, "redirect_url") or None,
+                "request_identifier": getattr(request, "request_identifier") or None,
+                "base_path": adapter["assets_path"],
             }
 
             pipe = AdapterIPCHandler.invoke(
@@ -933,11 +942,19 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             if decrypt_error:
                 return decrypt_error
 
-            if "version" in decoded_payload and decoded_payload.get("version") == "v1":
-                content_parts, extraction_error = extract_content_v1(
-                    platform_info["service_type"],
-                    decrypted_result.get("payload_plaintext"),
-                )
+            extraction_error = None
+            content_parts = None
+            if "version" in decoded_payload:
+                if decoded_payload.get("version") == "v1":
+                    content_parts, extraction_error = extract_content_v1(
+                        platform_info["service_type"],
+                        decrypted_result.get("payload_plaintext"),
+                    )
+                elif decoded_payload.get("version") == "v2":
+                    content_parts, extraction_error = extract_content_v2(
+                        platform_info["service_type"],
+                        decrypted_result.get("payload_plaintext"),
+                    )
             else:
                 content_parts, extraction_error = extract_content_v0(
                     platform_info["service_type"],
@@ -959,21 +976,21 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
 
             publication_response = None
 
-            if platform_info["protocol"] == "oauth2":
+            if platform_info["protocol_type"] == "oauth2":
                 publication_response = handle_oauth2_publication(
                     service_type=platform_info["service_type"],
                     platform_name=platform_info["name"],
                     content_parts=content_parts,
                     device_id=device_id_hex,
                 )
-            elif platform_info["protocol"] == "pnba":
+            elif platform_info["protocol_type"] == "pnba":
                 publication_response = handle_pnba_publication(
                     service_type=platform_info["service_type"],
                     platform_name=platform_info["name"],
                     content_parts=content_parts,
                     device_id=device_id_hex,
                 )
-            elif platform_info["protocol"] == "event":
+            elif platform_info["protocol_type"] == "event":
                 publication_response = handle_test_publication(
                     service_type=platform_info["service_type"],
                     platform_name=platform_info["name"],
@@ -1069,6 +1086,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
             params = {
                 "phone_number": request.phone_number,
                 "base_path": adapter["assets_path"],
+                "request_identifier": getattr(request, "request_identifier") or None,
             }
 
             pipe = AdapterIPCHandler.invoke(
@@ -1195,6 +1213,7 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                 "phone_number": request.phone_number,
                 "base_path": adapter["assets_path"],
                 "password": getattr(request, "password") or None,
+                "request_identifier": getattr(request, "request_identifier") or None,
             }
 
             if params.get("password"):
