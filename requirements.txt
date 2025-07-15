@@ -1,4 +1,4 @@
-fastapi[standard]==0.116.0
+fastapi[standard]==0.116.1
 GitPython==3.1.44
 grpc-interceptor==0.15.4
 grpcio==1.73.1
@@ -8,4 +8,4 @@ peewee>=3.17.8
 pymysql==1.1.1
 sentry-sdk[grpcio]==2.32.0
 tqdm==4.67.1
-twilio==9.6.4
+twilio==9.6.5
