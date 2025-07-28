@@ -1,11 +1,11 @@
 fastapi[standard]==0.116.1
-GitPython==3.1.44
+GitPython==3.1.45
 grpc-interceptor==0.15.4
-grpcio==1.73.1
-grpcio-testing==1.73.1
-grpcio-tools==1.73.1
+grpcio==1.74.0
+grpcio-testing==1.74.0
+grpcio-tools==1.74.0
 peewee>=3.17.8
 pymysql==1.1.1
-sentry-sdk[grpcio]==2.33.1
+sentry-sdk[grpcio]==2.33.2
 tqdm==4.67.1
-twilio==9.6.5
+twilio==9.7.0
