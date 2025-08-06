@@ -235,6 +235,7 @@ def create_message_v1(platform, config):
         "telegram": ["from", "to", "body"],
         "reliability": ["from"],
         "bluesky": ["from", "body", "access_token", "refresh_token"],
+        "slack": ["from", "to", "body", "access_token", "refresh_token"],
     }
 
     if platform not in platform_specific_params:
@@ -296,6 +297,7 @@ def create_message_v2(platform, config):
         "telegram": ["from", "to", "body"],
         "reliability": ["from"],
         "bluesky": ["from", "body", "access_token", "refresh_token"],
+        "slack": ["from", "to", "body", "access_token", "refresh_token"],
     }
 
     if platform not in platform_specific_params:
@@ -458,7 +460,8 @@ def test_auth_and_publish_v0(
         # ("telegram", b"T", True),
         # ("reliability", b"r", False),
         # ("reliability", b"r", True),
-        ("bluesky", b"b", True),
+        # ("bluesky", b"b", True),
+        ("slack", b"s", True),
     ],
 )
 def test_auth_and_publish_v1(
@@ -505,7 +508,8 @@ def test_auth_and_publish_v1(
         # ("telegram", b"T", True),
         # ("reliability", b"r", False),
         # ("reliability", b"r", True),
-        ("bluesky", b"b", True),
+        # ("bluesky", b"b", True),
+        ("slack", b"s", True),
     ],
 )
 def test_auth_and_publish_v2(

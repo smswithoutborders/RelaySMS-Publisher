@@ -645,6 +645,13 @@ class PublisherService(publisher_pb2_grpc.PublisherServicer):
                     "access_token": parts[2],
                     "refresh_token": parts[3],
                 },
+                "message": lambda parts: {
+                    "sender_id": parts[0],
+                    "recipient": parts[1],
+                    "message": parts[2],
+                    "access_token": parts[3],
+                    "refresh_token": parts[4],
+                },
             }
 
             if service_type not in service_handlers:
