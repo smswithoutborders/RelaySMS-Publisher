@@ -245,6 +245,8 @@ def extract_content_v1(service_type: str, content: bytes) -> tuple:
                 result["from"],
                 result["to"],
                 result["body"],
+                result.get("access_token"),
+                result.get("refresh_token"),
             ), None
 
         if service_type == "test":
@@ -324,6 +326,8 @@ def extract_content_v2(service_type: str, content: bytes) -> tuple:
                 result["from"],
                 result["to"],
                 result["body"],
+                result.get("access_token"),
+                result.get("refresh_token"),
             ), None
 
         if service_type == "test":
