@@ -6,6 +6,6 @@ grpcio-testing==1.74.0
 grpcio-tools==1.74.0
 peewee>=3.17.8
 pymysql==1.1.1
-sentry-sdk[grpcio]==2.33.2
+sentry-sdk[grpcio]==2.34.1
 tqdm==4.67.1
 twilio==9.7.0
