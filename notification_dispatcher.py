@@ -8,7 +8,12 @@ import concurrent.futures
 import threading
 import sentry_sdk
 from logutils import get_logger
-from sms_outbound import send_with_twilio
+from sms_outbound import (
+    send_with_twilio,
+    send_with_queuedroid,
+    get_phonenumber_region_code,
+    QUEUEDROID_SUPPORTED_REGION_CODES,
+)
 from publications import create_publication_entry
 
 logger = get_logger(__name__)
@@ -24,7 +29,11 @@ def send_sms_notification(phone_number: str, message: str):
     Returns:
         bool: True if sent successfully, False otherwise.
     """
-    send_with_twilio(phone_number, message)
+    region_code = get_phonenumber_region_code(phone_number)
+    if region_code not in QUEUEDROID_SUPPORTED_REGION_CODES:
+        return send_with_twilio(phone_number, message)
+
+    return send_with_queuedroid(phone_number, message)
 
 
 def send_event(
