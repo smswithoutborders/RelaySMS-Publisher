@@ -6,7 +6,7 @@ grpcio-testing==1.74.0
 grpcio-tools==1.74.0
 peewee>=3.17.8
 phonenumbers==9.0.12
-pymysql==1.1.1
+pymysql==1.1.2
 requests==2.32.5
 sentry-sdk[grpcio]==2.35.0
 tqdm==4.67.1
