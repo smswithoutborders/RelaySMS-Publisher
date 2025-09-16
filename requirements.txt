@@ -8,6 +8,6 @@ peewee>=3.17.8
 phonenumbers==9.0.13
 pymysql==1.1.2
 requests==2.32.5
-sentry-sdk[grpcio]==2.35.2
+sentry-sdk[grpcio]==2.37.0
 tqdm==4.67.1
-twilio==9.7.2
+twilio==9.8.0
