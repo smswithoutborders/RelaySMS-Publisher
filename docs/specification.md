@@ -256,16 +256,11 @@
 
 #### Content Type Indicator
 
-The content type indicator is a single byte where each bit represents the presence of a specific content type:
+The content type indicator is a single byte with the following values:
 
-- **Bit 0 (0x01)**: Text content present
-- **Bit 1 (0x02)**: Image content present
-
-Possible combinations:
-
-- **0x01**: Text-only content
-- **0x02**: Image-only content
-- **0x03**: Text and image content
+- **0**: Text-only content
+- **1**: Image-only content
+- **2**: Text and image content
 
 1. **Email format**: Binary-encoded fields with the following structure:
 
