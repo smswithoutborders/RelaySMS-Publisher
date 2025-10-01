@@ -7,11 +7,13 @@
   - [Content Format V1](#content-format-v1)
   - [Content Format V2](#content-format-v2)
   - [Content Format V3](#content-format-v3)
+  - [Content Format V4](#content-format-v4)
 - [Payload Format](#supported-payload-versions)
   - [Payload Format V0](#payload-format-v0)
   - [Payload Format V1](#payload-format-v1)
   - [Payload Format V2](#payload-format-v2)
   - [Payload Format V3](#payload-format-v3)
+  - [Payload Format V4](#payload-format-v4)
 
 ## Content Format
 
@@ -257,6 +259,98 @@ The bitmap is a single byte where each bit represents the presence of a specific
    - **1 byte**: Length of `from` field (if bit 0 is set)
    - **Variable**: Value of `from` field (considered the test ID, if present)
 
+### Content Format V4
+
+> [!NOTE]
+>
+> For detailed instructions on encrypting the content format using the Double Ratchet algorithm, refer to the [smswithoutborders_lib_sig documentation](https://github.com/smswithoutborders/lib_signal_double_ratchet_python?tab=readme-ov-file#double-ratchet-implementations).
+
+> [!NOTE]
+>
+> This format extends V3 by using a 2-byte bitmap instead of 1-byte, with bits 8 and 9 representing content types.
+>
+> **All 2-byte length fields are encoded as unsigned little-endian.**
+
+#### Field Bitmap Definition (2 bytes)
+
+The bitmap is 2 bytes where each bit represents the presence of a specific field:
+
+**First byte (bits 0-7) - Standard fields:**
+
+- **Bit 0 (0x01)**: `from` field
+- **Bit 1 (0x02)**: `to` field
+- **Bit 2 (0x04)**: `cc` field
+- **Bit 3 (0x08)**: `bcc` field
+- **Bit 4 (0x10)**: `subject` field
+- **Bit 5 (0x20)**: `body` field
+- **Bit 6 (0x40)**: `access_token` field
+- **Bit 7 (0x80)**: `refresh_token` field
+
+**Second byte (bits 8-15) - Content type:**
+
+- **Bit 8 (0x0100)**: Text content present
+- **Bit 9 (0x0200)**: Image content present
+
+1. **Email format**: Binary-encoded fields with the following structure:
+
+   - **2 bytes**: Field and content type bitmap
+   - **1 byte**: Length of `from` field (if bit 0 is set and bit 8 is set)
+   - **2 bytes**: Length of `to` field (if bit 1 is set and bit 8 is set)
+   - **2 bytes**: Length of `cc` field (if bit 2 is set and bit 8 is set)
+   - **2 bytes**: Length of `bcc` field (if bit 3 is set and bit 8 is set)
+   - **1 byte**: Length of `subject` field (if bit 4 is set and bit 8 is set)
+   - **2 bytes**: Length of `body` field (if bit 5 is set and bit 8 is set)
+   - **2 bytes**: Length of `access_token` field (if bit 6 is set and bit 8 is set)
+   - **2 bytes**: Length of `refresh_token` field (if bit 7 is set and bit 8 is set)
+   - **2 bytes**: `Image Session ID` (if bit 9 is set)
+   - **1 byte**: `Image Segment info` (if bit 9 is set)
+   - **2 bytes**: Length of `Image` (if bit 9 is set)
+   - **Variable**: Value of `from` field (if present)
+   - **Variable**: Value of `to` field (if present)
+   - **Variable**: Value of `cc` field (if present)
+   - **Variable**: Value of `bcc` field (if present)
+   - **Variable**: Value of `subject` field (if present)
+   - **Variable**: Value of `body` field (if present)
+   - **Variable**: Value of `access_token` field (if present)
+   - **Variable**: Value of `refresh_token` field (if present)
+   - **Variable**: Value of `Image` (if present)
+
+2. **Text format**: Binary-encoded fields with the following structure:
+
+   - **2 bytes**: Field and content type bitmap
+   - **1 byte**: Length of `from` field (if bit 0 is set and bit 8 is set)
+   - **2 bytes**: Length of `body` field (if bit 5 is set and bit 8 is set)
+   - **2 bytes**: Length of `access_token` field (if bit 6 is set and bit 8 is set)
+   - **2 bytes**: Length of `refresh_token` field (if bit 7 is set and bit 8 is set)
+   - **2 bytes**: `Image Session ID` (if bit 9 is set)
+   - **1 byte**: `Image Segment info` (if bit 9 is set)
+   - **2 bytes**: Length of `Image` (if bit 9 is set)
+   - **Variable**: Value of `from` field (if present)
+   - **Variable**: Value of `body` field (if present)
+   - **Variable**: Value of `access_token` field (if present)
+   - **Variable**: Value of `refresh_token` field (if present)
+   - **Variable**: Value of `Image` (if present)
+
+3. **Message format**: Binary-encoded fields with the following structure:
+
+   - **2 bytes**: Field and content type bitmap
+   - **1 byte**: Length of `from` field (if bit 0 is set and bit 8 is set)
+   - **2 bytes**: Length of `to` field (if bit 1 is set and bit 8 is set)
+   - **2 bytes**: Length of `body` field (if bit 5 is set and bit 8 is set)
+   - **2 bytes**: `Image Session ID` (if bit 9 is set)
+   - **1 byte**: `Image Segment info` (if bit 9 is set)
+   - **2 bytes**: Length of `Image` (if bit 9 is set)
+   - **Variable**: Value of `from` field (if present)
+   - **Variable**: Value of `to` field (if present)
+   - **Variable**: Value of `body` field (if present)
+   - **Variable**: Value of `Image` (if present)
+
+4. **Test format**: Binary-encoded fields with the following structure:
+
+   - **2 bytes**: Field and content type bitmap
+   - **1 byte**: Length of `from` field (if bit 0 is set)
+   - **Variable**: Value of `from` field (considered the test ID, if present)
+
 ## Supported Payload Versions
 
 | **Version**              | **Hexadecimal Value** | **Decimal Value** | **Description**                                                                                                                                                          |
@@ -265,6 +359,7 @@ The bitmap is a single byte where each bit represents the presence of a specific
 | [v1](#payload-format-v1) | `0x01`                | `1`               | Introduces version marker, 2-byte ciphertext length, explicit device ID length field, and language code support. Uses Content Format V1 with 1-byte token length fields. |
 | [v2](#payload-format-v2) | `0x02`                | `2`               | Same payload structure as V1 but uses Content Format V2 with 2-byte token length fields for better support of longer access/refresh tokens.                              |
 | [v3](#payload-format-v3) | `0x03`                | `3`               | Same payload structure as V1/V2 but uses Content Format V3 with bitmap-based field presence indication for more efficient encoding.                                      |
+| [v4](#payload-format-v4) | `0x04`                | `4`               | Same payload structure as V1/V2/V3 but uses Content Format V4 with 2-byte bitmap supporting image content.                                                               |
 
 ## Payload Format V0
 
@@ -427,6 +522,54 @@ print(encoded)
 
 ```python
 version_marker = b'\x03'
+platform_shortcode = b'g'
+language_code = b'en'
+device_id = b'...'
+encrypted_content = b'...'
+
+payload = (
+   version_marker +
+   struct.pack("<H", len(encrypted_content)) +
+   bytes([len(device_id)]) +
+   platform_shortcode +
+   encrypted_content +
+   device_id +
+   language_code
+)
+encoded = base64.b64encode(payload).decode("utf-8")
+print(encoded)
+```
+
+## Payload Format V4
+
+> [See available versions](#supported-payload-versions)
+
+### Message Payload
+
+- **Format**:
+  - **1 byte**: Version Marker. [See available versions](#supported-payload-versions).
+  - **2 bytes**: Ciphertext Length.
+  - **1 byte**: Device ID Length.
+  - **1 byte**: Platform shortcode.
+  - **Variable**: Ciphertext. (encrypted [Content Format V4](#content-format-v4)).
+  - **Variable**: Device ID.
+  - **2 bytes**: Language Code (ISO 639-1 format).
+
+> [!NOTE]
+>
+> For detailed instructions on using the Double Ratchet algorithm to create ciphertext, refer to the [smswithoutborders_lib_sig documentation](https://github.com/smswithoutborders/lib_signal_double_ratchet_python?tab=readme-ov-file#double-ratchet-implementations).
+
+#### Visual Representation:
+
+```plaintext
++----------------+-------------------+------------------+--------------------+-----------------+-----------------+---------------+
+| Version Marker | Ciphertext Length | Device ID Length | Platform shortcode | Ciphertext      | Device ID       | Language Code |
+| (1 byte)       | (2 bytes)         | (1 byte)         | (1 byte)           | (Variable size) | (Variable size) | (2 bytes)     |
++----------------+-------------------+------------------+--------------------+-----------------+-----------------+---------------+
+```
+
+```python
+version_marker = b'\x04'
 platform_shortcode = b'g'
 language_code = b'en'
 device_id = b'...'
