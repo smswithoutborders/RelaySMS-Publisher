@@ -250,76 +250,56 @@
 
 > [!NOTE]
 >
-> This format extends V3 by adding support for image content. A content type indicator determines which content types are present.
+> This format extends V3 by adding support for image content.
 >
 > **All 2-byte length fields are encoded as unsigned little-endian.**
 
-#### Content Type Indicator
-
-The content type indicator is a single byte with the following values:
-
-- **0**: Text-only content
-- **1**: Image-only content
-- **2**: Text and image content
-
 1. **Email format**: Binary-encoded fields with the following structure:
 
-   - **1 byte**: Content type indicator
-   - **1 byte**: Length of `from` field (if text content present).
-   - **2 bytes**: Length of `to` field (if text content present).
-   - **2 bytes**: Length of `cc` field (if text content present).
-   - **2 bytes**: Length of `bcc` field (if text content present).
-   - **1 byte**: Length of `subject` field (if text content present).
-   - **2 bytes**: Length of `body` field (if text content present).
-   - **2 bytes**: Length of `access_token` field (if text content present and optional).
-   - **2 bytes**: Length of `refresh_token` field (if text content present and optional).
-   - **2 bytes**: `Image Session ID` (if image content present).
-   - **1 byte**: `Image Segment info` (if image content present).
-   - **2 bytes**: Length of `Image` (if image content present).
-   - **Variable**: Value of `from` field (if text content present).
-   - **Variable**: Value of `to` field (if text content present).
-   - **Variable**: Value of `cc` field (if text content present).
-   - **Variable**: Value of `bcc` field (if text content present).
-   - **Variable**: Value of `subject` field (if text content present).
-   - **Variable**: Value of `body` field (if text content present).
-   - **Variable**: Value of `access_token` field (if text content present and token provided).
-   - **Variable**: Value of `refresh_token` field (if text content present and token provided).
-   - **Variable**: Value of `Image` (if image content present).
+   - **Variable**: Value of `image` field.
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field.
+   - **2 bytes**: Length of `cc` field.
+   - **2 bytes**: Length of `bcc` field.
+   - **1 byte**: Length of `subject` field.
+   - **2 bytes**: Length of `body` field.
+   - **2 bytes**: Length of `access_token` field (optional).
+   - **2 bytes**: Length of `refresh_token` field (optional).
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `to` field.
+   - **Variable**: Value of `cc` field.
+   - **Variable**: Value of `bcc` field.
+   - **Variable**: Value of `subject` field.
+   - **Variable**: Value of `body` field.
+   - **Variable**: Value of `access_token` field (if present).
+   - **Variable**: Value of `refresh_token` field (if present).
 
 2. **Text format**: Binary-encoded fields with the following structure:
 
-   - **1 byte**: Content type indicator
-   - **1 byte**: Length of `from` field (if text content present).
-   - **2 bytes**: Length of `body` field (if text content present).
-   - **2 bytes**: Length of `access_token` field (if text content present and optional).
-   - **2 bytes**: Length of `refresh_token` field (if text content present and optional).
-   - **2 bytes**: `Image Session ID` (if image content present).
-   - **1 byte**: `Image Segment info` (if image content present).
-   - **2 bytes**: Length of `Image` (if image content present).
-   - **Variable**: Value of `from` field (if text content present).
-   - **Variable**: Value of `body` field (if text content present).
-   - **Variable**: Value of `access_token` field (if text content present and token provided).
-   - **Variable**: Value of `refresh_token` field (if text content present and token provided).
-   - **Variable**: Value of `Image` (if image content present).
+   - **Variable**: Value of `image` field.
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `body` field.
+   - **2 bytes**: Length of `access_token` field (optional).
+   - **2 bytes**: Length of `refresh_token` field (optional).
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `body` field.
+   - **Variable**: Value of `access_token` field (if present).
+   - **Variable**: Value of `refresh_token` field (if present).
 
 3. **Message format**: Binary-encoded fields with the following structure:
 
-   - **1 byte**: Content type indicator
-   - **1 byte**: Length of `from` field (if text content present).
-   - **2 bytes**: Length of `to` field (if text content present).
-   - **2 bytes**: Length of `body` field (if text content present).
-   - **2 bytes**: `Image Session ID` (if image content present).
-   - **1 byte**: `Image Segment info` (if image content present).
-   - **2 bytes**: Length of `Image` (if image content present).
-   - **Variable**: Value of `from` field (if text content present).
-   - **Variable**: Value of `to` field (if text content present).
-   - **Variable**: Value of `body` field (if text content present).
-   - **Variable**: Value of `Image` (if image content present).
+   - **Variable**: Value of `image` field.
+   - **1 byte**: Length of `from` field.
+   - **2 bytes**: Length of `to` field.
+   - **2 bytes**: Length of `body` field.
+   - **Variable**: Value of `from` field.
+   - **Variable**: Value of `to` field.
+   - **Variable**: Value of `body` field.
 
 4. **Test format**: Binary-encoded fields with the following structure:
 
-   - **1 byte**: Length of `from` field (if text content present).
-   - **Variable**: Value of `from` field (considered the test ID, if text content present).
+   - **1 byte**: Length of `from` field.
+   - **Variable**: Value of `from` field (considered the test ID).
 
 ## Supported Payload Versions
 
