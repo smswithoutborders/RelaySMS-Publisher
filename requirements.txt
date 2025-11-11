@@ -1,13 +1,13 @@
-fastapi[standard]==0.120.0
+fastapi[standard]==0.121.1
 GitPython==3.1.45
 grpc-interceptor==0.15.4
 grpcio==1.76.0
 grpcio-testing==1.76.0
 grpcio-tools==1.76.0
 peewee>=3.17.8
-phonenumbers==9.0.17
+phonenumbers==9.0.18
 pymysql==1.1.2
 requests==2.32.5
-sentry-sdk[grpcio]==2.42.1
+sentry-sdk[grpcio]==2.43.0
 tqdm==4.67.1
-twilio==9.8.4
+twilio==9.8.5
