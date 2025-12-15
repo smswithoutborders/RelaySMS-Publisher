@@ -1,4 +1,4 @@
-fastapi[standard]==0.124.0
+fastapi[standard]==0.124.4
 GitPython==3.1.45
 grpc-interceptor==0.15.4
 grpcio==1.76.0
