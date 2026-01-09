@@ -1,13 +1,12 @@
-"""Vault gRPC Client"""
+"""Vault gRPC Client V1"""
 
 import functools
+
 import grpc
 
-import vault_pb2
-import vault_pb2_grpc
-
-from utils import get_configs, mask_sensitive_info
 from logutils import get_logger
+from protos.v1 import vault_pb2, vault_pb2_grpc
+from utils import get_configs, mask_sensitive_info
 
 logger = get_logger(__name__)
 
@@ -159,7 +158,9 @@ def get_entity_access_token(platform, account_identifier, **kwargs):
     id_type = (
         "long_lived_token"
         if long_lived_token
-        else "device_id" if device_id else "phone_number"
+        else "device_id"
+        if device_id
+        else "phone_number"
     )
 
     logger.debug("Requesting access tokens using %s='%s'...", id_type, identifier)

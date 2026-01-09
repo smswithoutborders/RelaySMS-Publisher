@@ -1,36 +1,34 @@
 """gRPC Publisher Service"""
 
-import datetime
 import base64
-import traceback
+import datetime
 import json
-import grpc
+import traceback
 
+import grpc
 import sentry_sdk
 
-import publisher_pb2
-import publisher_pb2_grpc
-
-from utils import get_configs
 from content_parser import (
     decode_content,
     extract_content_v0,
     extract_content_v1,
     extract_content_v2,
 )
-from grpc_vault_entity_client import (
+from logutils import get_logger
+from notification_dispatcher import dispatch_notifications
+from platforms.adapter_ipc_handler import AdapterIPCHandler
+from platforms.adapter_manager import AdapterManager
+from protos.v1 import publisher_pb2, publisher_pb2_grpc
+from translations import Localization
+from utils import get_configs
+from vault_clients.v1.grpc_client import (
+    delete_entity_token,
+    get_entity_access_token,
     list_entity_stored_tokens,
     store_entity_token,
-    get_entity_access_token,
-    decrypt_payload,
     update_entity_token,
-    delete_entity_token,
 )
-from notification_dispatcher import dispatch_notifications
-from logutils import get_logger
-from translations import Localization
-from platforms.adapter_manager import AdapterManager
-from platforms.adapter_ipc_handler import AdapterIPCHandler
+from vault_clients.v2.grpc_client import decrypt_payload
 
 MOCK_DELIVERY_SMS = (
     get_configs("MOCK_DELIVERY_SMS", default_value="true") or ""

@@ -5,13 +5,13 @@ from concurrent import futures
 
 import grpc
 from grpc_interceptor import ServerInterceptor
-import publisher_pb2_grpc
 
-from utils import get_configs
-from logutils import get_logger
-from sentry_config import initialize_sentry, SENTRY_ENABLED
 from grpc_publisher_service import PublisherService
+from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
+from protos.v1 import publisher_pb2_grpc
+from sentry_config import SENTRY_ENABLED, initialize_sentry
+from utils import get_configs
 
 logger = get_logger("publisher.grpc.server")
 

@@ -13,24 +13,28 @@ define download-proto
 	$(call log_message,INFO - $@ downloaded successfully!)
 endef
 
-$(PROTO_DIR)/%.proto:
+protos/v%/vault.proto:
 	$(eval PROTO_URL := $(PROTO_URL))
 	$(call download-proto)
 
 vault-proto: 
-	@rm -f "$(PROTO_DIR)/vault.proto"
-	@$(MAKE) PROTO_URL=https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Vault/$(CURRENT_BRANCH)/protos/v1/vault.proto \
-		$(PROTO_DIR)/vault.proto
+	@for v in v1 v2; do \
+		rm -f "protos/$$v/vault.proto"; \
+		$(MAKE) PROTO_URL=https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Vault/$(CURRENT_BRANCH)/protos/$$v/vault.proto \
+		protos/$$v/vault.proto; \
+	done
 
 grpc-compile:
-	$(call log_message,INFO - Compiling gRPC protos ...)
-	@$(python) -m grpc_tools.protoc \
-		-I$(PROTO_DIR) \
-		--python_out=. \
-		--pyi_out=. \
-		--grpc_python_out=. \
-		$(PROTO_DIR)/*.proto
-	$(call log_message,INFO - gRPC Compilation complete!)
+	$(call log_message,[INFO] Compiling gRPC protos ...)
+	@for v in v1 v2; do \
+		$(python) -m grpc_tools.protoc \
+			--proto_path=. \
+			--python_out=. \
+			--pyi_out=. \
+			--grpc_python_out=. \
+			./protos/$$v/*.proto ; \
+	done
+	$(call log_message,[INFO] gRPC Compilation complete!)
 
 grpc-server-start:
 	$(call log_message,INFO - Starting gRPC server ...)
