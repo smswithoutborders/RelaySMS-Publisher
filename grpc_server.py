@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Publisher gRPC server"""
 
 import os
@@ -6,10 +7,12 @@ from concurrent import futures
 import grpc
 from grpc_interceptor import ServerInterceptor
 
-from grpc_publisher_service import PublisherService
+from grpc_services.v1.service import PublisherServiceV1
+from grpc_services.v2.service import PublisherServiceV2
 from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
-from protos.v1 import publisher_pb2_grpc
+from protos.v1 import publisher_pb2_grpc as v1_grpc
+from protos.v2 import publisher_pb2_grpc as v2_grpc
 from sentry_config import SENTRY_ENABLED, initialize_sentry
 from utils import get_configs
 
@@ -35,6 +38,7 @@ class LoggingInterceptor(ServerInterceptor):
         """
         Intercept method calls for each incoming RPC.
         """
+        context.method_name = method_name
         response = method(request_or_iterator, context)
         if context.details():
             self.logger.error(
@@ -73,7 +77,8 @@ def serve():
         futures.ThreadPoolExecutor(max_workers=max_workers),
         interceptors=[LoggingInterceptor()],
     )
-    publisher_pb2_grpc.add_PublisherServicer_to_server(PublisherService(), grpc_server)
+    v1_grpc.add_PublisherServicer_to_server(PublisherServiceV1(), grpc_server)
+    v2_grpc.add_PublisherServicer_to_server(PublisherServiceV2(), grpc_server)
 
     if mode == "production":
         try:

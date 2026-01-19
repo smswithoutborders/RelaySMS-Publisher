@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Vault gRPC Client V1"""
 
 import functools
