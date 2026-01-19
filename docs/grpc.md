@@ -2,58 +2,65 @@
 
 ## Table of Contents
 
-- [Download Protocol Buffer File](#download-protocol-buffer-file)
-  - [Version 1](#version-1)
+- [Download Protocol Buffer Files](#download-protocol-buffer-files)
 - [Prerequisites](#prerequisites)
-- [Usage](#usage)
-  - [OAuth2](#oauth2)
-    - [Get Authorization URL](#get-authorization-url)
-    - [Exchange OAuth2 Code and Store Token](#exchange-oauth2-code-and-store-token-in-vault)
-    - [Revoke And Delete OAuth2 Token](#revoke-and-delete-oauth2-token)
-  - [Phone Number-Based Authentication (PNBA)](#phone-number-based-authentication-pnba)
-    - [Request PNBA Code](#request-pnba-code)
-    - [Exchange PNBA Code and Store Token](#exchange-pnba-code-and-store-token)
-    - [Revoke And Delete PNBA Token](#revoke-and-delete-pnba-token)
-  - [Publish Content](#publish-content)
+- [Version 2 API](#version-2-api)
+  - [v2: Get OAuth2 Authorization URL](#v2-get-oauth2-authorization-url)
+  - [v2: Exchange OAuth2 Code and Store Token](#v2-exchange-oauth2-code-and-store-token)
+  - [v2: Revoke and Delete OAuth2 Token](#v2-revoke-and-delete-oauth2-token)
+  - [v2: Get PNBA Code](#v2-get-pnba-code)
+  - [v2: Exchange PNBA Code and Store Token](#v2-exchange-pnba-code-and-store-token)
+  - [v2: Revoke and Delete PNBA Token](#v2-revoke-and-delete-pnba-token)
+- [Version 1 API](#version-1-api)
+  - [v1: Get OAuth2 Authorization URL](#v1-get-oauth2-authorization-url)
+  - [v1: Exchange OAuth2 Code and Store Token](#v1-exchange-oauth2-code-and-store-token)
+  - [v1: Revoke and Delete OAuth2 Token](#v1-revoke-and-delete-oauth2-token)
+  - [v1: Get PNBA Code](#v1-get-pnba-code)
+  - [v1: Exchange PNBA Code and Store Token](#v1-exchange-pnba-code-and-store-token)
+  - [v1: Revoke and Delete PNBA Token](#v1-revoke-and-delete-pnba-token)
+  - [v1: Publish Content](#v1-publish-content)
 
-## Download Protocol Buffer File
+## Download Protocol Buffer Files
 
-To use the gRPC functions, download the protocol buffer file from the
-[proto](/protos/) directory corresponding to the desired version.
+### Version 2
+
+```bash
+curl -O -L https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/staging/protos/v2/publisher.proto
+```
+
+**Package:** `publisher.v2`  
+**Service:** `Publisher`
 
 ### Version 1
 
 ```bash
-curl -O -L https://raw.githubusercontent.com/smswithoutborders/SMSWithoutBorders-Publisher/feature/grpc-api/protos/v1/publisher.proto
+curl -O -L https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/staging/protos/v1/publisher.proto
 ```
+
+**Package:** `publisher.v1`  
+**Service:** `Publisher`
 
 ## Prerequisites
 
 ### Install Dependencies
 
-If you're using Python, install the necessary dependencies from
-`requirements.txt`. For other languages, see
-[Supported languages](https://grpc.io/docs/languages/).
-
-> [!TIP]
->
-> It's recommended to set up a virtual environment to isolate your project's
-> dependencies.
-
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-```
-
-```bash
 pip install -r requirements.txt
 ```
 
-### Compile gRPC for Python
+For other languages, see [Supported languages](https://grpc.io/docs/languages/).
 
-If you're using Python, compile the gRPC files with `protoc` to generate the
-necessary Python files. For other languages, see
-[Supported languages](https://grpc.io/docs/languages/).
+### Compile gRPC
+
+**For Version 2:**
+
+```bash
+python -m grpc_tools.protoc -I protos/v2 --python_out=. --grpc_python_out=. protos/v2/publisher.proto
+```
+
+**For Version 1:**
 
 ```bash
 python -m grpc_tools.protoc -I protos/v1 --python_out=. --grpc_python_out=. protos/v1/publisher.proto
@@ -61,22 +68,24 @@ python -m grpc_tools.protoc -I protos/v1 --python_out=. --grpc_python_out=. prot
 
 ### Starting the Server
 
-**Quick Start (for Development Only):**
-
 ```bash
-GRPC_PORT=6000 \
-GRPC_HOST=127.0.0.1 \
+GRPC_PORT=<your_port> \
+GRPC_HOST=<your_host> \
 python3 grpc_server.py
 ```
 
-## Usage
+---
 
-### OAuth2
+## Version 2 API
 
-#### Get Authorization URL
+**Package:** `publisher.v2`  
+**Service:** `Publisher`
 
-This method generates an OAuth2 authorization URL that the client can use to
-start the OAuth2 flow.
+---
+
+### v2: Get OAuth2 Authorization URL
+
+Generates an OAuth2 authorization URL for initiating the OAuth2 flow.
 
 > [!NOTE]
 >
@@ -90,77 +99,34 @@ start the OAuth2 flow.
 > | Reliability   | r         | Test         | event    | N/A      |
 > | Bluesky       | b         | Text         | OAuth2   | Required |
 
----
+**Request:** `GetOAuth2AuthorizationUrlRequest`
 
-##### Request
+| Field                      | Type   | Required | Description                                                   |
+| -------------------------- | ------ | -------- | ------------------------------------------------------------- |
+| platform                   | string | Yes      | Platform identifier (e.g., "gmail")                           |
+| state                      | string | Optional | State parameter to prevent CSRF attacks                       |
+| code_verifier              | string | Optional | Cryptographic random string for PKCE                          |
+| autogenerate_code_verifier | bool   | Optional | Auto-generate code verifier if not provided                   |
+| redirect_url               | string | Optional | Redirect URL for OAuth2 application                           |
+| request_identifier         | string | Optional | Request identifier for tracking                               |
 
-> `request` **GetOAuth2AuthorizationUrlRequest**
+**Response:** `GetOAuth2AuthorizationUrlResponse`
 
-> [!IMPORTANT]
->
-> The table lists only the required fields for this step. Other fields will be
-> ignored.
+| Field             | Type   | Description                               |
+| ----------------- | ------ | ----------------------------------------- |
+| authorization_url | string | Generated authorization URL               |
+| state             | string | State parameter from request              |
+| code_verifier     | string | Code verifier used in PKCE flow           |
+| message           | string | Response message                          |
+| scope             | string | Authorization request scope               |
+| client_id         | string | OAuth2 application client ID              |
+| redirect_url      | string | OAuth2 application redirect URL           |
 
-| Field    | Type   | Description                                                                            |
-| -------- | ------ | -------------------------------------------------------------------------------------- |
-| platform | string | The platform identifier for which the authorization URL is generated. (e.g., "gmail"). |
-
-Optional fields:
-
-| Field                      | Type   | Description                                                                  |
-| -------------------------- | ------ | ---------------------------------------------------------------------------- |
-| state                      | string | An opaque value used to maintain state between the request and the callback. |
-| code_verifier              | string | A cryptographic random string used in the PKCE flow.                         |
-| autogenerate_code_verifier | bool   | If true, a code verifier will be auto-generated if not provided.             |
-| redirect_url               | string | The redirect URL for the OAuth2 application.                                 |
-| request_identifier         | string | A request identifier for tracking the request                                |
-
----
-
-##### Response
-
-> `response` **GetOAuth2AuthorizationUrlResponse**
-
-> [!IMPORTANT]
->
-> The table lists only the fields that are populated for this step. Other fields
-> may be empty, omitted, or false.
-
-| Field             | Type   | Description                                                          |
-| ----------------- | ------ | -------------------------------------------------------------------- |
-| authorization_url | string | The generated authorization URL.                                     |
-| state             | string | The state parameter sent in the request, if provided.                |
-| code_verifier     | string | The code verifier used in the PKCE flow, if provided/generated.      |
-| message           | string | A response message from the server.                                  |
-| scope             | string | The scope of the authorization request, as a comma-separated string. |
-| client_id         | string | The client ID for the OAuth2 application.                            |
-| redirect_url      | string | The redirect URL for the OAuth2 application.                         |
-
----
-
-##### Method
-
-> `method` **GetOAuth2AuthorizationUrl**
-
-> [!TIP]
->
-> The examples below use
-> [grpcurl](https://github.com/fullstorydev/grpcurl#grpcurl).
-
-**Sample request**
+**Example:**
 
 ```bash
-grpcurl -plaintext \
-    -d @ \
-    -proto protos/v1/publisher.proto \
-localhost:6000 publisher.v1.Publisher/GetOAuth2AuthorizationUrl <payload.json
-```
-
----
-
-**Sample payload.json**
-
-```json
+grpcurl -plaintext -d @ -proto protos/v2/publisher.proto \
+<your_host>:<your_port> publisher.v2.Publisher/GetOAuth2AuthorizationUrl <<EOF
 {
   "platform": "gmail",
   "state": "",
@@ -168,38 +134,333 @@ localhost:6000 publisher.v1.Publisher/GetOAuth2AuthorizationUrl <payload.json
   "autogenerate_code_verifier": true,
   "request_identifier": ""
 }
+EOF
 ```
 
 ---
 
-**Sample response**
+### v2: Exchange OAuth2 Code and Store Token
 
-```json
+Exchanges an OAuth2 authorization code for access and refresh tokens, and stores them in the vault.
+
+> [!WARNING]
+>
+> - This action requires authentication headers.
+
+**Request:** `ExchangeOAuth2CodeAndStoreRequest`
+
+| Field              | Type   | Required | Description                             |
+| ------------------ | ------ | -------- | --------------------------------------- |
+| platform           | string | Yes      | Platform identifier                     |
+| authorization_code | string | Yes      | OAuth2 authorization code               |
+| code_verifier      | string | Optional | Code verifier for PKCE                  |
+| redirect_url       | string | Optional | Redirect URL for OAuth2 application     |
+| store_on_device    | bool   | Optional | Store token on device instead of cloud  |
+| request_identifier | string | Optional | Request identifier for tracking         |
+
+**Headers:**
+
+| Header        | Type   | Required | Description                                                  |
+| ------------- | ------ | -------- | ------------------------------------------------------------ |
+| authorization | string | Yes      | Bearer token (format: `Bearer <long_lived_token>`)           |
+| x-sig         | string | Yes      | Request signature (base64 url-safe encoded)                  |
+| x-nonce       | string | Yes      | Nonce for request (must be unique, base64 url-safe encoded)  |
+| x-timestamp   | string | Yes      | Request timestamp                                            |
+
+**Response:** `ExchangeOAuth2CodeAndStoreResponse`
+
+| Field   | Type                | Description                         |
+| ------- | ------------------- | ----------------------------------- |
+| success | bool                | Operation success                   |
+| message | string              | Response message                    |
+| tokens  | map<string, string> | Access, refresh, and ID tokens      |
+
+**Example:**
+
+```bash
+grpcurl -plaintext \
+-H 'authorization: Bearer your_long_lived_token' \
+-H 'x-sig: your_signature_base64_urlsafe' \
+-H 'x-nonce: unique_nonce_base64_urlsafe' \
+-H 'x-timestamp: timestamp' \
+-d @ -proto protos/v2/publisher.proto \
+<your_host>:<your_port> publisher.v2.Publisher/ExchangeOAuth2CodeAndStore <<EOF
 {
-  "authorization_url": "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=your_client_id&redirect_uri=https://example.com/callback&scope=openid%20profile&state=xyz&code_challenge=abcdef&code_challenge_method=S256",
-  "state": "xyz",
+  "platform": "gmail",
+  "authorization_code": "auth_code",
   "code_verifier": "abcdef",
-  "client_id": "your_client_id",
-  "scope": "openid,https://www.googleapis.com/auth/gmail.send",
-  "redirect_url": "https://example.com/callback",
-  "message": "Successfully generated authorization url"
+  "store_on_device": false,
+  "request_identifier": ""
 }
+EOF
 ```
 
-#### Exchange OAuth2 Code and Store Token in Vault
+---
 
-This method exchanges an OAuth2 authorization code for access and refresh
-tokens, and fetches the user's profile information, and securely stores the
-tokens in the vault.
+### v2: Revoke and Delete OAuth2 Token
+
+Revokes and deletes an OAuth2 token from the vault.
+
+> [!WARNING]
+>
+> - This action requires authentication headers.
+
+**Request:** `RevokeAndDeleteOAuth2TokenRequest`
+
+| Field              | Type   | Required | Description        |
+| ------------------ | ------ | -------- | ------------------ |
+| platform           | string | Yes      | Platform name      |
+| account_identifier | string | Yes      | Account identifier |
+
+**Headers:**
+
+| Header        | Type   | Required | Description                                                  |
+| ------------- | ------ | -------- | ------------------------------------------------------------ |
+| authorization | string | Yes      | Bearer token (format: `Bearer <long_lived_token>`)           |
+| x-sig         | string | Yes      | Request signature (base64 url-safe encoded)                  |
+| x-nonce       | string | Yes      | Nonce for request (must be unique, base64 url-safe encoded)  |
+| x-timestamp   | string | Yes      | Request timestamp                                            |
+
+**Response:** `RevokeAndDeleteOAuth2TokenResponse`
+
+| Field   | Type   | Description       |
+| ------- | ------ | ----------------- |
+| message | string | Response message  |
+| success | bool   | Operation success |
+
+**Example:**
+
+```bash
+grpcurl -plaintext \
+-H 'authorization: Bearer your_long_lived_token' \
+-H 'x-sig: your_signature_base64_urlsafe' \
+-H 'x-nonce: unique_nonce_base64_urlsafe' \
+-H 'x-timestamp: timestamp' \
+-d @ -proto protos/v2/publisher.proto \
+<your_host>:<your_port> publisher.v2.Publisher/RevokeAndDeleteOAuth2Token <<EOF
+{
+  "platform": "gmail",
+  "account_identifier": "sample@mail.com"
+}
+EOF
+```
 
 ---
+
+### v2: Get PNBA Code
+
+Sends a one-time passcode (OTP) to the user's phone number for Phone Number-Based Authentication.
+
+**Request:** `GetPNBACodeRequest`
+
+| Field              | Type   | Required | Description                         |
+| ------------------ | ------ | -------- | ----------------------------------- |
+| platform           | string | Yes      | Platform identifier (e.g., "telegram") |
+| phone_number       | string | Yes      | Phone number to receive OTP         |
+| request_identifier | string | Optional | Request identifier for tracking     |
+
+**Response:** `GetPNBACodeResponse`
+
+| Field   | Type   | Description       |
+| ------- | ------ | ----------------- |
+| success | bool   | Operation success |
+| message | string | Response message  |
+
+**Example:**
+
+```bash
+grpcurl -plaintext -d @ -proto protos/v2/publisher.proto \
+<your_host>:<your_port> publisher.v2.Publisher/GetPNBACode <<EOF
+{
+  "phone_number": "1234567890",
+  "platform": "telegram",
+  "request_identifier": ""
+}
+EOF
+```
+
+---
+
+### v2: Exchange PNBA Code and Store Token
+
+Exchanges a one-time passcode (OTP) for an access token and stores it in the vault.
+
+> [!WARNING]
+>
+> - This action requires authentication headers.
+
+**Request:** `ExchangePNBACodeAndStoreRequest`
+
+| Field              | Type   | Required | Description                             |
+| ------------------ | ------ | -------- | --------------------------------------- |
+| platform           | string | Yes      | Platform identifier                     |
+| phone_number       | string | Yes      | Phone number that received OTP          |
+| authorization_code | string | Yes      | PNBA authorization code                 |
+| password           | string | Optional | Password for two-step verification      |
+| request_identifier | string | Optional | Request identifier for tracking         |
+
+**Headers:**
+
+| Header        | Type   | Required | Description                                                  |
+| ------------- | ------ | -------- | ------------------------------------------------------------ |
+| authorization | string | Yes      | Bearer token (format: `Bearer <long_lived_token>`)           |
+| x-sig         | string | Yes      | Request signature (base64 url-safe encoded)                  |
+| x-nonce       | string | Yes      | Nonce for request (must be unique, base64 url-safe encoded)  |
+| x-timestamp   | string | Yes      | Request timestamp                                            |
+
+**Response:** `ExchangePNBACodeAndStoreResponse`
+
+| Field                         | Type   | Description                         |
+| ----------------------------- | ------ | ----------------------------------- |
+| success                       | bool   | Operation success                   |
+| message                       | string | Response message                    |
+| two_step_verification_enabled | bool   | Two-step verification status        |
+
+**Example:**
+
+```bash
+grpcurl -plaintext \
+-H 'authorization: Bearer your_long_lived_token' \
+-H 'x-sig: your_signature_base64_urlsafe' \
+-H 'x-nonce: unique_nonce_base64_urlsafe' \
+-H 'x-timestamp: timestamp' \
+-d @ -proto protos/v2/publisher.proto \
+<your_host>:<your_port> publisher.v2.Publisher/ExchangePNBACodeAndStore <<EOF
+{
+  "authorization_code": "auth_code",
+  "password": "",
+  "phone_number": "+1234567890",
+  "platform": "telegram",
+  "request_identifier": ""
+}
+EOF
+```
+
+---
+
+### v2: Revoke and Delete PNBA Token
+
+Revokes and deletes a PNBA token from the vault.
+
+> [!WARNING]
+>
+> - This action requires authentication headers.
+
+**Request:** `RevokeAndDeletePNBATokenRequest`
+
+| Field              | Type   | Required | Description        |
+| ------------------ | ------ | -------- | ------------------ |
+| platform           | string | Yes      | Platform name      |
+| account_identifier | string | Yes      | Account identifier |
+
+**Headers:**
+
+| Header        | Type   | Required | Description                                                  |
+| ------------- | ------ | -------- | ------------------------------------------------------------ |
+| authorization | string | Yes      | Bearer token (format: `Bearer <long_lived_token>`)           |
+| x-sig         | string | Yes      | Request signature (base64 url-safe encoded)                  |
+| x-nonce       | string | Yes      | Nonce for request (must be unique, base64 url-safe encoded)  |
+| x-timestamp   | string | Yes      | Request timestamp                                            |
+
+**Response:** `RevokeAndDeletePNBATokenResponse`
+
+| Field   | Type   | Description       |
+| ------- | ------ | ----------------- |
+| message | string | Response message  |
+| success | bool   | Operation success |
+
+**Example:**
+
+```bash
+grpcurl -plaintext \
+-H 'authorization: Bearer your_long_lived_token' \
+-H 'x-sig: your_signature_base64_urlsafe' \
+-H 'x-nonce: unique_nonce_base64_urlsafe' \
+-H 'x-timestamp: timestamp' \
+-d @ -proto protos/v2/publisher.proto \
+<your_host>:<your_port> publisher.v2.Publisher/RevokeAndDeletePNBAToken <<EOF
+{
+  "platform": "telegram",
+  "account_identifier": "1234567890"
+}
+EOF
+```
+
+---
+
+## Version 1 API
+
+**Package:** `publisher.v1`  
+**Service:** `Publisher`
+
+---
+
+### v1: Get OAuth2 Authorization URL
+
+Generates an OAuth2 authorization URL for initiating the OAuth2 flow.
+
+> [!NOTE]
+>
+> #### Supported Platforms
+>
+> | Platform Name | Shortcode | Service Type | Protocol | PKCE     |
+> | ------------- | --------- | ------------ | -------- | -------- |
+> | Gmail         | g         | Email        | OAuth2   | Optional |
+> | Twitter       | t         | Text         | OAuth2   | Required |
+> | Telegram      | T         | Message      | PNBA     | N/A      |
+> | Reliability   | r         | Test         | event    | N/A      |
+> | Bluesky       | b         | Text         | OAuth2   | Required |
+
+**Request:** `GetOAuth2AuthorizationUrlRequest`
+
+| Field                      | Type   | Required | Description                                                   |
+| -------------------------- | ------ | -------- | ------------------------------------------------------------- |
+| platform                   | string | Yes      | Platform identifier (e.g., "gmail")                           |
+| state                      | string | Optional | State parameter to prevent CSRF attacks                       |
+| code_verifier              | string | Optional | Cryptographic random string for PKCE                          |
+| autogenerate_code_verifier | bool   | Optional | Auto-generate code verifier if not provided                   |
+| redirect_url               | string | Optional | Redirect URL for OAuth2 application                           |
+| request_identifier         | string | Optional | Request identifier for tracking                               |
+
+**Response:** `GetOAuth2AuthorizationUrlResponse`
+
+| Field             | Type   | Description                               |
+| ----------------- | ------ | ----------------------------------------- |
+| authorization_url | string | Generated authorization URL               |
+| state             | string | State parameter from request              |
+| code_verifier     | string | Code verifier used in PKCE flow           |
+| message           | string | Response message                          |
+| scope             | string | Authorization request scope               |
+| client_id         | string | OAuth2 application client ID              |
+| redirect_url      | string | OAuth2 application redirect URL           |
+
+**Example:**
+
+```bash
+grpcurl -plaintext -d @ -proto protos/v1/publisher.proto \
+<your_host>:<your_port> publisher.v1.Publisher/GetOAuth2AuthorizationUrl <<EOF
+{
+  "platform": "gmail",
+  "state": "",
+  "code_verifier": "",
+  "autogenerate_code_verifier": true,
+  "request_identifier": ""
+}
+EOF
+```
+
+---
+
+### v1: Exchange OAuth2 Code and Store Token
+
+Exchanges an OAuth2 authorization code for access and refresh tokens, and stores them in the vault.
 
 > [!NOTE]
 >
 > Ensure you have generated your authorization URL before using this function.
 > Use the following recommended parameters:
 >
-> ##### Gmail:
+> ##### Gmail
 >
 > - **scope:**
 >   - `openid`
@@ -215,10 +476,7 @@ tokens in the vault.
 > https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=your_application_client_id&redirect_uri=your_application_redirect_uri&scope=openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.send+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile&state=random_state_string&prompt=consent&access_type=offline
 > ```
 >
-> Ensure to replace `your_application_client_id` and
-> `your_application_redirect_uri` with your actual client ID and redirect URI.
->
-> ##### Twitter:
+> ##### Twitter
 >
 > - **scope:**
 >   - `tweet.write`
@@ -228,95 +486,37 @@ tokens in the vault.
 > - **code_challenge:** `generated code challenge`
 > - **code_challenge_method:** `S256`
 >
-> A well-generated Gmail authorization URL will look something like this:
+> A well-generated Twitter authorization URL will look something like this:
 >
 > ```bash
 > https://twitter.com/i/oauth2/authorize?response_type=code&client_id=your_application_client_id&redirect_uri=your_application_redirect_uri&scope=tweet.write+users.read+tweet.read+offline.access&state=kr5sa8LtHL1mkjq7oOtWlH06Rb0dQM&code_challenge=code_challenge&code_challenge_method=S256
 > ```
->
-> Ensure to replace `your_application_client_id` and
-> `your_application_redirect_uri` with your actual client ID and redirect URI.
-> Replace `code_challenge` with the generated code challenge, or utilize the
-> `autogenerate_code_verifier` field in the publisher's
-> [Get Authorization URL](#get-authorization-url) function to assist in
-> generating it.
 
-> [!TIP]
->
-> - You can use the publisher's [Get Authorization URL](#get-authorization-url)
->   function to help generate the URL for you, or utilize other tools that can
->   construct the URL.
-> - The URL parameters should be Base64URL encoded. You can easily encode your
->   parameters using [Base64URL Encoder](https://www.base64url.com/).
+**Request:** `ExchangeOAuth2CodeAndStoreRequest`
 
----
+| Field              | Type   | Required | Description                             |
+| ------------------ | ------ | -------- | --------------------------------------- |
+| long_lived_token   | string | Yes      | Long-lived token for authentication     |
+| platform           | string | Yes      | Platform identifier                     |
+| authorization_code | string | Yes      | OAuth2 authorization code               |
+| code_verifier      | string | Optional | Code verifier for PKCE                  |
+| redirect_url       | string | Optional | Redirect URL for OAuth2 application     |
+| store_on_device    | bool   | Optional | Store token on device instead of cloud  |
+| request_identifier | string | Optional | Request identifier for tracking         |
 
-##### Request
+**Response:** `ExchangeOAuth2CodeAndStoreResponse`
 
-> `request` **ExchangeOAuth2CodeAndStoreRequest**
+| Field   | Type                | Description                         |
+| ------- | ------------------- | ----------------------------------- |
+| success | bool                | Operation success                   |
+| message | string              | Response message                    |
+| tokens  | map<string, string> | Access, refresh, and ID tokens      |
 
-> [!IMPORTANT]
->
-> The table lists only the required fields for this step. Other fields will be
-> ignored.
-
-| Field              | Type   | Description                                           |
-| ------------------ | ------ | ----------------------------------------------------- |
-| long_lived_token   | string | Long-lived token for authentication.                  |
-| platform           | string | Platform identifier for which the code is exchanged.  |
-| authorization_code | string | OAuth2 authorization code received from the provider. |
-
-Optional fields:
-
-| Field              | Type   | Description                                                                 |
-| ------------------ | ------ | --------------------------------------------------------------------------- |
-| code_verifier      | string | A cryptographic random string used in the PKCE flow.                        |
-| redirect_url       | string | The redirect URL for the OAuth2 application.                                |
-| store_on_device    | bool   | Indicates if the token should be stored on the device instead of the cloud. |
-| request_identifier | string | A request identifier for tracking the request                               |
-
----
-
-##### Response
-
-> `response` **ExchangeOAuth2CodeAndStoreResponse**
-
-> [!IMPORTANT]
->
-> The table lists only the fields that are populated for this step. Other fields
-> may be empty, omitted, or false.
-
-| Field   | Type                | Description                                                                                             |
-| ------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
-| success | bool                | Indicates if the operation was successful.                                                              |
-| message | string              | A response message from the server.                                                                     |
-| tokens  | map<string, string> | Contains the access, refresh, and ID tokens with keys: `access_token`, `refresh_token`, and `id_token`. |
-
----
-
-##### Method
-
-> `method` **ExchangeOAuth2CodeAndStore**
-
-> [!TIP]
->
-> The examples below use
-> [grpcurl](https://github.com/fullstorydev/grpcurl#grpcurl).
-
-**Sample request**
+**Example:**
 
 ```bash
-grpcurl -plaintext \
-    -d @ \
-    -proto protos/v1/publisher.proto \
-localhost:6000 publisher.v1.Publisher/ExchangeOAuth2CodeAndStore <payload.json
-```
-
----
-
-**Sample payload.json**
-
-```json
+grpcurl -plaintext -d @ -proto protos/v1/publisher.proto \
+<your_host>:<your_port> publisher.v1.Publisher/ExchangeOAuth2CodeAndStore <<EOF
 {
   "long_lived_token": "long_lived_token",
   "platform": "gmail",
@@ -325,254 +525,107 @@ localhost:6000 publisher.v1.Publisher/ExchangeOAuth2CodeAndStore <payload.json
   "store_on_device": false,
   "request_identifier": ""
 }
+EOF
 ```
 
 ---
 
-**Sample response**
+### v1: Revoke and Delete OAuth2 Token
 
-```json
-{
-  "message": "Successfully fetched and stored tokens.",
-  "tokens": {},
-  "success": true
-}
-```
+Revokes and deletes an OAuth2 token from the vault.
 
----
+**Request:** `RevokeAndDeleteOAuth2TokenRequest`
 
-#### Revoke And Delete OAuth2 Token
+| Field              | Type   | Required | Description                      |
+| ------------------ | ------ | -------- | -------------------------------- |
+| long_lived_token   | string | Yes      | Long-lived token for authentication |
+| platform           | string | Yes      | Platform name                    |
+| account_identifier | string | Yes      | Account identifier               |
 
-This method handles revoking and deleting an OAuth2 token from the vault.
+**Response:** `RevokeAndDeleteOAuth2TokenResponse`
 
----
+| Field   | Type   | Description       |
+| ------- | ------ | ----------------- |
+| message | string | Response message  |
+| success | bool   | Operation success |
 
-##### Request
-
-> `request` **RevokeAndDeleteOAuth2TokenRequest**
-
-> [!IMPORTANT]
->
-> The table lists only the required fields for this step. Other fields will be
-> ignored.
-
-| Field              | Type   | Description                                                |
-| ------------------ | ------ | ---------------------------------------------------------- |
-| long_lived_token   | string | Long-lived token for authentication.                       |
-| platform           | string | Platform identifier for which the token should be revoked. |
-| account_identifier | string | The identifier of the account associated with the token.   |
-
----
-
-##### Response
-
-> `response` **RevokeAndDeleteOAuth2TokenResponse**
-
-> [!IMPORTANT]
->
-> The table lists only the fields that are populated for this step. Other fields
-> may be empty, omitted, or false.
-
-| Field   | Type   | Description                                |
-| ------- | ------ | ------------------------------------------ |
-| message | string | A response message from the server.        |
-| success | bool   | Indicates if the operation was successful. |
-
----
-
-##### Method
-
-> `method` **RevokeAndDeleteOAuth2Token**
-
-> [!TIP]
->
-> The examples below use
-> [grpcurl](https://github.com/fullstorydev/grpcurl#grpcurl).
-
-**Sample request**
+**Example:**
 
 ```bash
-grpcurl -plaintext \
-    -d @ \
-    -proto protos/v1/publisher.proto \
-localhost:6000 publisher.v1.Publisher/RevokeAndDeleteOAuth2Token <payload.json
-```
-
----
-
-**Sample payload.json**
-
-```json
+grpcurl -plaintext -d @ -proto protos/v1/publisher.proto \
+<your_host>:<your_port> publisher.v1.Publisher/RevokeAndDeleteOAuth2Token <<EOF
 {
   "long_lived_token": "long_lived_token",
   "platform": "gmail",
   "account_identifier": "sample@mail.com"
 }
+EOF
 ```
 
 ---
 
-**Sample response**
+### v1: Get PNBA Code
 
-```json
-{
-  "message": "Successfully deleted token",
-  "success": true
-}
-```
+Sends a one-time passcode (OTP) to the user's phone number for Phone Number-Based Authentication.
 
-### Phone Number-Based Authentication (PNBA)
+**Request:** `GetPNBACodeRequest`
 
-#### Get PNBA Code
+| Field              | Type   | Required | Description                         |
+| ------------------ | ------ | -------- | ----------------------------------- |
+| platform           | string | Yes      | Platform identifier (e.g., "telegram") |
+| phone_number       | string | Yes      | Phone number to receive OTP         |
+| request_identifier | string | Optional | Request identifier for tracking     |
 
-This method sends a one-time passcode (OTP) to the user's phone number for authentication.
+**Response:** `GetPNBACodeResponse`
 
----
+| Field   | Type   | Description       |
+| ------- | ------ | ----------------- |
+| success | bool   | Operation success |
+| message | string | Response message  |
 
-##### Request
-
-> `request` **GetPNBACodeRequest**
-
-> [!IMPORTANT]
->
-> The table lists only the required fields for this step. Other fields will be ignored.
-
-| Field        | Type   | Description                                                                                |
-| ------------ | ------ | ------------------------------------------------------------------------------------------ |
-| phone_number | string | The phone number to which the OTP is sent.                                                 |
-| platform     | string | The platform identifier for which the authorization code is generated. (e.g., "telegram"). |
-
-Optional fields:
-
-| Field              | Type   | Description                                   |
-| ------------------ | ------ | --------------------------------------------- |
-| request_identifier | string | A request identifier for tracking the request |
-
----
-
-##### Response
-
-> `response` **GetPNBACodeResponse**
-
-> [!IMPORTANT]
->
-> The table lists only the fields that are populated for this step. Other fields may be empty, omitted, or false.
-
-| Field   | Type   | Description                                |
-| ------- | ------ | ------------------------------------------ |
-| message | string | A response message from the server.        |
-| success | bool   | Indicates if the operation was successful. |
-
----
-
-##### Method
-
-> `method` **GetPNBACode**
-
-> [!TIP]
->
-> The examples below use [grpcurl](https://github.com/fullstorydev/grpcurl#grpcurl).
-
-**Sample request**
+**Example:**
 
 ```bash
-grpcurl -plaintext \
-    -d @ \
-    -proto protos/v1/publisher.proto \
-localhost:6000 publisher.v1.Publisher/GetPNBACode <payload.json
-```
-
----
-
-**Sample payload.json**
-
-```json
+grpcurl -plaintext -d @ -proto protos/v1/publisher.proto \
+<your_host>:<your_port> publisher.v1.Publisher/GetPNBACode <<EOF
 {
   "phone_number": "+1234567890",
   "platform": "telegram",
   "request_identifier": ""
 }
+EOF
 ```
 
 ---
 
-**Sample response**
+### v1: Exchange PNBA Code and Store Token
 
-```json
-{
-  "message": "Successfully sent authorization to your telegram app.",
-  "success": true
-}
-```
+Exchanges a one-time passcode (OTP) for an access token and stores it in the vault.
 
-#### Exchange PNBA Code and Store Token
+**Request:** `ExchangePNBACodeAndStoreRequest`
 
-This method exchanges the one-time passcode (OTP) for an access token and stores it securely in the vault.
+| Field              | Type   | Required | Description                             |
+| ------------------ | ------ | -------- | --------------------------------------- |
+| long_lived_token   | string | Yes      | Long-lived token for authentication     |
+| platform           | string | Yes      | Platform identifier                     |
+| phone_number       | string | Yes      | Phone number that received OTP          |
+| authorization_code | string | Yes      | PNBA authorization code                 |
+| password           | string | Optional | Password for two-step verification      |
+| request_identifier | string | Optional | Request identifier for tracking         |
 
----
+**Response:** `ExchangePNBACodeAndStoreResponse`
 
-##### Request
+| Field                         | Type   | Description                         |
+| ----------------------------- | ------ | ----------------------------------- |
+| success                       | bool   | Operation success                   |
+| message                       | string | Response message                    |
+| two_step_verification_enabled | bool   | Two-step verification status        |
 
-> `request` **ExchangePNBACodeAndStoreRequest**
-
-> [!IMPORTANT]
->
-> The table lists only the required fields for this step. Other fields will be ignored.
-
-| Field              | Type   | Description                                         |
-| ------------------ | ------ | --------------------------------------------------- |
-| long_lived_token   | string | Long-lived token for authentication.                |
-| platform           | string | Platform identifier for which the OTP is exchanged. |
-| phone_number       | string | The phone number to which the OTP was sent.         |
-| authorization_code | string | PNBA authorization code received from the provider. |
-
-Optional fields:
-
-| Field              | Type   | Description                                   |
-| ------------------ | ------ | --------------------------------------------- |
-| password           | string | The password for two-step verification.       |
-| request_identifier | string | A request identifier for tracking the request |
-
----
-
-##### Response
-
-> `response` **ExchangePNBACodeAndStoreResponse**
-
-> [!IMPORTANT]
->
-> The table lists only the fields that are populated for this step. Other fields may be empty, omitted, or false.
-
-| Field                         | Type   | Description                                    |
-| ----------------------------- | ------ | ---------------------------------------------- |
-| message                       | string | A response message from the server.            |
-| two_step_verification_enabled | bool   | Indicates if two step verification is enabled. |
-| success                       | bool   | Indicates if the operation was successful.     |
-
----
-
-##### Method
-
-> `method` **ExchangePNBACodeAndStore**
-
-> [!TIP]
->
-> The examples below use [grpcurl](https://github.com/fullstorydev/grpcurl#grpcurl).
-
-**Sample request**
+**Example:**
 
 ```bash
-grpcurl -plaintext \
-    -d @ \
-    -proto protos/v1/publisher.proto \
-localhost:6000 publisher.v1.Publisher/ExchangePNBACodeAndStore <payload.json
-```
-
----
-
-**Sample payload.json**
-
-```json
+grpcurl -plaintext -d @ -proto protos/v1/publisher.proto \
+<your_host>:<your_port> publisher.v1.Publisher/ExchangePNBACodeAndStore <<EOF
 {
   "authorization_code": "auth_code",
   "long_lived_token": "long_lived_token",
@@ -581,180 +634,80 @@ localhost:6000 publisher.v1.Publisher/ExchangePNBACodeAndStore <payload.json
   "platform": "telegram",
   "request_identifier": ""
 }
+EOF
 ```
 
 ---
 
-**Sample response**
+### v1: Revoke and Delete PNBA Token
 
-```json
-{
-  "success": true,
-  "two_step_verification_enabled": false,
-  "message": "Successfully fetched and stored token"
-}
-```
+Revokes and deletes a PNBA token from the vault.
 
----
+**Request:** `RevokeAndDeletePNBATokenRequest`
 
-#### Revoke And Delete PNBA Token
+| Field              | Type   | Required | Description                      |
+| ------------------ | ------ | -------- | -------------------------------- |
+| long_lived_token   | string | Yes      | Long-lived token for authentication |
+| platform           | string | Yes      | Platform name                    |
+| account_identifier | string | Yes      | Account identifier               |
 
-This method handles revoking and deleting an PNBA token from the vault.
+**Response:** `RevokeAndDeletePNBATokenResponse`
 
----
+| Field   | Type   | Description       |
+| ------- | ------ | ----------------- |
+| message | string | Response message  |
+| success | bool   | Operation success |
 
-##### Request
-
-> `request` **RevokeAndDeletePNBATokenRequest**
-
-> [!IMPORTANT]
->
-> The table lists only the required fields for this step. Other fields will be
-> ignored.
-
-| Field              | Type   | Description                                                |
-| ------------------ | ------ | ---------------------------------------------------------- |
-| long_lived_token   | string | Long-lived token for authentication.                       |
-| platform           | string | Platform identifier for which the token should be revoked. |
-| account_identifier | string | The identifier of the account associated with the token.   |
-
----
-
-##### Response
-
-> `response` **RevokeAndDeletePNBATokenResponse**
-
-> [!IMPORTANT]
->
-> The table lists only the fields that are populated for this step. Other fields
-> may be empty, omitted, or false.
-
-| Field   | Type   | Description                                |
-| ------- | ------ | ------------------------------------------ |
-| message | string | A response message from the server.        |
-| success | bool   | Indicates if the operation was successful. |
-
----
-
-##### Method
-
-> `method` **RevokeAndDeletePNBAToken**
-
-> [!TIP]
->
-> The examples below use
-> [grpcurl](https://github.com/fullstorydev/grpcurl#grpcurl).
-
-**Sample request**
+**Example:**
 
 ```bash
-grpcurl -plaintext \
-    -d @ \
-    -proto protos/v1/publisher.proto \
-localhost:6000 publisher.v1.Publisher/RevokeAndDeletePNBAToken <payload.json
-```
-
----
-
-**Sample payload.json**
-
-```json
+grpcurl -plaintext -d @ -proto protos/v1/publisher.proto \
+<your_host>:<your_port> publisher.v1.Publisher/RevokeAndDeletePNBAToken <<EOF
 {
   "long_lived_token": "long_lived_token",
   "platform": "telegram",
   "account_identifier": "+1234567890"
 }
+EOF
 ```
 
 ---
 
-**Sample response**
+### v1: Publish Content
 
-```json
-{
-  "message": "Successfully deleted token",
-  "success": true
-}
-```
+Publishes a RelaySMS payload.
 
-### Publish Content
+**Request:** `PublishContentRequest`
 
-This method handles publishing a relaysms payload.
+| Field    | Type                | Required | Description              |
+| -------- | ------------------- | -------- | ------------------------ |
+| content  | string              | Yes      | Content payload          |
+| metadata | map<string, string> | Yes      | Metadata about content   |
 
----
+**Response:** `PublishContentResponse`
 
-##### Request
+| Field              | Type   | Description                     |
+| ------------------ | ------ | ------------------------------- |
+| success            | bool   | Operation success               |
+| message            | string | Response message                |
+| publisher_response | string | Encrypted response from publisher |
 
-> `request` **PublishContentRequest**
-
-> [!IMPORTANT]
->
-> The table lists only the required fields for this step. Other fields will be
-> ignored.
-
-| Field    | Type                | Description                          |
-| -------- | ------------------- | ------------------------------------ |
-| content  | string              | The content payload to be published. |
-| metadata | map<string, string> | Metadata about the content.          |
-
----
-
-##### Response
-
-> `response` **PublishContentResponse**
-
-> [!IMPORTANT]
->
-> The table lists only the fields that are populated for this step. Other fields
-> may be empty, omitted, or false.
-
-| Field              | Type   | Description                                        |
-| ------------------ | ------ | -------------------------------------------------- |
-| message            | string | A response message from the server.                |
-| publisher_response | string | The encrypted response from the publisher, if any. |
-| success            | bool   | Indicates if the operation was successful.         |
-
----
-
-##### Method
-
-> `method` **PublishContent**
-
-> [!TIP]
->
-> The examples below use
-> [grpcurl](https://github.com/fullstorydev/grpcurl#grpcurl).
-
-**Sample request**
+**Example:**
 
 ```bash
-grpcurl -plaintext \
-    -d @ \
-    -proto protos/v1/publisher.proto \
-localhost:6000 publisher.v1.Publisher/PublishContent <payload.json
-```
-
----
-
-**Sample payload.json**
-
-```json
+grpcurl -plaintext -d @ -proto protos/v1/publisher.proto \
+<your_host>:<your_port> publisher.v1.Publisher/PublishContent <<EOF
 {
   "content": "encoded_relay_sms_payload",
   "metadata": {
     "From": "+1234567890"
   }
 }
+EOF
 ```
 
 ---
 
-**Sample response**
-
-```json
-{
-  "message": "Successfully published Gmail message",
-  "publisher_response": "encrypted_response_payload",
-  "success": true
-}
-```
+> [!NOTE]
+>
+>All gRPC responses return standard status codes. `0 OK` indicates success. See [gRPC Status Codes](https://grpc.github.io/grpc/core/md_doc_statuscodes.html) for error codes.

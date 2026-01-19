@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
 """Vault gRPC Client V2"""
 
 import functools
@@ -6,7 +7,7 @@ import grpc
 
 from logutils import get_logger
 from protos.v2 import vault_pb2, vault_pb2_grpc
-from utils import get_configs, mask_sensitive_info
+from utils import get_configs
 
 logger = get_logger(__name__)
 
@@ -68,19 +69,120 @@ def grpc_call(internal=True):
 
 
 @grpc_call()
-def decrypt_payload(payload_ciphertext, **kwargs):
-    """
-    Decrypts the payload.
-
-    Args:
-        payload_ciphertext (bytes): The ciphertext of the payload to be decrypted.
-
-    Returns:
-        tuple: A tuple containing:
-            - server response (object): The vault server response.
-            - error (Exception): The error encountered if the request fails, otherwise None.
-    """
+def store_entity_token(**kwargs):
+    """Store an entity token in the vault."""
     stub = kwargs["stub"]
+    metadata = kwargs["metadata"]
+    token = kwargs["token"]
+    platform = kwargs["platform"]
+    account_identifier = kwargs["account_identifier"]
+
+    request = vault_pb2.StoreEntityTokenRequest(
+        token=token,
+        platform=platform,
+        account_identifier=account_identifier,
+    )
+
+    logger.debug("Initiating store token for platform '%s'.", platform)
+
+    response = stub.StoreEntityToken(request, metadata=metadata)
+
+    logger.info("Successfully stored token for platform '%s'", platform)
+    return response, None
+
+
+@grpc_call(False)
+def list_entity_stored_tokens(**kwargs):
+    """Lists an entity's stored tokens from the vault."""
+    stub = kwargs["stub"]
+    metadata = kwargs["metadata"]
+    request = vault_pb2.ListEntityStoredTokensRequest()
+
+    logger.debug("Initiating request to list stored tokens.")
+
+    response = stub.ListEntityStoredTokens(request, metadata=metadata)
+    tokens = response.stored_tokens
+
+    logger.info("Successfully retrieved stored tokens.")
+    return tokens, None
+
+
+@grpc_call()
+def get_entity_access_token(**kwargs):
+    """Retrieves an entity access token."""
+    stub = kwargs["stub"]
+    metadata = kwargs["metadata"]
+    platform = kwargs["platform"]
+    account_identifier = kwargs["account_identifier"]
+    device_id = kwargs.get("device_id")
+    phone_number = kwargs.get("phone_number")
+
+    request = vault_pb2.GetEntityAccessTokenRequest(
+        device_id=device_id,
+        platform=platform,
+        account_identifier=account_identifier,
+        phone_number=phone_number,
+    )
+
+    logger.debug("Initiating access token retrieval for platform '%s'.", platform)
+
+    response = stub.GetEntityAccessToken(request, metadata=metadata)
+
+    logger.info("Successfully retrieved access token for platform '%s'.", platform)
+    return response, None
+
+
+@grpc_call()
+def delete_entity_token(**kwargs):
+    """Delete an entity's token in the vault."""
+    stub = kwargs["stub"]
+    metadata = kwargs["metadata"]
+    platform = kwargs["platform"]
+    account_identifier = kwargs["account_identifier"]
+
+    request = vault_pb2.DeleteEntityTokenRequest(
+        platform=platform, account_identifier=account_identifier
+    )
+
+    logger.debug("Initiating token deletion for platform '%s'.", platform)
+
+    response = stub.DeleteEntityToken(request, metadata=metadata)
+
+    logger.info("Successfully deleted token for platform '%s'.", platform)
+    return response, None
+
+
+@grpc_call()
+def update_entity_token(**kwargs):
+    """Update an entity's token in the vault."""
+    stub = kwargs["stub"]
+    token = kwargs["token"]
+    platform = kwargs["platform"]
+    account_identifier = kwargs["account_identifier"]
+    device_id = kwargs.get("device_id")
+    phone_number = kwargs.get("phone_number")
+
+    request = vault_pb2.UpdateEntityTokenRequest(
+        device_id=device_id,
+        token=token,
+        platform=platform,
+        account_identifier=account_identifier,
+        phone_number=phone_number,
+    )
+
+    logger.debug("Initiating token update for platform '%s'.", platform)
+
+    response = stub.UpdateEntityToken(request)
+
+    logger.info("Successfully updated token for platform '%s'.", platform)
+    return response, None
+
+
+@grpc_call()
+def decrypt_payload(**kwargs):
+    """Decrypts the payload."""
+    stub = kwargs["stub"]
+    payload_ciphertext = kwargs["payload_ciphertext"]
     device_id = kwargs.get("device_id")
     phone_number = kwargs.get("phone_number")
 
@@ -90,18 +192,27 @@ def decrypt_payload(payload_ciphertext, **kwargs):
         phone_number=phone_number,
     )
 
-    identifier = mask_sensitive_info(device_id or phone_number)
-
-    logger.debug(
-        "Initiating decryption request using %s='%s'.",
-        "device_id" if device_id else "phone_number",
-        identifier,
-    )
+    logger.debug("Initiating decryption request.")
 
     response = stub.DecryptPayload(request)
 
-    logger.info(
-        "Decryption successful using %s.",
-        "device_id" if device_id else "phone_number",
+    logger.info("Decryption successful.")
+    return response, None
+
+
+@grpc_call()
+def encrypt_payload(**kwargs):
+    """Encrypts the payload."""
+    stub = kwargs["stub"]
+    payload_plaintext = kwargs["payload_plaintext"]
+    device_id = kwargs.get("device_id")
+    request = vault_pb2.EncryptPayloadRequest(
+        device_id=device_id, payload_plaintext=payload_plaintext
     )
+
+    logger.debug("Initiating encryption request.")
+
+    response = stub.EncryptPayload(request)
+
+    logger.info("Successfully encrypted payload.")
     return response, None
