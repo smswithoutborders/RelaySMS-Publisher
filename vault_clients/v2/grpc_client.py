@@ -111,9 +111,9 @@ def list_entity_stored_tokens(**kwargs):
 def get_entity_access_token(**kwargs):
     """Retrieves an entity access token."""
     stub = kwargs["stub"]
-    metadata = kwargs["metadata"]
     platform = kwargs["platform"]
     account_identifier = kwargs["account_identifier"]
+    metadata = kwargs.get("metadata")
     device_id = kwargs.get("device_id")
     phone_number = kwargs.get("phone_number")
 

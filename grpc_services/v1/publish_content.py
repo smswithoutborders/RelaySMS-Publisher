@@ -20,8 +20,8 @@ from platforms.adapter_manager import AdapterManager
 from protos.v1 import publisher_pb2
 from translations import Localization
 from utils import get_configs
-from vault_clients.v1.grpc_client import get_entity_access_token, update_entity_token
-from vault_clients.v2.grpc_client import decrypt_payload
+from vault_clients.v1.grpc_client import update_entity_token
+from vault_clients.v2.grpc_client import decrypt_payload, get_entity_access_token
 
 MOCK_DELIVERY_SMS = (
     get_configs("MOCK_DELIVERY_SMS", default_value="true") or ""
