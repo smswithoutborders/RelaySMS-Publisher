@@ -1,61 +1,199 @@
 # RelaySMS Publisher
 
-RelaySMS Publisher allows users to publish content to online platforms (like Gmail, Twitter, Telegram) using SMS when internet connectivity is unavailable.
+Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS when internet connectivity is unavailable.
+
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Platform Adapters](#platform-adapters)
+- [Documentation](#documentation)
+- [Testing](#testing)
+- [License](#license)
 
 ## Requirements
 
-- **Python**: Version >= 3.8.10
-- **Dependencies**: Install system packages:
-  ```bash
-  sudo apt install build-essential python3-dev
-  ```
+- **Python:** ≥ 3.8.10
+- **Database:** MySQL (≥ 8.0.28), MariaDB, or SQLite
+- **External Services:** [RelaySMS Vault](https://github.com/smswithoutborders/RelaySMS-Vault) (required)
 
-## Quick Start
+**Ubuntu Dependencies:**
 
-1. **Setup virtual environment**:
+```bash
+sudo apt install python3-dev build-essential libmysqlclient-dev make
+```
 
-   ```bash
-   python3 -m venv venv
-   . venv/bin/activate
-   pip install -r requirements.txt
-   ```
+## Installation
 
-2. **Download and compile protocol buffers**:
+### Production
 
-   ```bash
-   make grpc-compile
-   ```
+Quick install:
 
-3. **Start the server**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | sudo bash
+```
 
-   ```bash
-   export GRPC_HOST=localhost
-   export GRPC_PORT=8000
-   # Additional environment variables as needed
+Manage services:
 
-   # Start the server
-   python3 grpc_server.py
-   ```
+```bash
+cd /opt/relaysms/relaysms-publisher
+./manage.sh {start|stop|restart|status|logs|update}
+```
 
-## Supported Platforms
+See [INSTALL.md](INSTALL.md) for manual installation and detailed configuration.
 
-The list of supported platforms is available in [platforms.json](resources/platforms.json) and can also be retrieved from the REST API at [https://publisher.smswithoutborders.com/v1/platforms](https://publisher.smswithoutborders.com/v1/platforms).
+### Development
 
-## Testing
+```bash
+# Setup environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-For information on setting up and running tests, see the [Test Documentation](tests/README.md).
+# Configure
+cp template.env .env
+# Edit .env as needed
+
+# Build
+make build-setup
+
+# Start services
+python3 grpc_server.py        # Terminal 1
+fastapi dev app.py             # Terminal 2
+```
+
+### Docker
+
+```bash
+# Build
+docker build -t relaysms-publisher:latest .
+
+# Configure
+cp template.env .env
+# Edit .env as needed
+
+# Run
+docker run -d \
+  --name relaysms-publisher \
+  --env-file .env \
+  -p 9000:9000 \
+  -p 6000:6000 \
+  -v $(pwd)/data:/publisher/data \
+  relaysms-publisher:latest
+```
+
+> [!TIP]
+> Update `GRPC_HOST=0.0.0.0` and `HOST=0.0.0.0` in `.env` for external container access.
+
+## Configuration
+
+Configure via environment variables in `.env` file:
+
+### Server
+
+```bash
+MODE=production                 # development or production
+HOST=127.0.0.1                  # REST API host
+PORT=9000                       # REST API port
+GRPC_HOST=127.0.0.1            # gRPC server host
+GRPC_PORT=6000                  # gRPC server port
+GRPC_SSL_PORT=6001             # gRPC SSL port
+SSL_CERTIFICATE=                # SSL certificate path (optional)
+SSL_KEY=                        # SSL key path (optional)
+```
+
+### Vault Connection
+
+```bash
+VAULT_GRPC_HOST=localhost
+VAULT_GRPC_PORT=8000
+VAULT_GRPC_SSL_PORT=8001
+VAULT_GRPC_INTERNAL_PORT=8443
+VAULT_GRPC_INTERNAL_SSL_PORT=8444
+```
+
+> [!IMPORTANT]
+> RelaySMS Vault must be installed and running. See [RelaySMS Vault Installation](https://github.com/smswithoutborders/RelaySMS-Vault/blob/main/INSTALL.md)
+
+### Database
+
+**SQLite (default):**
+
+```bash
+SQLITE_DATABASE_PATH=data/publisher.sqlite
+```
+
+**MySQL:**
+
+```bash
+MYSQL_HOST=127.0.0.1
+MYSQL_USER=your_user
+MYSQL_PASSWORD=your_password
+MYSQL_DATABASE=relaysms_publisher
+```
+
+### Adapters
+
+```bash
+PLATFORMS_ADAPTERS_DIR=platforms/adapters
+PLATFORMS_ADAPTERS_VENV_DIR=platforms/adapters_venv
+PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets
+```
+
+### Logging & Monitoring
+
+```bash
+LOG_LEVEL=info                  # debug, info, warning, error
+```
+
+**Error Tracking (Optional):**
+
+Publisher supports Sentry-compatible error tracking:
+
+```bash
+SENTRY_DSN=https://your-dsn@sentry.io/project-id
+SENTRY_TRACES_SAMPLE_RATE=1.0
+SENTRY_PROFILES_SAMPLE_RATE=1.0
+```
+
+> [!NOTE]
+> **Using GlitchTip:** GlitchTip is a Sentry-compatible open-source error tracker. The `SENTRY_DSN` variable works with both Sentry and GlitchTip.
+>
+> See [GlitchTip Installation Guide](https://glitchtip.com/documentation/install) to set up your own instance.
 
 ## Platform Adapters
 
-Platform adapters can be used to extend RelaySMS Publisher's functionality. For more information, see the [Platforms Documentation](platforms/README.md).
+Supported platforms are listed in [platforms.json](resources/platforms.json) or via REST API: [https://publisher.smswithoutborders.com/v1/platforms](https://publisher.smswithoutborders.com/v1/platforms)
+
+> [!TIP]
+> Each adapter has its own configuration requirements. See:
+>
+> - [Platform Adapters Documentation](platforms/README.md)
+> - Individual adapter READMEs: `platforms/adapters/*/README.md`
+
+**Available adapters:**
+
+- [Gmail](https://github.com/smswithoutborders/gmail-oauth2-adapter)
+- [X (formerly Twitter)](https://github.com/smswithoutborders/twitter-oauth2-adapter)
+- [Telegram](https://github.com/smswithoutborders/telegram-pnba-adapter)
+- [Slack](https://github.com/smswithoutborders/slack-oauth2-adapter)
+- [Bluesky](https://github.com/smswithoutborders/bluesky-oauth2-adapter)
+- [Mastodon](https://github.com/smswithoutborders/mastodon-oauth2-adapter)
 
 ## Documentation
 
-- [gRPC API Documentation](docs/grpc.md)
-- [Content and Payload Specifications](docs/specification.md)
-- [REST API Documentation](https://publisher.smswithoutborders.com/docs)
-- [Reliability Testing](docs/reliability_test.md)
+- [Installation Guide](INSTALL.md) - Detailed setup instructions
+- [gRPC API](docs/grpc.md) - gRPC interface documentation
+- [Content Specifications](docs/specification.md) - Payload format specs
+- [REST API](https://publisher.smswithoutborders.com/docs) - REST API reference
+- [Platform Adapters](platforms/README.md) - Extending functionality
+- [Reliability Testing](docs/reliability_test.md) - Testing guidelines
+
+## Testing
+
+See [Test Documentation](tests/README.md) for running tests.
 
 ## License
 
-This project is licensed under the GNU General Public License (GPL) v3. See the [LICENSE](LICENSE.md) file for details.
+Licensed under the GNU General Public License (GPL) v3. See [LICENSE](LICENSE.md) for details.

@@ -5,6 +5,8 @@ configs/config.ini
 platforms/list.txt
 platforms/available/*
 *.sh
+!install.sh
+!manage.sh
 credentials.json
 logs/
 logos/*.svg
