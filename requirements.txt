@@ -1,5 +1,5 @@
 fastapi[standard]==0.136.1
-GitPython==3.1.49
+GitPython==3.1.50
 grpc-interceptor==0.15.4
 grpcio==1.80.0
 grpcio-testing==1.80.0
