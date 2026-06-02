@@ -1,0 +1,4 @@
+[submodule "lib_relaysms_payload_specs"]
+	path = lib_relaysms_payload_specs
+	url = git@github.com:smswithoutborders/rusty_relaysms_payload_specs.git
+	branch = dev

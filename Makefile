@@ -41,4 +41,28 @@ grpc-server-start:
 	@$(python) -u grpc_server.py
 	$(call log_message,INFO - gRPC server started successfully.)
 
+payload-specs-fetch:
+	$(call log_message,INFO - Fetching payload specifications library dependencies ...)
+	@ git submodule update --init --recursive --remote --merge
+	$(call log_message,INFO - Payload specifications library fetched successfully!)
+
+payload-specs-build:
+	$(call log_message,INFO - Building payload specifications library ...)
+	@cd lib_relaysms_payload_specs && \
+		cargo clean && \
+		rm -rf generated/* && \
+		rm -rf target/ && \
+		cargo build --release
+	$(call log_message,INFO - Payload specifications library built successfully!)
+
+payload-specs-compile: payload-specs-fetch payload-specs-build
+	$(call log_message,INFO - Compiling payload specifications ...)
+	@cd lib_relaysms_payload_specs && \
+		cargo run --bin uniffi_bindgen -- generate \
+	  --library target/release/librelaysms_spec_payload.so \
+	  --language python \
+	  --out-dir generated/ && \
+		cp target/release/librelaysms_spec_payload.so generated/
+	$(call log_message,INFO - Payload specifications compiled successfully!)
+
 build-setup: vault-proto grpc-compile
