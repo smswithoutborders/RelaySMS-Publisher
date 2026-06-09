@@ -160,14 +160,14 @@ create_app_directories() {
 
 run_migrations() {
   log "Running database migrations"
-  cd "$INSTALL_DIR"
-  export PATH="$INSTALL_DIR/venv/bin:$PATH"
-  # Load only the vars alembic needs without sourcing the file
-  set -a
-  # shellcheck disable=SC1091
-  . "$INSTALL_DIR/.env"
-  set +a
-  make migrate-up || error "Database migrations failed"
+  sudo -u "$SERVICE_USER" bash -c "
+    set -a
+    # shellcheck disable=SC1091
+    . '$INSTALL_DIR/.env'
+    set +a
+    cd '$INSTALL_DIR'
+    PATH='$INSTALL_DIR/venv/bin:$PATH' make migrate-up
+  " || error "Database migrations failed"
 }
 
 install_services() {
