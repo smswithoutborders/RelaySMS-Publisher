@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package publisher.v3;
+
+// Represents a server ephemeral public key
+message ServerPublicKey {
+  // The key ID
+  uint32 key_id = 1;
+  // The public key (32 bytes)
+  bytes public_key = 2;
+}
+
+// Request message for getting the OAuth2 authorization URL
+//
+// Headers:
+// X-Public-Key = Client ephemeral public key (eC_pk, 32 bytes, base64url encoded)
+message GetOAuth2AuthorizationUrlRequest {
+  // The platform for which the authorization URL is requested
+  string platform = 1;
+  // Optional state parameter to prevent CSRF attacks
+  string state = 2;
+  // Optional PKCE code verifier. Ignored if autogenerate_code_verifier is true.
+  string code_verifier = 3;
+  // If true, a PKCE code verifier is auto-generated and code_verifier is ignored
+  bool autogenerate_code_verifier = 4;
+  // Optional redirect URL for the OAuth2 application
+  string redirect_url = 5;
+  // Optional request identifier for tracking
+  string request_identifier = 6;
+}
+
+// Response message for GetOAuth2AuthorizationUrl
+//
+// Trailing metadata:
+// X-Key-Id    = Server identity key ID (sSk_kid, uint32)
+// X-Public-Key = Server ephemeral public key (eS_pk, 32 bytes, base64url encoded)
+message GetOAuth2AuthorizationUrlResponse {
+  // Encrypted authorization URL ciphertext
+  bytes ciphertext = 1;
+  // State parameter for CSRF protection
+  string state = 2;
+  // PKCE code verifier (auto-generated or echo of the request value)
+  string code_verifier = 3;
+  // A response message
+  string message = 4;
+  // Scope of the authorization request
+  string scope = 5;
+  // Client ID of the OAuth2 application
+  string client_id = 6;
+  // Redirect URL of the OAuth2 application
+  string redirect_url = 7;
+}
+
+// Request message for exchanging an OAuth2 authorization code for a token
+message ExchangeOAuth2CodeAndStoreRequest {
+  // The platform for which the token exchange is being performed
+  string platform = 1;
+  // The authorization code received from the authorization server
+  string authorization_code = 2;
+  // Optional PKCE code verifier
+  string code_verifier = 3;
+  // Optional redirect URL for the OAuth2 application
+  string redirect_url = 4;
+  // Optional request identifier for tracking
+  string request_identifier = 5;
+}
+
+// Response message for ExchangeOAuth2CodeAndStore
+message ExchangeOAuth2CodeAndStoreResponse {
+  // Indicates if the token exchange and storage was successful
+  bool success = 1;
+  // A response message
+  string message = 2;
+  // Account identifier associated with the token
+  string account_identifier = 3;
+  // Server ephemeral public key for the stored token
+  repeated ServerPublicKey server_ephemeral_public_key = 4;
+  // Hash of the stored token
+  bytes token_hash = 5;
+}
+
+// Request message for revoking and deleting an OAuth2 token
+message RevokeAndDeleteOAuth2TokenRequest {
+  // The platform associated with the token
+  string platform = 1;
+  // Hash of the token to revoke and delete
+  bytes token_hash = 2;
+}
+
+// Response message for RevokeAndDeleteOAuth2Token
+message RevokeAndDeleteOAuth2TokenResponse {
+  // A response message
+  string message = 1;
+  // Indicates whether the operation was successful
+  bool success = 2;
+}
+
+// Publisher service
+service Publisher {
+  // Get an encrypted OAuth2 authorization URL for a platform
+  rpc GetOAuth2AuthorizationUrl(GetOAuth2AuthorizationUrlRequest) returns (GetOAuth2AuthorizationUrlResponse);
+  // Exchange an OAuth2 authorization code for a token and store it
+  rpc ExchangeOAuth2CodeAndStore(ExchangeOAuth2CodeAndStoreRequest) returns (ExchangeOAuth2CodeAndStoreResponse);
+  // Revoke and delete a stored OAuth2 token
+  rpc RevokeAndDeleteOAuth2Token(RevokeAndDeleteOAuth2TokenRequest) returns (RevokeAndDeleteOAuth2TokenResponse);
+}

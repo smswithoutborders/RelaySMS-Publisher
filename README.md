@@ -14,14 +14,13 @@ Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS w
 
 ## Requirements
 
-- **Python:** ≥ 3.8.10
-- **Database:** MySQL (≥ 8.0.28), MariaDB, or SQLite
-- **External Services:** [RelaySMS Vault](https://github.com/smswithoutborders/RelaySMS-Vault) (required)
+- **Python:** >= 3.8.10
+- **Database:** MySQL (>= 8.0.28), MariaDB, or SQLite
 
 **Ubuntu Dependencies:**
 
 ```bash
-sudo apt install python3-dev build-essential libmysqlclient-dev make
+sudo apt install python3-dev build-essential libsqlcipher-dev pkg-config make git
 ```
 
 ## Installation
@@ -57,6 +56,9 @@ cp template.env .env
 
 # Build
 make build-setup
+
+# Run database migrations
+make migrate-up
 
 # Start services
 python3 grpc_server.py        # Terminal 1
@@ -103,25 +105,12 @@ SSL_CERTIFICATE=                # SSL certificate path (optional)
 SSL_KEY=                        # SSL key path (optional)
 ```
 
-### Vault Connection
-
-```bash
-VAULT_GRPC_HOST=localhost
-VAULT_GRPC_PORT=8000
-VAULT_GRPC_SSL_PORT=8001
-VAULT_GRPC_INTERNAL_PORT=8443
-VAULT_GRPC_INTERNAL_SSL_PORT=8444
-```
-
-> [!IMPORTANT]
-> RelaySMS Vault must be installed and running. See [RelaySMS Vault Installation](https://github.com/smswithoutborders/RelaySMS-Vault/blob/main/INSTALL.md)
-
 ### Database
 
 **SQLite (default):**
 
 ```bash
-SQLITE_DATABASE_PATH=data/publisher.sqlite
+SQLITE_DATABASE_PATH=data/relaysms.db
 ```
 
 **MySQL:**

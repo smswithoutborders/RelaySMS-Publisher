@@ -1,25 +1,16 @@
-"""
-This program is free software: you can redistribute it under the terms
-of the GNU General Public License, v. 3.0. If a copy of the GNU General
-Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
-"""
+# SPDX-License-Identifier: GPL-3.0-only
 
-import datetime
 import json
 from pathlib import Path as PathLib
-from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query, Path, Request
+from typing import List
+
+from fastapi import APIRouter, HTTPException, Path, Request
 from fastapi.responses import HTMLResponse
-from api_schemas import (
-    PublicationsRead,
-    PublicationsResponse,
-    Pagination,
-    PlatformManifest,
-    OAuthClientMetadata,
-)
-from publications import fetch_publication
-from platforms.adapter_manager import AdapterManager
+
+from api_schemas import OAuthClientMetadata, PlatformManifest, ServerStaticPublicKey
 from logutils import get_logger
+from models.server_identity_key import get_public_key, get_public_keys
+from platforms.adapter_manager import AdapterManager
 
 logger = get_logger(__name__)
 
@@ -35,67 +26,6 @@ ALLOWED_PLATFORM_MANIFEST_KEYS = [
     "support_url_scheme",
 ]
 ALLOWED_PLATFORMS_WITH_CLIENT_METADATA = ["bluesky"]
-
-
-@router.get("/metrics/publications", response_model=PublicationsResponse)
-def get_publication(
-    start_date: datetime.date = Query(...),
-    end_date: datetime.date = Query(...),
-    country_code: Optional[str] = Query(None),
-    platform_name: Optional[str] = Query(None),
-    source: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    gateway_client: Optional[str] = Query(None),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-):
-    """Retrieve metrics with optional filters."""
-    logger.debug(
-        "Fetching metrics with filters: start_date=%s, end_date=%s, "
-        "country_code=%s, platform_name=%s, source=%s, status=%s, "
-        "gateway_client=%s, page=%s, page_size=%s",
-        start_date,
-        end_date,
-        country_code,
-        platform_name,
-        source,
-        status,
-        gateway_client,
-        page,
-        page_size,
-    )
-
-    filters = {
-        "country_code": country_code,
-        "platform_name": platform_name,
-        "source": source,
-        "status": status,
-        "gateway_client": gateway_client,
-    }
-
-    try:
-        result = fetch_publication(start_date, end_date, filters, page, page_size)
-        publications = [
-            PublicationsRead(**publication.__data__) for publication in result["data"]
-        ]
-        total_records = result.get("total_publications", 0)
-        total_pages = (total_records + page_size - 1) // page_size
-        return PublicationsResponse(
-            total_publications=result.get("total_publications", 0),
-            total_published=result.get("total_published", 0),
-            total_failed=result.get("total_failed", 0),
-            data=publications,
-            pagination=Pagination(
-                total_records=total_records,
-                page=page,
-                page_size=page_size,
-                total_pages=total_pages,
-            ),
-        )
-
-    except Exception as e:
-        logger.error(f"Error fetching publications: {e}")
-        raise HTTPException(status_code=500, detail="Error fetching publications")
 
 
 @router.get("/platforms")
@@ -115,11 +45,34 @@ def get_platforms() -> List[PlatformManifest]:
     return platforms
 
 
+@router.get(
+    "/server-keys",
+    response_model=List[ServerStaticPublicKey],
+)
+def list_server_static_keys():
+    """List all server static public keys."""
+    return get_public_keys()
+
+
+@router.get(
+    "/server-keys/{key_id}",
+    response_model=ServerStaticPublicKey,
+)
+def get_server_static_key(
+    key_id: int = Path(..., ge=0, le=255, description="Static key identifier"),
+):
+    """Return a single server static public key by key_id."""
+    try:
+        return get_public_key(key_id)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/platforms/{platform_name}")
 def get_platform_data(
     platform_name: str = Path(
         ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
-    )
+    ),
 ) -> PlatformManifest:
     """Retrieve the manifest of a platform adapter."""
     AdapterManager._populate_registry()
@@ -146,7 +99,7 @@ def get_platform_data(
 def get_platform_oauth_client_metadata(
     platform_name: str = Path(
         ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
-    )
+    ),
 ) -> OAuthClientMetadata:
     """Retrieve the OAuth client metadata for a platform adapter."""
     AdapterManager._populate_registry()
@@ -161,7 +114,7 @@ def get_platform_oauth_client_metadata(
     if not adapter:
         raise HTTPException(status_code=404, detail="Platform not found")
 
-    if not platform_name.lower() in ALLOWED_PLATFORMS_WITH_CLIENT_METADATA:
+    if platform_name.lower() not in ALLOWED_PLATFORMS_WITH_CLIENT_METADATA:
         raise HTTPException(
             status_code=404,
             detail="OAuth client metadata not available for this platform",
@@ -209,7 +162,7 @@ async def oauth_callback(
     if not adapter:
         raise HTTPException(status_code=404, detail="Platform not found")
 
-    if not platform_name.lower() in ALLOWED_PLATFORMS_WITH_CLIENT_METADATA:
+    if platform_name.lower() not in ALLOWED_PLATFORMS_WITH_CLIENT_METADATA:
         raise HTTPException(
             status_code=404,
             detail="OAuth client metadata not available for this platform",

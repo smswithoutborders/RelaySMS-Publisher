@@ -1,13 +1,15 @@
+alembic==1.13.1
 fastapi[standard]==0.136.1
 GitPython==3.1.50
 grpc-interceptor==0.15.4
 grpcio==1.80.0
 grpcio-testing==1.80.0
 grpcio-tools==1.80.0
-peewee>=4.0.5
 phonenumbers==9.0.30
 pymysql==1.1.3
+pysqlcipher3==1.2.0
 requests==2.34.2
 sentry-sdk[grpcio]==2.60.0
+sqlalchemy==2.0.23
 tqdm==4.67.3
 twilio==9.10.9
