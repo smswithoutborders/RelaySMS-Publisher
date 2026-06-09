@@ -29,14 +29,6 @@ def _decode_client_ephemeral_key(ec_pk_b64: str) -> bytes:
     return ec_pk_bytes
 
 
-def _get_server_identity_key(ss_kid: int):
-    """Look up a server identity key, raising if absent."""
-    ss = get_private_key(ss_kid)
-    if not ss:
-        raise LookupError(f"Server identity key {ss_kid} not found")
-    return ss
-
-
 def GetOAuth2AuthorizationUrl(self, request, context):
     """Generate and return an encrypted OAuth2 authorization URL."""
 
@@ -71,7 +63,7 @@ def GetOAuth2AuthorizationUrl(self, request, context):
 
     try:
         ss_kid = secrets.randbelow(256)
-        ss = _get_server_identity_key(ss_kid)
+        ss = get_private_key(ss_kid)
 
         adapter = get_oauth2_adapter(request.platform)
 
@@ -138,7 +130,7 @@ def GetOAuth2AuthorizationUrl(self, request, context):
             grpc.StatusCode.UNIMPLEMENTED,
         )
 
-    except LookupError as exc:
+    except ValueError as exc:
         logger.error("%s", exc)
         return self.handle_create_grpc_error_response(
             context,

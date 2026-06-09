@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package publisher.v3;
 
-// Represents a server ephemeral public key
-message ServerPublicKey {
+// Represents a public key
+message PublicKey {
   // The key ID
   uint32 key_id = 1;
   // The public key (32 bytes)
@@ -74,7 +74,7 @@ message ExchangeOAuth2CodeAndStoreResponse {
   // Account identifier associated with the token
   string account_identifier = 3;
   // Server ephemeral public key for the stored token
-  repeated ServerPublicKey server_ephemeral_public_key = 4;
+  repeated PublicKey server_ephemeral_public_key = 4;
   // Hash of the stored token
   bytes token_hash = 5;
 }
@@ -95,6 +95,24 @@ message RevokeAndDeleteOAuth2TokenResponse {
   bool success = 2;
 }
 
+// Request message for uploading client ephemeral public keys
+message UploadClientEphemeralPublicKeysRequest {
+  // Client ephemeral public keys to upload
+  repeated PublicKey client_ephemeral_public_key = 1;
+  // Hash of the token associated with the keys
+  bytes token_hash = 2;
+}
+
+// Response message for UploadClientEphemeralPublicKeys
+message UploadClientEphemeralPublicKeysResponse {
+  // A response message
+  string message = 1;
+  // Indicates whether the operation was successful
+  bool success = 2;
+  // Identifier of the token associated with the uploaded keys
+  bytes token_id = 3;
+}
+  
 // Publisher service
 service Publisher {
   // Get an encrypted OAuth2 authorization URL for a platform
@@ -103,4 +121,6 @@ service Publisher {
   rpc ExchangeOAuth2CodeAndStore(ExchangeOAuth2CodeAndStoreRequest) returns (ExchangeOAuth2CodeAndStoreResponse);
   // Revoke and delete a stored OAuth2 token
   rpc RevokeAndDeleteOAuth2Token(RevokeAndDeleteOAuth2TokenRequest) returns (RevokeAndDeleteOAuth2TokenResponse);
+  // Upload client ephemeral public keys associated with a token
+  rpc UploadClientEphemeralPublicKeys(UploadClientEphemeralPublicKeysRequest) returns (UploadClientEphemeralPublicKeysResponse);
 }
