@@ -33,7 +33,7 @@ def _make_sqlcipher3_creator(db_path: str, key: str):
     import sqlcipher3
 
     def connect():
-        conn = sqlcipher3.connect(db_path)
+        conn = sqlcipher3.connect(db_path, check_same_thread=False)
         conn.execute("PRAGMA cipher_compatibility = 4;")
         conn.execute(f"PRAGMA key = \"x'{key}'\";")
 
