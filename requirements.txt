@@ -1,4 +1,5 @@
 alembic==1.13.1
+cryptography==48.0.0
 fastapi[standard]==0.136.1
 GitPython==3.1.50
 grpc-interceptor==0.15.4
