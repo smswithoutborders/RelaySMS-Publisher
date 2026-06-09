@@ -20,7 +20,7 @@ ALLOWED_PLATFORM_MANIFEST_KEYS = [
     "name",
     "shortcode",
     "protocol_type",
-    "service_type",
+    "cat_id",
     "icon_svg",
     "icon_png",
     "support_url_scheme",

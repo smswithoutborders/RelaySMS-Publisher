@@ -38,7 +38,7 @@ class PlatformManifest(BaseModel):
     name: str
     shortcode: str
     protocol_type: str
-    service_type: str
+    cat_id: int
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None
     support_url_scheme: Optional[bool] = None
