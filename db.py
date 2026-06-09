@@ -22,18 +22,35 @@ _session_factory: Optional[sessionmaker] = None
 
 
 def _build_sqlite_url() -> str:
-    """Build SQLite connection URL with optional encryption."""
+    """Build SQLite connection URL."""
     db_path = get_configs("SQLITE_DATABASE_PATH", default_value="data/relaysms.db")
-    encrypt = (
-        get_configs("DATABASE_ENCRYPTION_ENABLED", default_value="false").lower()
-        == "true"
-    )
-
     safe_db_path = quote(db_path, safe="/")
+    return f"sqlite:///{safe_db_path}"
 
-    if not encrypt:
-        return f"sqlite:///{safe_db_path}"
 
+def _make_sqlcipher3_creator(db_path: str, key: str):
+    """Return a SQLAlchemy creator function that opens an encrypted SQLCipher3 database."""
+    import sqlcipher3
+
+    def connect():
+        conn = sqlcipher3.connect(db_path)
+        conn.execute("PRAGMA cipher_compatibility = 4;")
+        conn.execute(f"PRAGMA key = \"x'{key}'\";")
+
+        try:
+            conn.execute("SELECT count(*) FROM sqlite_master;")
+        except sqlcipher3.DatabaseError:
+            conn.close()
+            raise ValueError("Invalid hex key or database file is corrupted.")
+
+        return conn
+
+    return connect
+
+
+def _get_sqlcipher3_config():
+    """Validate and return (db_path, key) for an encrypted SQLite database."""
+    db_path = get_configs("SQLITE_DATABASE_PATH", default_value="data/relaysms.db")
     key = get_configs("DATABASE_ENCRYPTION_KEY")
     if not key:
         raise ValueError(
@@ -50,12 +67,8 @@ def _build_sqlite_url() -> str:
             f"DATABASE_ENCRYPTION_KEY must be 32 bytes (64 hex chars), got {len(key_bytes)}"
         )
 
-    logger.info("Using SQLCipher encryption for SQLite")
-
-    return (
-        f"sqlite+pysqlcipher://:{key}@/{safe_db_path}"
-        f"?cipher=aes-256-cfb&kdf_iter=256000"
-    )
+    logger.info("Using SQLCipher3 encryption for SQLite")
+    return db_path, key
 
 
 def _ensure_sqlite_parent_dir() -> None:
@@ -147,15 +160,30 @@ def _create_engine() -> Engine:
         engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
     else:
         _ensure_sqlite_parent_dir()
-        url = _build_sqlite_url()
-        engine = create_engine(
-            url,
-            echo=False,
-            connect_args={"check_same_thread": False},
-            poolclass=QueuePool,
-            pool_size=5,
-            pool_pre_ping=True,
+        encrypt = (
+            get_configs("DATABASE_ENCRYPTION_ENABLED", default_value="false").lower()
+            == "true"
         )
+        if encrypt:
+            db_path, key = _get_sqlcipher3_config()
+            engine = create_engine(
+                "sqlite://",
+                creator=_make_sqlcipher3_creator(db_path, key),
+                echo=False,
+                poolclass=QueuePool,
+                pool_size=5,
+                pool_pre_ping=True,
+            )
+        else:
+            url = _build_sqlite_url()
+            engine = create_engine(
+                url,
+                echo=False,
+                connect_args={"check_same_thread": False},
+                poolclass=QueuePool,
+                pool_size=5,
+                pool_pre_ping=True,
+            )
 
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
