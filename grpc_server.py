@@ -2,18 +2,20 @@
 """Publisher gRPC server"""
 
 import os
+import signal
+import sys
 from concurrent import futures
 
 import grpc
 from grpc_interceptor import ServerInterceptor
 
-from grpc_services.v1.service import PublisherServiceV1
-from grpc_services.v2.service import PublisherServiceV2
+from db import dispose_engine
+from grpc_services.v3.service import PublisherServiceV3
 from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
-from protos.v1 import publisher_pb2_grpc as v1_grpc
-from protos.v2 import publisher_pb2_grpc as v2_grpc
+from protos.v3 import publisher_pb2_grpc as v3_grpc
 from sentry_config import SENTRY_ENABLED, initialize_sentry
+from server_identity_keys import initialize_server_identity_keys
 from utils import get_configs
 
 logger = get_logger("publisher.grpc.server")
@@ -23,112 +25,85 @@ if SENTRY_ENABLED:
 
 
 class LoggingInterceptor(ServerInterceptor):
-    """
-    gRPC server interceptor for logging requests.
-    """
+    """gRPC server interceptor for logging requests."""
 
-    def __init__(self):
-        """
-        Initialize the LoggingInterceptor.
-        """
-        self.logger = logger
-        self.server_protocol = "HTTP/2.0"
+    server_protocol = "HTTP/2.0"
 
     def intercept(self, method, request_or_iterator, context, method_name):
-        """
-        Intercept method calls for each incoming RPC.
-        """
         context.method_name = method_name
         response = method(request_or_iterator, context)
         if context.details():
-            self.logger.error(
+            logger.error(
                 "%s %s - %s -",
                 method_name,
                 self.server_protocol,
                 str(context.code()).split(".")[1],
             )
         else:
-            self.logger.info("%s %s - %s -", method_name, self.server_protocol, "OK")
+            logger.info("%s %s - OK -", method_name, self.server_protocol)
         return response
 
 
 def serve():
-    """
-    Starts the gRPC server and listens for requests using a thread pool.
-    """
+    """Start the gRPC server and listen for requests."""
     mode = get_configs("MODE", False, "development")
-    server_certificate = get_configs("SSL_CERTIFICATE")
-    private_key = get_configs("SSL_KEY")
     hostname = get_configs("GRPC_HOST")
-    secure_port = get_configs("GRPC_SSL_PORT")
     port = get_configs("GRPC_PORT")
+    secure_port = get_configs("GRPC_SSL_PORT")
 
-    num_cpu_cores = os.cpu_count()
     max_workers = 10
-
-    logger.info("Starting server in %s mode...", mode)
-    logger.info("Hostname: %s", hostname)
-    logger.info("Insecure port: %s", port)
-    logger.info("Secure port: %s", secure_port)
-    logger.info("Logical CPU cores available: %s", num_cpu_cores)
-    logger.info("gRPC server max workers: %s", max_workers)
+    logger.info(
+        "Starting server in %s mode | host=%s | port=%s | workers=%s",
+        mode,
+        hostname,
+        port,
+        max_workers,
+    )
+    logger.info("Logical CPU cores available: %s", os.cpu_count())
 
     grpc_server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=max_workers),
         interceptors=[LoggingInterceptor()],
     )
-    v1_grpc.add_PublisherServicer_to_server(PublisherServiceV1(), grpc_server)
-    v2_grpc.add_PublisherServicer_to_server(PublisherServiceV2(), grpc_server)
+
+    initialize_server_identity_keys()
+    v3_grpc.add_PublisherServicer_to_server(PublisherServiceV3(), grpc_server)
 
     if mode == "production":
         try:
-            with open(server_certificate, "rb") as f:
-                server_certificate_data = f.read()
-            with open(private_key, "rb") as f:
-                private_key_data = f.read()
-
-            server_credentials = grpc.ssl_server_credentials(
-                ((private_key_data, server_certificate_data),)
+            with open(get_configs("SSL_CERTIFICATE"), "rb") as f:
+                cert = f.read()
+            with open(get_configs("SSL_KEY"), "rb") as f:
+                key = f.read()
+            grpc_server.add_secure_port(
+                f"{hostname}:{secure_port}",
+                grpc.ssl_server_credentials(((key, cert),)),
             )
-            grpc_server.add_secure_port(f"{hostname}:{secure_port}", server_credentials)
-            logger.info(
-                "TLS is enabled: The server is securely running at %s:%s",
-                hostname,
-                secure_port,
-            )
+            logger.info("TLS enabled: %s:%s", hostname, secure_port)
         except FileNotFoundError as e:
-            logger.critical(
-                (
-                    "Unable to start server: TLS certificate or key file not found: %s. "
-                    "Please check your configuration."
-                ),
-                e,
-            )
+            logger.critical("TLS certificate or key file not found: %s", e)
             raise
         except Exception as e:
-            logger.critical(
-                (
-                    "Unable to start server: Error loading TLS credentials: %s. "
-                    "Please check your configuration."
-                ),
-                e,
-            )
+            logger.critical("Error loading TLS credentials: %s", e)
             raise
     else:
         grpc_server.add_insecure_port(f"{hostname}:{port}")
-        logger.warning(
-            "The server is running in insecure mode at %s:%s", hostname, port
-        )
+        logger.warning("Insecure mode: %s:%s", hostname, port)
 
     grpc_server.start()
     AdapterManager._populate_registry()
 
-    try:
-        grpc_server.wait_for_termination()
-    except KeyboardInterrupt:
-        logger.info("Shutting down the server...")
-        grpc_server.stop(0)
-        logger.info("The server has stopped successfully")
+    def shutdown(signum, frame):
+        logger.info("Shutting down (signal %s) ...", signum)
+        grpc_server.stop(grace=5)
+        dispose_engine()
+        logger.info("Server stopped")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    grpc_server.wait_for_termination()
 
 
 if __name__ == "__main__":

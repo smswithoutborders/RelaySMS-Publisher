@@ -4,12 +4,13 @@ PartOf=relaysms-publisher.target
 After=network.target
 
 [Service]
+User=relaysms
 WorkingDirectory=/opt/relaysms/relaysms-publisher
 EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
 ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/fastapi run --proxy-headers --host ${HOST} --port ${PORT} --workers 4
 Restart=on-failure
 SyslogIdentifier=relaysms-publisher-rest
-ReadWritePaths=/opt/relaysms/relaysms-publisher/data
+ReadWritePaths=/opt/relaysms/relaysms-publisher/data /opt/relaysms/relaysms-publisher/platforms
 
 [Install]
 WantedBy=relaysms-publisher.target

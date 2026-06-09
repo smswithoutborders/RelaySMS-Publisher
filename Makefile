@@ -1,68 +1,93 @@
-python=python3
-PROTO_DIR=protos/v1
-CURRENT_BRANCH=$(shell git branch --show-current)
+# SPDX-License-Identifier: GPL-3.0-only
 
-define log_message
-	@echo "[$(shell date +'%Y-%m-%d %H:%M:%S')] - $1"
+python        := python3
+grpc_host     := $${HOST:-127.0.0.1}
+grpc_port     := $${GRPC_PORT:-6000}
+fastapi_port  := $${PORT:-16000}
+
+define log
+	@echo "[$(shell date +'%Y-%m-%d %H:%M:%S')] [$1] $2"
 endef
 
-define download-proto
-	$(call log_message,INFO - Downloading $(PROTO_URL) to $@ ...)
-	@mkdir -p $(dir $@) && \
-	curl -o $@ -L $(PROTO_URL)
-	$(call log_message,INFO - $@ downloaded successfully!)
-endef
+.PHONY: \
+	grpc-compile \
+	grpc-server-start \
+	fastapi-server-start \
+	run \
+	payload-specs-fetch \
+	payload-specs-build \
+	payload-specs-compile \
+	build-setup \
+	migrate-up
 
-protos/v%/vault.proto:
-	$(eval PROTO_URL := $(PROTO_URL))
-	$(call download-proto)
 
-vault-proto: 
-	@for v in v1 v2; do \
-		rm -f "protos/$$v/vault.proto"; \
-		$(MAKE) PROTO_URL=https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Vault/$(CURRENT_BRANCH)/protos/$$v/vault.proto \
-		protos/$$v/vault.proto; \
-	done
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
 
 grpc-compile:
-	$(call log_message,[INFO] Compiling gRPC protos ...)
-	@for v in v1 v2; do \
+	$(call log,INFO,Compiling gRPC protos ...)
+	@for v in v1 v2 v3; do \
 		$(python) -m grpc_tools.protoc \
 			--proto_path=. \
 			--python_out=. \
 			--pyi_out=. \
 			--grpc_python_out=. \
-			./protos/$$v/*.proto ; \
+			./protos/$$v/*.proto; \
 	done
-	$(call log_message,[INFO] gRPC Compilation complete!)
-
-grpc-server-start:
-	$(call log_message,INFO - Starting gRPC server ...)
-	@$(python) -u grpc_server.py
-	$(call log_message,INFO - gRPC server started successfully.)
+	$(call log,INFO,gRPC compilation complete)
 
 payload-specs-fetch:
-	$(call log_message,INFO - Fetching payload specifications library dependencies ...)
-	@ git submodule update --init --recursive --remote --merge
-	$(call log_message,INFO - Payload specifications library fetched successfully!)
+	$(call log,INFO,Fetching payload specs submodule ...)
+	@git submodule update --init --recursive --remote --merge
+	$(call log,INFO,Payload specs fetched)
 
 payload-specs-build:
-	$(call log_message,INFO - Building payload specifications library ...)
+	$(call log,INFO,Building payload specs library ...)
 	@cd lib_relaysms_payload_specs && \
 		cargo clean && \
-		rm -rf generated/* && \
-		rm -rf target/ && \
+		rm -rf generated/* target/ && \
 		cargo build --release
-	$(call log_message,INFO - Payload specifications library built successfully!)
+	$(call log,INFO,Payload specs built)
 
 payload-specs-compile: payload-specs-fetch payload-specs-build
-	$(call log_message,INFO - Compiling payload specifications ...)
+	$(call log,INFO,Compiling payload specs bindings ...)
 	@cd lib_relaysms_payload_specs && \
 		cargo run --bin uniffi_bindgen -- generate \
-	  --library target/release/librelaysms_spec_payload.so \
-	  --language python \
-	  --out-dir generated/ && \
+			--library target/release/librelaysms_spec_payload.so \
+			--language python \
+			--out-dir generated/ && \
 		cp target/release/librelaysms_spec_payload.so generated/
-	$(call log_message,INFO - Payload specifications compiled successfully!)
+	$(call log,INFO,Payload specs compiled)
 
-build-setup: vault-proto grpc-compile
+build-setup: grpc-compile payload-specs-compile
+
+
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
+
+migrate-up:
+	$(call log,INFO,Running database migrations ...)
+	@$(python) -m alembic upgrade head
+	$(call log,INFO,Migrations complete)
+
+
+# ---------------------------------------------------------------------------
+# Servers
+# ---------------------------------------------------------------------------
+
+grpc-server-start:
+	$(call log,INFO,Starting gRPC server ...)
+	@$(python) -u grpc_server.py
+
+fastapi-server-start:
+	$(call log,INFO,Starting FastAPI server ...)
+	@$(python) -m uvicorn app:app --workers 1 --host $(grpc_host) --port $(fastapi_port)
+
+run:
+	$(call log,INFO,Starting gRPC and FastAPI servers ...)
+	@trap 'echo "Shutting down ..."; kill -- -$$$$; wait' INT TERM EXIT; \
+		$(python) -u grpc_server.py & \
+		$(python) -m uvicorn app:app --workers 1 --host $(grpc_host) --port $(fastapi_port) & \
+		wait

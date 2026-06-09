@@ -44,12 +44,14 @@ disable)
   ;;
 update)
   check_sudo
+  export PATH="$HOME/.cargo/bin:$PATH"
   systemctl stop $SERVICE_NAME
   cd "$INSTALL_DIR"
   git pull
+  git submodule update --init --recursive --remote --merge
   source venv/bin/activate
-  pip install --upgrade pip
-  pip install -r requirements.txt
+  pip install --quiet --upgrade pip
+  pip install --quiet -r requirements.txt
   make build-setup
   systemctl daemon-reload
   systemctl start $SERVICE_NAME

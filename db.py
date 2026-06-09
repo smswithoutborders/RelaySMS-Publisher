@@ -1,139 +1,204 @@
-"""Module for connecting to a database."""
+# SPDX-License-Identifier: GPL-3.0-only
+"""Database connection and session management."""
 
-from peewee import Database, DatabaseError, MySQLDatabase, SqliteDatabase
-from playhouse.shortcuts import ReconnectMixin
-from utils import ensure_database_exists, get_configs
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Generator, Optional
+from urllib.parse import quote, quote_plus
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.pool import QueuePool, StaticPool
+
 from logutils import get_logger
+from utils import get_configs
 
 logger = get_logger(__name__)
+Base = declarative_base()
 
-DATABASE_CONFIGS = {
-    "mode": get_configs("MODE", default_value="development"),
-    "mysql": {
-        "database": get_configs("MYSQL_DATABASE"),
-        "host": get_configs("MYSQL_HOST"),
-        "password": get_configs("MYSQL_PASSWORD"),
-        "user": get_configs("MYSQL_USER"),
-    },
-    "sqlite": {
-        "database_path": get_configs("SQLITE_DATABASE_PATH"),
-    },
-}
+_engine: Optional[Engine] = None
+_session_factory: Optional[sessionmaker] = None
 
 
-class ReconnectMySQLDatabase(ReconnectMixin, MySQLDatabase):
-    """
-    A custom MySQLDatabase class with automatic reconnection capability.
+def _build_sqlite_url() -> str:
+    """Build SQLite connection URL with optional encryption."""
+    db_path = get_configs("SQLITE_DATABASE_PATH", default_value="data/relaysms.db")
+    encrypt = (
+        get_configs("DATABASE_ENCRYPTION_ENABLED", default_value="false").lower()
+        == "true"
+    )
 
-    This class inherits from both ReconnectMixin and MySQLDatabase
-    to provide automatic reconnection functionality in case the database
-    connection is lost.
-    """
+    safe_db_path = quote(db_path, safe="/")
+
+    if not encrypt:
+        return f"sqlite:///{safe_db_path}"
+
+    key = get_configs("DATABASE_ENCRYPTION_KEY")
+    if not key:
+        raise ValueError(
+            "DATABASE_ENCRYPTION_ENABLED=true but DATABASE_ENCRYPTION_KEY is not set"
+        )
+
+    try:
+        key_bytes = bytes.fromhex(key)
+    except ValueError:
+        raise ValueError("DATABASE_ENCRYPTION_KEY must be a valid hex string")
+
+    if len(key_bytes) != 32:
+        raise ValueError(
+            f"DATABASE_ENCRYPTION_KEY must be 32 bytes (64 hex chars), got {len(key_bytes)}"
+        )
+
+    logger.info("Using SQLCipher encryption for SQLite")
+
+    return (
+        f"sqlite+pysqlcipher://:{key}@/{safe_db_path}"
+        f"?cipher=aes-256-cfb&kdf_iter=256000"
+    )
 
 
-def is_mysql_config_complete() -> bool:
-    """
-    Checks if all required MySQL configurations are present.
+def _ensure_sqlite_parent_dir() -> None:
+    """Create the SQLite database parent directory if needed."""
+    db_path = get_configs("SQLITE_DATABASE_PATH", default_value="data/relaysms.db")
+    if not db_path or db_path == ":memory:":
+        return
 
-    Returns:
-        bool: True if all MySQL configurations are complete, False otherwise.
-    """
-    logger.debug("Checking if MySQL configuration is complete...")
-    mysql_config = DATABASE_CONFIGS["mysql"]
-    required_keys = ["database", "host", "password", "user"]
-    return all(mysql_config.get(key) for key in required_keys)
+    parent = Path(db_path).expanduser().resolve().parent
+    parent.mkdir(parents=True, exist_ok=True)
 
 
-def connect() -> Database:
-    """
-    Connects to the appropriate database based on the mode.
+def _build_mysql_url() -> str:
+    """Build MySQL connection URL."""
+    host = get_configs("MYSQL_HOST", default_value="localhost")
+    port = get_configs("MYSQL_PORT", default_value="3306")
+    user = get_configs("MYSQL_USER")
+    password = get_configs("MYSQL_PASSWORD")
+    database = get_configs("MYSQL_DATABASE")
 
-    If the mode is 'testing', it returns None.
+    if (
+        get_configs("DATABASE_ENCRYPTION_ENABLED", default_value="false").lower()
+        == "true"
+    ):
+        logger.info(
+            "Database encryption enabled - ensure TDE is configured on MySQL/MariaDB server"
+        )
 
-    If the mode is 'development', it checks if MySQL credentials
-    are complete. If they are, it connects to the MySQL database,
-    otherwise, it falls back to the SQLite database.
+    safe_user = quote_plus(user) if user else ""
+    safe_password = quote_plus(password) if password else ""
+    safe_database = quote_plus(database) if database else ""
 
-    If the mode is not 'testing' or 'development', it connects
-    to the MySQL database.
+    return f"mysql+pymysql://{safe_user}:{safe_password}@{host}:{port}/{safe_database}"
 
-    Returns:
-        Database: The connected database object.
-    """
-    mode = DATABASE_CONFIGS["mode"]
-    logger.debug("Database connection mode: %s", mode)
+
+def _ensure_mysql_database() -> None:
+    """Create MySQL database if it doesn't exist."""
+    import pymysql
+
+    host = get_configs("MYSQL_HOST", default_value="localhost")
+    port = int(get_configs("MYSQL_PORT", default_value="3306"))
+    user = get_configs("MYSQL_USER")
+    password = get_configs("MYSQL_PASSWORD")
+    database = get_configs("MYSQL_DATABASE")
+
+    safe_db = database.replace("`", "``") if database else database
+
+    try:
+        conn = pymysql.connect(host=host, port=port, user=user, password=password)
+        with conn.cursor() as cursor:
+            cursor.execute(
+                f"CREATE DATABASE IF NOT EXISTS `{safe_db}` "
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            )
+        conn.close()
+        logger.debug(f"Database '{database}' ready")
+    except Exception as e:
+        logger.error(f"Failed to create database '{database}': {e}")
+        raise
+
+
+def _has_mysql_config() -> bool:
+    """Check if MySQL configuration is complete."""
+    required = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE"]
+    return all(get_configs(key) for key in required)
+
+
+def _create_engine() -> Engine:
+    """Create and configure database engine."""
+    mode = get_configs("MODE", default_value="development")
+    engine_type = get_configs("DATABASE_DIALECT", default_value="sqlite")
 
     if mode == "testing":
-        logger.debug("Mode is 'testing'. No database connection will be made.")
-        return None
-
-    if mode == "development":
-        if is_mysql_config_complete():
-            return connect_to_mysql()
-        logger.warning(
-            "MySQL configuration is incomplete. Falling back to SQLite database."
+        logger.debug("Using in-memory SQLite for testing")
+        return create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
         )
-        return connect_to_sqlite()
 
-    return connect_to_mysql()
+    if mode == "development" and engine_type.lower() == "mysql":
+        if not _has_mysql_config():
+            logger.warning("MySQL config incomplete, falling back to SQLite")
+            engine_type = "sqlite"
+
+    if engine_type.lower() == "mysql":
+        _ensure_mysql_database()
+        url = _build_mysql_url()
+        engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
+    else:
+        _ensure_sqlite_parent_dir()
+        url = _build_sqlite_url()
+        engine = create_engine(
+            url,
+            echo=False,
+            connect_args={"check_same_thread": False},
+            poolclass=QueuePool,
+            pool_size=5,
+            pool_pre_ping=True,
+        )
+
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+
+    logger.info(f"Connected to {engine_type} database")
+    return engine
 
 
-@ensure_database_exists(
-    DATABASE_CONFIGS["mysql"]["host"],
-    DATABASE_CONFIGS["mysql"]["user"],
-    DATABASE_CONFIGS["mysql"]["password"],
-    DATABASE_CONFIGS["mysql"]["database"],
-)
-def connect_to_mysql() -> ReconnectMySQLDatabase:
-    """
-    Connects to the MySQL database.
+def get_engine() -> Engine:
+    """Get database engine."""
+    global _engine
+    if _engine is None:
+        _engine = _create_engine()
+    return _engine
 
-    Returns:
-        ReconnectMySQLDatabase: The connected MySQL database object with reconnection capability.
 
-    Raises:
-        DatabaseError: If failed to connect to the database.
-    """
-    logger.debug(
-        "Attempting to connect to MySQL database '%s' at '%s'...",
-        DATABASE_CONFIGS["mysql"]["database"],
-        DATABASE_CONFIGS["mysql"]["host"],
-    )
+def dispose_engine() -> None:
+    """Dispose database engine and cleanup connections."""
+    global _engine, _session_factory
+    if _engine is not None:
+        _engine.dispose()
+        logger.info("Database engine disposed")
+        _engine = None
+        _session_factory = None
+
+
+def get_session_factory() -> sessionmaker:
+    """Get session factory."""
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = sessionmaker(bind=get_engine(), expire_on_commit=False)
+    return _session_factory
+
+
+@contextmanager
+def get_session() -> Generator[Session, None, None]:
+    """Context manager for database sessions."""
+    session = get_session_factory()()
     try:
-        db = ReconnectMySQLDatabase(
-            DATABASE_CONFIGS["mysql"]["database"],
-            user=DATABASE_CONFIGS["mysql"]["user"],
-            password=DATABASE_CONFIGS["mysql"]["password"],
-            host=DATABASE_CONFIGS["mysql"]["host"],
-        )
-        db.connect()
-        return db
-    except DatabaseError as error:
-        logger.error(
-            "Failed to connect to MySQL database '%s' at '%s': %s",
-            DATABASE_CONFIGS["mysql"]["database"],
-            DATABASE_CONFIGS["mysql"]["host"],
-            error,
-        )
-        raise error
-
-
-def connect_to_sqlite() -> SqliteDatabase:
-    """
-    Connects to the SQLite database.
-
-    Returns:
-        SqliteDatabase: The connected SQLite database object.
-
-    Raises:
-        DatabaseError: If failed to connect to the database.
-    """
-    db_path = DATABASE_CONFIGS["sqlite"]["database_path"]
-    logger.debug("Attempting to connect to SQLite database at '%s'...", db_path)
-    try:
-        db = SqliteDatabase(db_path)
-        db.connect()
-        return db
-    except DatabaseError as error:
-        logger.error("Failed to connect to SQLite database at '%s': %s", db_path, error)
-        raise error
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()

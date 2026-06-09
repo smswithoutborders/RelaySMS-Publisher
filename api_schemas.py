@@ -1,11 +1,8 @@
-"""
-This program is free software: you can redistribute it under the terms
-of the GNU General Public License, v. 3.0. If a copy of the GNU General
-Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
-"""
+# SPDX-License-Identifier: GPL-3.0-only
 
 import datetime
 from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -58,3 +55,8 @@ class OAuthClientMetadata(BaseModel):
     token_endpoint_auth_method: str
     client_name: str
     client_uri: str
+
+
+class ServerStaticPublicKey(BaseModel):
+    key_id: int
+    public_key: str
