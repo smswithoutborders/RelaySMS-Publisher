@@ -2,7 +2,7 @@
 """Server identity keys initialization on application startup."""
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from db import get_session
 from logutils import get_logger
@@ -47,7 +47,7 @@ def generate_server_identity_keys(count: int = 256) -> None:
             logger.info(
                 f"Successfully generated and stored {count} server identity keys"
             )
-        except IntegrityError:
+        except (IntegrityError, OperationalError) as e:
             session.rollback()
             logger.info(
                 "Server identity keys were created by another process, skipping"
