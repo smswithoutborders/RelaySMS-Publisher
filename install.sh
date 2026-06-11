@@ -118,9 +118,13 @@ setup_env() {
 
   local db_key
   db_key=$(openssl rand -hex 32) || error "Failed to generate database encryption key"
-
+  field_key=$(openssl rand -hex 32) || error "Failed to generate database field encryption key"
+  data_key=$(openssl rand -hex 32) || error "Failed to generate data encryption key"
   sed -i "s|^DATABASE_ENCRYPTION_ENABLED=.*|DATABASE_ENCRYPTION_ENABLED=true|" .env
+  sed -i "s|^DATABASE_FIELD_ENCRYPTION_ENABLED=.*|DATABASE_FIELD_ENCRYPTION_ENABLED=true|" .env
   sed -i "s|^DATABASE_ENCRYPTION_KEY=.*|DATABASE_ENCRYPTION_KEY=$db_key|" .env
+  sed -i "s|^DATABASE_FIELD_ENCRYPTION_KEY=.*|DATABASE_FIELD_ENCRYPTION_KEY=$field_key|" .env
+  sed -i "s|^DATA_ENCRYPTION_KEY=.*|DATA_ENCRYPTION_KEY=$data_key|" .env
 
   chown "root:$SERVICE_USER" .env
   chmod 640 .env

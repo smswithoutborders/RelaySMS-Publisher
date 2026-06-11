@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from sqlalchemy import Column, DateTime, Integer, LargeBinary
 
 from db import Base, get_session
-from db_types import EncryptedBinary
+from db_types import PrivateEncryptedBinary
 
 
 def utc_now() -> datetime.datetime:
@@ -22,7 +22,7 @@ class ServerIdentityKey(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     key_index = Column(Integer, nullable=False, unique=True)
-    private_key = Column(EncryptedBinary(), nullable=False)
+    private_key = Column(PrivateEncryptedBinary(), nullable=False)
     public_key = Column(LargeBinary(32), nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)

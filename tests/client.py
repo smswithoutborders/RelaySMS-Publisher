@@ -5,6 +5,7 @@
 import argparse
 import base64
 import json
+import secrets
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -96,6 +97,37 @@ def grpc_call(fn, *args, **kwargs) -> tuple:
         return None, f"gRPC error: {e.code()} -- {e.details()}"
 
 
+def build_v1_request_metadata(
+    ss_pk_bytes: bytes, key_id: int, method_name: str, payload: bytes | None = None
+) -> tuple[bytes, bytes, list[tuple]]:
+    """
+    Generate a client ephemeral keypair, encrypt the request payload
+    using v1_requests_encrypt, and return the gRPC metadata headers.
+
+    Returns:
+        (ec_bytes, ec_pk_bytes, metadata_list)
+    """
+    ec = X25519PrivateKey.generate()
+    ec_pk_bytes = ec.public_key().public_bytes_raw()
+    ec_bytes = ec.private_bytes_raw()
+
+    encrypted = rrs.v1_requests_encrypt(
+        ec=ec_bytes,
+        ss_kid_pk=ss_pk_bytes,
+        method_name=method_name.encode(),
+        payload=payload,
+    )
+
+    metadata = [
+        ("x-payload-bin", encrypted.ciphertext),
+        ("x-public-key-bin", ec_pk_bytes),
+        ("x-key-id", str(key_id)),
+        ("x-nonce-bin", encrypted.nonce),
+        ("x-timestamp", str(encrypted.timestamp)),
+    ]
+    return ec_bytes, ec_pk_bytes, metadata
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -103,10 +135,6 @@ def grpc_call(fn, *args, **kwargs) -> tuple:
 
 def cmd_get_oauth2_url(args: argparse.Namespace) -> bool:
     """Test GetOAuth2AuthorizationUrl."""
-    ec = X25519PrivateKey.generate()
-    ec_pk_bytes = ec.public_key().public_bytes_raw()
-    ec_bytes = ec.private_bytes_raw()
-
     logger.info(
         "Platform: %s | gRPC: %s:%d | TLS: %s",
         args.platform,
@@ -114,7 +142,30 @@ def cmd_get_oauth2_url(args: argparse.Namespace) -> bool:
         args.port,
         args.tls,
     )
-    logger.info("Client ephemeral public key: %s", b64(ec_pk_bytes, truncate=40))
+
+    try:
+        key_id = secrets.randbelow(256)
+        logger.info("Fetching server identity public key (kid=%d) ...", key_id)
+        ss_pk_bytes = fetch_server_identity_public_key(args.rest_api, key_id)
+        logger.info(
+            "Server identity public key (kid=%d): %s",
+            key_id,
+            b64(ss_pk_bytes, truncate=40),
+        )
+    except Exception as e:
+        logger.error("Failed to fetch server identity public key: %s", e)
+        return False
+
+    try:
+        _, ec_pk_bytes, metadata = build_v1_request_metadata(
+            ss_pk_bytes=ss_pk_bytes,
+            key_id=key_id,
+            method_name="/publisher.v3.Publisher/GetOAuth2AuthorizationUrl",
+        )
+        logger.info("Client ephemeral public key: %s", b64(ec_pk_bytes, truncate=40))
+    except Exception as e:
+        logger.error("Failed to build request metadata: %s", e)
+        return False
 
     with grpc_channel(args.host, args.port, args.tls) as channel:
         stub = publisher_pb2_grpc.PublisherStub(channel)
@@ -124,38 +175,11 @@ def cmd_get_oauth2_url(args: argparse.Namespace) -> bool:
             autogenerate_code_verifier=not args.no_auto_verifier,
         )
 
-        result, err = grpc_call(
-            stub.GetOAuth2AuthorizationUrl.with_call,
-            request,
-            metadata=[("x-public-key", b64(ec_pk_bytes))],
+        response, err = grpc_call(
+            stub.GetOAuth2AuthorizationUrl, request, metadata=metadata
         )
         if err:
             logger.error(err)
-            return False
-
-        response, call = result
-        trailing = dict(call.trailing_metadata())
-        ss_kid = int(trailing.get("x-key-id", "-1"))
-        es_pk_bytes = base64.urlsafe_b64decode(trailing.get("x-public-key", ""))
-
-        try:
-            logger.info("Fetching server identity public key (kid=%d) ...", ss_kid)
-            ss_pk_bytes = fetch_server_identity_public_key(args.rest_api, ss_kid)
-            logger.info(
-                "Server identity public key (kid=%d): %s",
-                ss_kid,
-                b64(ss_pk_bytes, truncate=40),
-            )
-            logger.info("Running DH handshake + decryption ...")
-
-            authorization_url = rrs.v1_oauth_decrypt(
-                ec_kid=ec_bytes,
-                ss_kid_pk=ss_pk_bytes,
-                es_kid_pk=es_pk_bytes,
-                ciphertext=response.ciphertext,
-            ).decode()
-        except Exception as e:
-            logger.exception("Decryption failed: %s", e)
             return False
 
     db_set(
@@ -171,7 +195,7 @@ def cmd_get_oauth2_url(args: argparse.Namespace) -> bool:
     )
     logger.info("Saved OAuth2 session data to %s", DB_PATH)
 
-    print(f"Authorization URL : {authorization_url}")
+    print(f"Authorization URL : {response.authorization_url}")
     print(f"State             : {response.state}")
     print(f"Code Verifier     : {response.code_verifier}")
     print(f"Client ID         : {response.client_id}")
@@ -184,13 +208,46 @@ def cmd_exchange_oauth2_code(args: argparse.Namespace) -> bool:
     """Test ExchangeOAuth2CodeAndStore."""
     logger.info("Platform: %s | Code: %s...", args.platform, args.code[:12])
 
-    # fall back to stored code_verifier if not provided
     code_verifier = args.code_verifier
     if not code_verifier:
         stored = db_get("oauth2") or {}
         code_verifier = stored.get("code_verifier", "")
         if code_verifier:
             logger.info("Using stored code_verifier from %s", DB_PATH)
+
+    try:
+        key_id = secrets.randbelow(256)
+        logger.info("Fetching server identity public key (kid=%d) ...", key_id)
+        ss_pk_bytes = fetch_server_identity_public_key(args.rest_api, key_id)
+        logger.info(
+            "Server identity public key (kid=%d): %s",
+            key_id,
+            b64(ss_pk_bytes, truncate=40),
+        )
+    except Exception as e:
+        logger.error("Failed to fetch server identity public key: %s", e)
+        return False
+
+    logger.info("Generating 256 client ephemeral keypairs ...")
+    client_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
+    client_public_keys = [
+        publisher_pb2.PublicKey(
+            key_id=i,
+            public_key=kp.public_key().public_bytes_raw(),
+        )
+        for i, kp in enumerate(client_keypairs)
+    ]
+
+    try:
+        ec_bytes, ec_pk_bytes, metadata = build_v1_request_metadata(
+            ss_pk_bytes=ss_pk_bytes,
+            key_id=key_id,
+            method_name="/publisher.v3.Publisher/ExchangeOAuth2CodeAndStore",
+        )
+        logger.info("Client ephemeral public key: %s", b64(ec_pk_bytes, truncate=40))
+    except Exception as e:
+        logger.error("Failed to build request metadata: %s", e)
+        return False
 
     with grpc_channel(args.host, args.port, args.tls) as channel:
         stub = publisher_pb2_grpc.PublisherStub(channel)
@@ -199,84 +256,58 @@ def cmd_exchange_oauth2_code(args: argparse.Namespace) -> bool:
             authorization_code=args.code,
             code_verifier=code_verifier,
             redirect_url=args.redirect_url or "",
+            client_ephemeral_public_keys=client_public_keys,
         )
 
-        response, err = grpc_call(stub.ExchangeOAuth2CodeAndStore, request)
+        response, err = grpc_call(
+            stub.ExchangeOAuth2CodeAndStore, request, metadata=metadata
+        )
         if err:
             logger.error(err)
             return False
 
-    token_hash_b64 = b64(response.token_hash)
-    db_set(
-        "token",
-        {
-            "platform": args.platform,
-            "account_identifier": response.account_identifier,
-            "token_hash": token_hash_b64,
-            "server_ephemeral_public_keys": [
-                {"key_id": k.key_id, "public_key": b64(k.public_key)}
-                for k in response.server_ephemeral_public_key
-            ],
-        },
-    )
-    logger.info("Saved token data to %s", DB_PATH)
-
-    print(f"Success            : {response.success}")
-    print(f"Message            : {response.message}")
-    print(f"Account Identifier : {response.account_identifier}")
-    print(f"Token Hash         : {token_hash_b64}")
-    for key in response.server_ephemeral_public_key:
-        print(f"Server Key [{key.key_id:>3}]  : {b64(key.public_key, truncate=40)}")
-    return True
-
-
-def cmd_upload_client_keys(args: argparse.Namespace) -> bool:
-    """Test UploadClientEphemeralPublicKeys."""
-    token_hash_b64 = args.token_hash
-    if not token_hash_b64:
-        stored = db_get("token") or {}
-        token_hash_b64 = stored.get("token_hash")
-        if not token_hash_b64:
-            logger.error("No token_hash provided and none found in %s", DB_PATH)
-            return False
-        logger.info("Using stored token_hash from %s", DB_PATH)
-
-    token_hash = base64.urlsafe_b64decode(token_hash_b64)
-
-    keys = [X25519PrivateKey.generate() for _ in range(256)]
-    client_public_keys = [
-        publisher_pb2.PublicKey(key_id=i, public_key=k.public_key().public_bytes_raw())
-        for i, k in enumerate(keys)
-    ]
-
-    logger.info("Uploading 256 client ephemeral public keys ...")
-
-    with grpc_channel(args.host, args.port, args.tls) as channel:
-        stub = publisher_pb2_grpc.PublisherStub(channel)
-        request = publisher_pb2.UploadClientEphemeralPublicKeysRequest(
-            token_hash=token_hash,
-            client_ephemeral_public_key=client_public_keys,
-        )
-
-        response, err = grpc_call(stub.UploadClientEphemeralPublicKeys, request)
-        if err:
-            logger.error(err)
-            return False
+    if not response.success:
+        logger.error("Exchange failed: %s", response.message)
+        return False
 
     token_id_b64 = b64(response.token_id)
-    db_set(
-        "client_keys",
-        {
-            "token_hash": token_hash_b64,
-            "token_id": token_id_b64,
-            "private_keys": [b64(k.private_bytes_raw()) for k in keys],
-        },
-    )
-    logger.info("Saved client key private bytes to %s", DB_PATH)
+    token_ciphertext_b64 = b64(response.token_ciphertext)
 
-    print(f"Success   : {response.success}")
-    print(f"Message   : {response.message}")
-    print(f"Token ID  : {token_id_b64}")
+    tokens = db_get("tokens") or {}
+    tokens[token_ciphertext_b64] = {
+        "platform": args.platform,
+        "account_identifier": response.account_identifier,
+        "token_id": token_id_b64,
+        "ec_pk": b64(ec_pk_bytes),
+        "ec_private_key": b64(ec_bytes),
+        "server_ephemeral_public_keys": [
+            {"key_id": k.key_id, "public_key": b64(k.public_key)}
+            for k in response.server_ephemeral_public_keys
+        ],
+        "client_ephemeral_keypairs": [
+            {
+                "key_id": i,
+                "public_key": b64(kp.public_key().public_bytes_raw()),
+                "private_key": b64(kp.private_bytes_raw()),
+            }
+            for i, kp in enumerate(client_keypairs)
+        ],
+    }
+    db_set("tokens", tokens)
+    logger.info("Saved token data under token_id=%s to %s", token_id_b64, DB_PATH)
+
+    print(f"Success                      : {response.success}")
+    print(f"Message                      : {response.message}")
+    print(f"Account Identifier           : {response.account_identifier}")
+    print(f"Token ID                     : {token_id_b64}")
+    print(f"Token Ciphertext             : {token_ciphertext_b64}")
+    print(
+        f"Server Ephemeral Public Key  : {b64(response.server_ephemeral_public_key, truncate=40)}"
+    )
+    for key in response.server_ephemeral_public_keys:
+        print(
+            f"Server Key [{key.key_id:>3}]             : {b64(key.public_key, truncate=40)}"
+        )
     return True
 
 
@@ -287,7 +318,6 @@ def cmd_upload_client_keys(args: argparse.Namespace) -> bool:
 COMMANDS = {
     "get-oauth2-url": cmd_get_oauth2_url,
     "exchange-oauth2-code": cmd_exchange_oauth2_code,
-    "upload-client-keys": cmd_upload_client_keys,
 }
 
 
@@ -299,7 +329,6 @@ def build_parser() -> argparse.ArgumentParser:
 Examples:
   python -m tests.client get-oauth2-url --platform gmail
   python -m tests.client exchange-oauth2-code --platform gmail --code AUTH_CODE
-  python -m tests.client upload-client-keys
         """,
     )
 
@@ -321,7 +350,7 @@ Examples:
     p_get = sub.add_parser(
         "get-oauth2-url",
         parents=[shared],
-        help="Fetch and decrypt an OAuth2 authorization URL",
+        help="Encrypt a request and fetch an OAuth2 authorization URL",
     )
     p_get.add_argument(
         "--rest-api",
@@ -341,6 +370,12 @@ Examples:
         help="Exchange an OAuth2 authorization code for tokens",
     )
     p_exchange.add_argument(
+        "--rest-api",
+        default="http://localhost:16000",
+        metavar="URL",
+        help="REST API base URL for server key lookup",
+    )
+    p_exchange.add_argument(
         "--code", required=True, help="Authorization code from the OAuth2 redirect"
     )
     p_exchange.add_argument(
@@ -352,17 +387,6 @@ Examples:
         "--redirect-url",
         metavar="URL",
         help="Redirect URL used in the original request",
-    )
-
-    p_upload = sub.add_parser(
-        "upload-client-keys",
-        parents=[shared],
-        help="Upload 256 client ephemeral public keys",
-    )
-    p_upload.add_argument(
-        "--token-hash",
-        metavar="HASH",
-        help="Token hash base64url (falls back to db.json)",
     )
 
     return root

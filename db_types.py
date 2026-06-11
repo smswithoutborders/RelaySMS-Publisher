@@ -128,3 +128,40 @@ class EncryptedJSON(TypeDecorator):
         data = bytes.fromhex(value)
         plaintext = self._decrypt_func(self._key, data)
         return json.loads(plaintext.decode())
+
+
+class PrivateEncryptedBinary(TypeDecorator):
+    """
+    Mandatory encrypted binary type for private keys.
+    Uses DATA_ENCRYPTION_KEY regardless of other encryption settings.
+    """
+
+    impl = LargeBinary
+    cache_ok = True
+
+    def __init__(self, algorithm: str = "aes-256-gcm"):
+        super().__init__()
+        key_hex = get_configs("DATA_ENCRYPTION_KEY")
+        if not key_hex:
+            raise ValueError("DATA_ENCRYPTION_KEY required for PrivateEncryptedBinary")
+
+        try:
+            self._key = bytes.fromhex(key_hex)
+            if len(self._key) != 32:
+                raise ValueError("DATA_ENCRYPTION_KEY must be 32 bytes (64 hex chars)")
+        except ValueError as e:
+            raise ValueError(f"Invalid DATA_ENCRYPTION_KEY: {e}")
+
+        self._encrypt_func, self._decrypt_func = get_encryption_algorithm(algorithm)
+
+    def process_bind_param(self, value, dialect):
+        """Encrypt binary data before storing."""
+        if value is None:
+            return None
+        return self._encrypt_func(self._key, value)
+
+    def process_result_value(self, value, dialect):
+        """Decrypt binary data after retrieving."""
+        if value is None:
+            return None
+        return self._decrypt_func(self._key, value)

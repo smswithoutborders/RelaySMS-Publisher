@@ -12,8 +12,12 @@ message PublicKey {
 
 // Request message for getting the OAuth2 authorization URL
 //
-// Headers:
-// X-Public-Key = Client ephemeral public key (eC_pk, 32 bytes, base64url encoded)
+// Required headers:
+//   X-Payload-bin:    Encrypted request payload ciphertext (binary)
+//   X-Public-Key-bin: Client ephemeral public key (eC_pk, 32 bytes, binary)
+//   X-Key-ID:         Server identity key ID used for encrypting the payload (string)
+//   X-Nonce-bin:      Request nonce (16 bytes, binary)
+//   X-Timestamp:      Unix timestamp in seconds (string)
 message GetOAuth2AuthorizationUrlRequest {
   // The platform for which the authorization URL is requested
   string platform = 1;
@@ -30,13 +34,9 @@ message GetOAuth2AuthorizationUrlRequest {
 }
 
 // Response message for GetOAuth2AuthorizationUrl
-//
-// Trailing metadata:
-// X-Key-Id    = Server identity key ID (sSk_kid, uint32)
-// X-Public-Key = Server ephemeral public key (eS_pk, 32 bytes, base64url encoded)
 message GetOAuth2AuthorizationUrlResponse {
-  // Encrypted authorization URL ciphertext
-  bytes ciphertext = 1;
+  // The authorization URL to redirect the user to
+  string authorization_url = 1;
   // State parameter for CSRF protection
   string state = 2;
   // PKCE code verifier (auto-generated or echo of the request value)
@@ -52,6 +52,13 @@ message GetOAuth2AuthorizationUrlResponse {
 }
 
 // Request message for exchanging an OAuth2 authorization code for a token
+//
+// Required headers:
+//   X-Payload-bin:    Encrypted request payload ciphertext (binary)
+//   X-Public-Key-bin: Client ephemeral public key (eC_pk, 32 bytes, binary)
+//   X-Key-ID:         Server identity key ID used for encrypting the payload (string)
+//   X-Nonce-bin:      Request nonce (16 bytes, binary)
+//   X-Timestamp:      Unix timestamp in seconds (string)
 message ExchangeOAuth2CodeAndStoreRequest {
   // The platform for which the token exchange is being performed
   string platform = 1;
@@ -63,6 +70,8 @@ message ExchangeOAuth2CodeAndStoreRequest {
   string redirect_url = 4;
   // Optional request identifier for tracking
   string request_identifier = 5;
+  // Client ephemeral public keys to associate with the stored token
+  repeated PublicKey client_ephemeral_public_keys = 6;
 }
 
 // Response message for ExchangeOAuth2CodeAndStore
@@ -73,54 +82,22 @@ message ExchangeOAuth2CodeAndStoreResponse {
   string message = 2;
   // Account identifier associated with the token
   string account_identifier = 3;
-  // Server ephemeral public key for the stored token
-  repeated PublicKey server_ephemeral_public_key = 4;
-  // Hash of the stored token
-  bytes token_hash = 5;
+  // Encrypted token ciphertext
+  bytes token_ciphertext = 4;
+  // Unique identifier of the stored token
+  bytes token_id = 5;
+  // Server ephemeral public key used for encrypting the token ciphertext
+  bytes server_ephemeral_public_key = 6;
+  // Server ephemeral public keys associated with the token
+  repeated PublicKey server_ephemeral_public_keys = 7;
+  // Server identity key ID used for encrypting the token ciphertext
+  uint32 key_id = 8;
 }
 
-// Request message for revoking and deleting an OAuth2 token
-message RevokeAndDeleteOAuth2TokenRequest {
-  // The platform associated with the token
-  string platform = 1;
-  // Hash of the token to revoke and delete
-  bytes token_hash = 2;
-}
-
-// Response message for RevokeAndDeleteOAuth2Token
-message RevokeAndDeleteOAuth2TokenResponse {
-  // A response message
-  string message = 1;
-  // Indicates whether the operation was successful
-  bool success = 2;
-}
-
-// Request message for uploading client ephemeral public keys
-message UploadClientEphemeralPublicKeysRequest {
-  // Client ephemeral public keys to upload
-  repeated PublicKey client_ephemeral_public_key = 1;
-  // Hash of the token associated with the keys
-  bytes token_hash = 2;
-}
-
-// Response message for UploadClientEphemeralPublicKeys
-message UploadClientEphemeralPublicKeysResponse {
-  // A response message
-  string message = 1;
-  // Indicates whether the operation was successful
-  bool success = 2;
-  // Identifier of the token associated with the uploaded keys
-  bytes token_id = 3;
-}
-  
 // Publisher service
 service Publisher {
-  // Get an encrypted OAuth2 authorization URL for a platform
+  // Get an OAuth2 authorization URL for a platform
   rpc GetOAuth2AuthorizationUrl(GetOAuth2AuthorizationUrlRequest) returns (GetOAuth2AuthorizationUrlResponse);
-  // Exchange an OAuth2 authorization code for a token and store it
+  // Exchange an OAuth2 authorization code for a token, store it, and return encrypted token data
   rpc ExchangeOAuth2CodeAndStore(ExchangeOAuth2CodeAndStoreRequest) returns (ExchangeOAuth2CodeAndStoreResponse);
-  // Revoke and delete a stored OAuth2 token
-  rpc RevokeAndDeleteOAuth2Token(RevokeAndDeleteOAuth2TokenRequest) returns (RevokeAndDeleteOAuth2TokenResponse);
-  // Upload client ephemeral public keys associated with a token
-  rpc UploadClientEphemeralPublicKeys(UploadClientEphemeralPublicKeysRequest) returns (UploadClientEphemeralPublicKeysResponse);
 }

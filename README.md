@@ -153,7 +153,7 @@ SENTRY_PROFILES_SAMPLE_RATE=1.0
 
 ## Platform Adapters
 
-Supported platforms are listed in [platforms.json](resources/platforms.json) or via REST API: [https://publisher.smswithoutborders.com/v1/platforms](https://publisher.smswithoutborders.com/v1/platforms)
+Supported platforms can be retrieved via the REST API: [/v1/platforms](https://publisher.smswithoutborders.com/v1/platforms). Server identity keys are available at [/v1/server-keys](https://publisher.smswithoutborders.com/v1/server-keys).
 
 > [!TIP]
 > Each adapter has its own configuration requirements. See:
@@ -174,8 +174,9 @@ Supported platforms are listed in [platforms.json](resources/platforms.json) or 
 
 - [Installation Guide](INSTALL.md) - Detailed setup instructions
 - [gRPC API](docs/grpc.md) - gRPC interface documentation
+- [REST API](docs/rest.md) - REST API reference
 - [Content Specifications](docs/specification.md) - Payload format specs
-- [REST API](https://publisher.smswithoutborders.com/docs) - REST API reference
+- [REST API (Swagger)](https://publisher.smswithoutborders.com/docs) - Interactive API reference
 - [Platform Adapters](platforms/README.md) - Extending functionality
 - [Reliability Testing](docs/reliability_test.md) - Testing guidelines
 

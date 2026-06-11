@@ -1,24 +1,72 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """gRPC Publisher Service V3"""
 
+import threading
+
 import grpc
 import sentry_sdk
+from cachetools import TTLCache
 
 from grpc_services.v3.exchange_oauth2_code import ExchangeOAuth2CodeAndStore
 from grpc_services.v3.get_oauth2_auth_url import GetOAuth2AuthorizationUrl
-from grpc_services.v3.upload_client_keys import UploadClientEphemeralPublicKeys
+from grpc_services.v3.utils import verify_v1_request
 from logutils import get_logger
 from protos.v3 import publisher_pb2_grpc
+from utils import get_configs
 
 logger = get_logger(__name__)
+
+NONCE_TTL_SECONDS = int(get_configs("NONCE_TTL_SECONDS", default_value="600"))
 
 
 class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
     """Publisher gRPC Service V3"""
 
+    _nonce_cache: TTLCache = TTLCache(maxsize=10000, ttl=NONCE_TTL_SECONDS)
+    _nonce_lock: threading.Lock = threading.Lock()
+
     GetOAuth2AuthorizationUrl = GetOAuth2AuthorizationUrl
     ExchangeOAuth2CodeAndStore = ExchangeOAuth2CodeAndStore
-    UploadClientEphemeralPublicKeys = UploadClientEphemeralPublicKeys
+
+    @classmethod
+    def _get_nonce_lock(cls) -> threading.Lock:
+        """Get the nonce lock for thread-safe nonce cache access."""
+        return cls._nonce_lock
+
+    def handle_v1_request_auth(
+        self, context: grpc.ServicerContext, response
+    ) -> tuple[bytes | None, object | None]:
+        """Authenticate an incoming V1 encrypted request."""
+        request_payload, error = verify_v1_request(
+            context=context,
+            nonce_cache=self._nonce_cache,
+            nonce_lock=self._get_nonce_lock(),
+            nonce_cache_ttl=NONCE_TTL_SECONDS,
+        )
+        if error:
+            return None, self.handle_create_grpc_error_response(
+                context=context,
+                response=response,
+                error=error,
+                status_code=grpc.StatusCode.UNAUTHENTICATED,
+                error_prefix="request authentication failed",
+            )
+
+        method_name = request_payload.method_name.decode()
+        if method_name != context.method_name:
+            logger.warning(
+                "Request rejected -- method name %s does not match %s",
+                method_name,
+                context.method_name,
+            )
+            return None, self.handle_create_grpc_error_response(
+                context=context,
+                response=response,
+                error="method name in payload does not match gRPC method",
+                status_code=grpc.StatusCode.UNAUTHENTICATED,
+                error_prefix="request authentication failed",
+            )
+        return request_payload.payload, None
 
     def handle_create_grpc_error_response(
         self,
@@ -61,7 +109,8 @@ class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
     ):
         """Validate required fields on a gRPC request.
 
-        Returns None if all fields are present, or an error response on the first missing field.
+        Returns None if all fields are present,
+        or an error response on the first missing field.
         """
         for field in required_fields:
             if not getattr(request, field, None):

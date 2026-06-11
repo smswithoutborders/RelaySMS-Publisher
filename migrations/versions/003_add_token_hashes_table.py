@@ -21,7 +21,7 @@ def upgrade():
     op.create_table(
         "token_hashes",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("token_hash", sa.LargeBinary(length=16), nullable=False, unique=True),
+        sa.Column("token_hash", sa.LargeBinary(length=32), nullable=False, unique=True),
         sa.Column(
             "token_id",
             sa.Integer(),

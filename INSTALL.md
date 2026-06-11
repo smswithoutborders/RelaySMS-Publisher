@@ -159,12 +159,23 @@ MYSQL_DATABASE=relaysms_publisher
 
 ### Database Encryption
 
-The installer auto-generates `DATABASE_ENCRYPTION_KEY` using `openssl rand -hex 32` and enables it by default. To generate manually:
+The installer auto-generates `DATABASE_ENCRYPTION_KEY`, `DATABASE_FIELD_ENCRYPTION_ENABLED` and `DATA_ENCRYPTION_KEY` using `openssl rand -hex 32`. To generate manually:
 
 ```bash
+DATA_ENCRYPTION_KEY=<64 hex chars>
+
 DATABASE_ENCRYPTION_ENABLED=true
 DATABASE_ENCRYPTION_KEY=<64 hex chars>
+
+DATABASE_FIELD_ENCRYPTION_ENABLED=true
+DATABASE_FIELD_ENCRYPTION_KEY=<64 hex chars>
 ```
+
+> [!NOTE]
+>
+> - The `DATA ENCRYPTION_KEY` is used to encrypt all private keys regardless of the other encryption settings.
+> - The `DATABASE_ENCRYPTION_KEY` is used to encrypt the entire database at rest (SQLite only).
+> - The `DATABASE_FIELD_ENCRYPTION_KEY` is used to encrypt specific sensitive fields in the database.
 
 ### Platform Adapters
 

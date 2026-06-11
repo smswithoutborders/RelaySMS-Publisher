@@ -16,7 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from db import Base
-from db_types import EncryptedBinary
+from db_types import PrivateEncryptedBinary
 
 
 def utc_now() -> datetime.datetime:
@@ -33,7 +33,7 @@ class ServerEphemeralKey(Base):
         Integer, ForeignKey("token_hashes.id", ondelete="CASCADE"), nullable=False
     )
     key_index = Column(Integer, nullable=False)
-    private_key = Column(EncryptedBinary(), nullable=False)
+    private_key = Column(PrivateEncryptedBinary(), nullable=False)
     public_key = Column(LargeBinary(32), nullable=False)
     used = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)

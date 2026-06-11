@@ -21,7 +21,7 @@ class TokenHash(Base):
     __tablename__ = "token_hashes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    token_hash = Column(LargeBinary(16), nullable=False, unique=True)
+    token_hash = Column(LargeBinary(32), nullable=False, unique=True)
     token_id = Column(
         Integer, ForeignKey("tokens.id", ondelete="CASCADE"), nullable=False
     )
@@ -43,12 +43,16 @@ class TokenHash(Base):
     )
 
 
-def create(token_id: int, session: Session) -> TokenHash:
+def create(token_id: int, session: Session) -> tuple[TokenHash, bytes]:
     """Create a new token hash."""
-    token_hash = TokenHash(token_hash=secrets.token_bytes(16), token_id=token_id)
+    import hashlib
+
+    raw_token = secrets.token_bytes(32)
+    token_hash_bytes = hashlib.sha256(raw_token).digest()
+    token_hash = TokenHash(token_hash=token_hash_bytes, token_id=token_id)
     session.add(token_hash)
     session.flush()
-    return token_hash
+    return token_hash, raw_token
 
 
 def get_by_hash(token_hash: bytes, session: Session) -> Optional[TokenHash]:
