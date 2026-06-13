@@ -44,14 +44,9 @@ def get_public_keys() -> list[dict]:
 
 
 def get_public_key(key_id: int) -> dict:
-    """Get a single public key for API response.
-
-    Raises:
-        ValueError: If key_id is out of range or not found.
-    """
+    """Get a single public key for API response."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
-
     with get_session() as s:
         key = (
             s.query(ServerIdentityKey)
@@ -67,11 +62,7 @@ def get_public_key(key_id: int) -> dict:
 
 
 def get_private_key(key_id: int) -> X25519PrivateKey:
-    """Get a private key for cryptographic operations and mark it used.
-
-    Raises:
-        ValueError: If key_id is out of range or not found.
-    """
+    """Fetch a private key for cryptographic operations."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
 
@@ -83,10 +74,24 @@ def get_private_key(key_id: int) -> X25519PrivateKey:
         )
         if not key:
             raise ValueError(f"Server identity key {key_id} not found")
-
-        s.query(ServerIdentityKey).filter(ServerIdentityKey.key_index == key_id).update(
-            {"last_used_at": utc_now(), "used_count": ServerIdentityKey.used_count + 1},
-            synchronize_session=False,
-        )
-
         return X25519PrivateKey.from_private_bytes(key.private_key)
+
+
+def mark_key_used(key_id: int) -> None:
+    """Mark a server identity key as used after a successful operation."""
+    if not (0 <= key_id <= 255):
+        raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
+    with get_session() as s:
+        updated = (
+            s.query(ServerIdentityKey)
+            .filter(ServerIdentityKey.key_index == key_id)
+            .update(
+                {
+                    "last_used_at": utc_now(),
+                    "used_count": ServerIdentityKey.used_count + 1,
+                },
+                synchronize_session=False,
+            )
+        )
+        if not updated:
+            raise ValueError(f"Server identity key {key_id} not found")

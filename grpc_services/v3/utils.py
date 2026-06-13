@@ -1,22 +1,30 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Shared utilities for V3 gRPC service handlers."""
 
+import secrets
 import threading
 import time
 
 import grpc
 from cachetools import TTLCache
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from sqlalchemy import insert
+from sqlalchemy.orm import Session
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
-from models.server_identity_key import get_private_key
+from models.client_ephemeral_key import ClientEphemeralKey
+from models.server_ephemeral_key import ServerEphemeralKey
+from models.server_identity_key import get_private_key, mark_key_used
+from models.token_hash import create as create_token_hash
 from platforms.adapter_manager import AdapterManager
+from protos.v3 import publisher_pb2
 
 logger = get_logger(__name__)
 
 
 def get_oauth2_adapter(platform: str) -> dict:
-    """Resolve the OAuth2 adapter for a platform, raising NotImplementedError if unsupported."""
+    """Resolve the OAuth2 adapter for a platform or raise NotImplementedError."""
     adapter = AdapterManager.get_adapter_path(name=platform.lower(), protocol="oauth2")
     if not adapter:
         raise NotImplementedError(
@@ -26,42 +34,13 @@ def get_oauth2_adapter(platform: str) -> dict:
     return adapter
 
 
-def _resolve_ss_kid(key_id_raw: str) -> tuple[bytes | None, str | None]:
-    try:
-        key_id = int(key_id_raw)
-    except (ValueError, TypeError):
-        logger.warning(
-            "Request rejected -- X-Key-ID is not a valid integer: %r", key_id_raw
-        )
-        return None, "x-key-id is not a valid integer"
-
-    try:
-        private_key = get_private_key(key_id)
-        ss_kid = private_key.private_bytes_raw()
-        return ss_kid, None
-    except ValueError as e:
-        logger.warning(
-            "Request rejected -- key lookup failed for key_id=%s: %s", key_id, e
-        )
-        return None, str(e)
-    except Exception as e:
-        logger.error(
-            "Unexpected error fetching private key for key_id=%s: %s", key_id, e
-        )
-        return None, "failed to retrieve server identity key"
-
-
 def verify_v1_request(
     context: grpc.ServicerContext,
     nonce_cache: TTLCache,
     nonce_lock: threading.Lock,
     nonce_cache_ttl: int,
 ) -> tuple[rrs.ResponsePayload | None, str | None]:
-    """
-    Extract headers from gRPC context, verify timestamp and nonce,
-    resolve the server static key by key ID, and decrypt the request
-    payload using v1_requests_decrypt.
-    """
+    """Verify and decrypt an incoming V1 encrypted request."""
     metadata = dict(context.invocation_metadata())
 
     ciphertext = metadata.get("x-payload-bin")
@@ -83,41 +62,114 @@ def verify_v1_request(
     ]
     if missing:
         reason = f"missing required headers: {', '.join(missing)}"
-        logger.warning("Request rejected -- %s", reason)
+        logger.warning(reason)
         return None, reason
+
+    try:
+        key_id = int(key_id_raw)
+    except (ValueError, TypeError):
+        return None, "x-key-id is not a valid integer"
 
     try:
         timestamp = int(timestamp_raw)
     except ValueError:
-        logger.warning(
-            "Request rejected -- x-timestamp is not a valid integer: %r", timestamp_raw
-        )
         return None, "x-timestamp is not a valid integer"
 
     timestamp_diff = abs(int(time.time()) - timestamp)
     if timestamp_diff > nonce_cache_ttl:
         logger.warning(
-            "Request rejected -- outdated timestamp (diff=%ds, window=%ds)",
-            timestamp_diff,
-            nonce_cache_ttl,
+            "outdated timestamp (diff=%ds, window=%ds)", timestamp_diff, nonce_cache_ttl
         )
         return None, "outdated timestamp detected in request"
 
     with nonce_lock:
         if nonce in nonce_cache:
-            logger.warning("Request rejected -- replayed nonce detected")
+            logger.warning("replayed nonce detected")
             return None, "nonce has already been used"
         nonce_cache[nonce] = True
 
-    ss_kid, key_error = _resolve_ss_kid(key_id_raw)
-    if key_error:
-        return None, key_error
+    try:
+        ss_kid = get_private_key(key_id).private_bytes_raw()
+    except ValueError as e:
+        logger.warning("key lookup failed for key_id=%s: %s", key_id, e)
+        return None, str(e)
 
     try:
-        request_payload = rrs.v1_requests_decrypt(
+        return rrs.v1_requests_decrypt(
             ss_kid=ss_kid, ec_pk=ec_pk, nonce=nonce, ciphertext=ciphertext
-        )
-        return request_payload, None
+        ), None
     except rrs.V1CryptographicError.FailedToDecrypt as e:
-        logger.warning("v1_requests_decrypt failed: %s", e)
+        logger.warning("v1_requests_decrypt failed for key_id=%s: %s", key_id, e)
         return None, "decryption failed"
+
+
+def create_token_pools_and_encrypt(
+    token_id: int, client_ephemeral_public_keys: list, session: Session
+) -> tuple[bytes, int, list[publisher_pb2.PublicKey]]:
+    """
+    Create 256 server and client ephemeral key pools, pick a single random
+    kid_index across all three key roles (ss, es, ec), encrypt the raw token,
+    delete used keys for forward secrecy, and mark the identity key used.
+    """
+    token_hash_obj, raw_token = create_token_hash(token_id=token_id, session=session)
+
+    kid_index = secrets.randbelow(256)
+
+    server_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
+    server_public_keys = [
+        publisher_pb2.PublicKey(key_id=i, public_key=kp.public_key().public_bytes_raw())
+        for i, kp in enumerate(server_keypairs)
+    ]
+
+    session.execute(
+        insert(ServerEphemeralKey),
+        [
+            {
+                "token_hash_id": token_hash_obj.id,
+                "key_index": i,
+                "private_key": kp.private_bytes_raw(),
+                "public_key": kp.public_key().public_bytes_raw(),
+                "used": False,
+            }
+            for i, kp in enumerate(server_keypairs)
+        ],
+    )
+
+    session.execute(
+        insert(ClientEphemeralKey),
+        [
+            {
+                "token_hash_id": token_hash_obj.id,
+                "key_index": k.key_id,
+                "public_key": k.public_key,
+                "used": False,
+            }
+            for k in client_ephemeral_public_keys
+        ],
+    )
+
+    ss_kid_bytes = get_private_key(kid_index).private_bytes_raw()
+    es_kid_bytes = server_keypairs[kid_index].private_bytes_raw()
+    ec_kid_pk_bytes = client_ephemeral_public_keys[kid_index].public_key
+
+    token_ciphertext = rrs.v1_token_encrypt_server(
+        ss_kid=ss_kid_bytes,
+        es_kid=es_kid_bytes,
+        ec_kid_pk=ec_kid_pk_bytes,
+        key_id=kid_index,
+        token=raw_token,
+    )
+
+    session.query(ServerEphemeralKey).filter(
+        ServerEphemeralKey.token_hash_id == token_hash_obj.id,
+        ServerEphemeralKey.key_index == kid_index,
+    ).delete(synchronize_session=False)
+
+    session.query(ClientEphemeralKey).filter(
+        ClientEphemeralKey.token_hash_id == token_hash_obj.id,
+        ClientEphemeralKey.key_index == kid_index,
+    ).delete(synchronize_session=False)
+
+    mark_key_used(kid_index)
+
+    return token_ciphertext, kid_index, server_public_keys

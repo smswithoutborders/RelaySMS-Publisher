@@ -89,6 +89,11 @@ def b64(data: bytes, *, truncate: int = 0) -> str:
     return encoded[:truncate] + "..." if truncate else encoded
 
 
+def b64_decode(data: str) -> bytes:
+    """Decode a URL-safe base64 string."""
+    return base64.urlsafe_b64decode(data)
+
+
 def grpc_call(fn, *args, **kwargs) -> tuple:
     """Wrap a gRPC call, returning (result, None) or (None, error_message)."""
     try:
@@ -205,7 +210,12 @@ def cmd_get_oauth2_url(args: argparse.Namespace) -> bool:
 
 
 def cmd_exchange_oauth2_code(args: argparse.Namespace) -> bool:
-    """Test ExchangeOAuth2CodeAndStore."""
+    """Test ExchangeOAuth2CodeAndStore.
+
+    Generates 256 client ephemeral keypairs, sends them with the exchange
+    request, receives the encrypted token, and decrypts it using
+    v1_token_decrypt_client with the kid_index from the response.
+    """
     logger.info("Platform: %s | Code: %s...", args.platform, args.code[:12])
 
     code_verifier = args.code_verifier
@@ -239,12 +249,11 @@ def cmd_exchange_oauth2_code(args: argparse.Namespace) -> bool:
     ]
 
     try:
-        ec_bytes, ec_pk_bytes, metadata = build_v1_request_metadata(
+        _, _, metadata = build_v1_request_metadata(
             ss_pk_bytes=ss_pk_bytes,
             key_id=key_id,
             method_name="/publisher.v3.Publisher/ExchangeOAuth2CodeAndStore",
         )
-        logger.info("Client ephemeral public key: %s", b64(ec_pk_bytes, truncate=40))
     except Exception as e:
         logger.error("Failed to build request metadata: %s", e)
         return False
@@ -270,43 +279,81 @@ def cmd_exchange_oauth2_code(args: argparse.Namespace) -> bool:
         logger.error("Exchange failed: %s", response.message)
         return False
 
+    kid_index = response.key_id
+
+    try:
+        response_ss_kid_pk = fetch_server_identity_public_key(args.rest_api, kid_index)
+    except Exception as e:
+        logger.error("Failed to fetch server identity public key for decryption: %s", e)
+        return False
+
+    es_kid_pk_entry = next(
+        (k for k in response.server_ephemeral_public_keys if k.key_id == kid_index),
+        None,
+    )
+    if es_kid_pk_entry is None:
+        logger.error(
+            "Server ephemeral public key at kid_index=%d not found in response",
+            kid_index,
+        )
+        return False
+
+    es_kid_pk_bytes = es_kid_pk_entry.public_key
+    ec_kid_private = client_keypairs[kid_index]
+
+    try:
+        raw_token = rrs.v1_token_decrypt_client(
+            ec_kid=ec_kid_private.private_bytes_raw(),
+            ss_kid_pk=response_ss_kid_pk,
+            es_kid_pk=es_kid_pk_bytes,
+            key_id=kid_index,
+            received_payload=response.token_ciphertext,
+        )
+        logger.info("Token decrypted successfully using kid_index=%d", kid_index)
+    except Exception as e:
+        logger.error("Failed to decrypt token ciphertext: %s", e)
+        return False
+
     token_id_b64 = b64(response.token_id)
-    token_ciphertext_b64 = b64(response.token_ciphertext)
+    token_b64 = b64(raw_token)
+
+    remaining_keypairs = [
+        {
+            "key_id": i,
+            "public_key": b64(kp.public_key().public_bytes_raw()),
+            "private_key": b64(kp.private_bytes_raw()),
+        }
+        for i, kp in enumerate(client_keypairs)
+        if i != kid_index
+    ]
 
     tokens = db_get("tokens") or {}
-    tokens[token_ciphertext_b64] = {
+    tokens[token_b64] = {
         "platform": args.platform,
         "account_identifier": response.account_identifier,
+        "key_id": kid_index,
         "token_id": token_id_b64,
-        "ec_pk": b64(ec_pk_bytes),
-        "ec_private_key": b64(ec_bytes),
+        "server_identity_public_key": b64(response_ss_kid_pk),
         "server_ephemeral_public_keys": [
             {"key_id": k.key_id, "public_key": b64(k.public_key)}
             for k in response.server_ephemeral_public_keys
+            if k.key_id != kid_index
         ],
-        "client_ephemeral_keypairs": [
-            {
-                "key_id": i,
-                "public_key": b64(kp.public_key().public_bytes_raw()),
-                "private_key": b64(kp.private_bytes_raw()),
-            }
-            for i, kp in enumerate(client_keypairs)
-        ],
+        "client_ephemeral_keypairs": remaining_keypairs,
     }
     db_set("tokens", tokens)
     logger.info("Saved token data under token_id=%s to %s", token_id_b64, DB_PATH)
 
-    print(f"Success                      : {response.success}")
-    print(f"Message                      : {response.message}")
-    print(f"Account Identifier           : {response.account_identifier}")
-    print(f"Token ID                     : {token_id_b64}")
-    print(f"Token Ciphertext             : {token_ciphertext_b64}")
-    print(
-        f"Server Ephemeral Public Key  : {b64(response.server_ephemeral_public_key, truncate=40)}"
-    )
+    print(f"Success            : {response.success}")
+    print(f"Message            : {response.message}")
+    print(f"Account Identifier : {response.account_identifier}")
+    print(f"Token ID           : {token_id_b64}")
+    print(f"Raw Token          : {b64(raw_token, truncate=40)}")
+    print(f"Key ID / kid_index : {kid_index}")
     for key in response.server_ephemeral_public_keys:
+        used = " (used)" if key.key_id == kid_index else ""
         print(
-            f"Server Key [{key.key_id:>3}]             : {b64(key.public_key, truncate=40)}"
+            f"Server Key [{key.key_id:>3}]  : {b64(key.public_key, truncate=40)}{used}"
         )
     return True
 

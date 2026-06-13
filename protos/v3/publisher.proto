@@ -86,12 +86,10 @@ message ExchangeOAuth2CodeAndStoreResponse {
   bytes token_ciphertext = 4;
   // Unique identifier of the stored token
   bytes token_id = 5;
-  // Server ephemeral public key used for encrypting the token ciphertext
-  bytes server_ephemeral_public_key = 6;
   // Server ephemeral public keys associated with the token
-  repeated PublicKey server_ephemeral_public_keys = 7;
-  // Server identity key ID used for encrypting the token ciphertext
-  uint32 key_id = 8;
+  repeated PublicKey server_ephemeral_public_keys = 6;
+  // Key ID used for encrypting the token ciphertext
+  uint32 key_id = 7;
 }
 
 // Publisher service
