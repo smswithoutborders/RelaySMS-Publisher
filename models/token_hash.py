@@ -29,6 +29,7 @@ class TokenHash(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     last_used_at = Column(DateTime, nullable=True)
 
+    token = relationship("Token", back_populates="token_hash")
     server_keys = relationship(
         "ServerEphemeralKey",
         back_populates="token_hash",

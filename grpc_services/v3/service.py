@@ -9,6 +9,7 @@ from cachetools import TTLCache
 
 from grpc_services.v3.exchange_oauth2_code import ExchangeOAuth2CodeAndStore
 from grpc_services.v3.get_oauth2_auth_url import GetOAuth2AuthorizationUrl
+from grpc_services.v3.revoke_oauth2_token import RevokeOAuth2Token
 from grpc_services.v3.utils import verify_v1_request
 from logutils import get_logger
 from protos.v3 import publisher_pb2_grpc
@@ -27,6 +28,7 @@ class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
 
     GetOAuth2AuthorizationUrl = GetOAuth2AuthorizationUrl
     ExchangeOAuth2CodeAndStore = ExchangeOAuth2CodeAndStore
+    RevokeOAuth2Token = RevokeOAuth2Token
 
     @classmethod
     def _get_nonce_lock(cls) -> threading.Lock:

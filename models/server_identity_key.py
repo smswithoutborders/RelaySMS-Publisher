@@ -3,9 +3,11 @@
 
 import base64
 import datetime
+from typing import Optional
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from sqlalchemy import Column, DateTime, Integer, LargeBinary
+from sqlalchemy.orm import Session
 
 from db import Base, get_session
 from db_types import PrivateEncryptedBinary
@@ -61,37 +63,46 @@ def get_public_key(key_id: int) -> dict:
         }
 
 
-def get_private_key(key_id: int) -> X25519PrivateKey:
+def get_private_key(key_id: int, session: Optional[Session] = None) -> X25519PrivateKey:
     """Fetch a private key for cryptographic operations."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
 
-    with get_session() as s:
-        key = (
+    def fetch(s):
+        k = (
             s.query(ServerIdentityKey)
             .filter(ServerIdentityKey.key_index == key_id)
             .first()
         )
-        if not key:
+        if not k:
             raise ValueError(f"Server identity key {key_id} not found")
-        return X25519PrivateKey.from_private_bytes(key.private_key)
+        return k
+
+    if session:
+        key = fetch(session)
+    else:
+        with get_session() as s:
+            key = fetch(s)
+
+    return X25519PrivateKey.from_private_bytes(key.private_key)
 
 
-def mark_key_used(key_id: int) -> None:
+def mark_key_used(key_id: int, session: Session) -> None:
     """Mark a server identity key as used after a successful operation."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
-    with get_session() as s:
-        updated = (
-            s.query(ServerIdentityKey)
-            .filter(ServerIdentityKey.key_index == key_id)
-            .update(
-                {
-                    "last_used_at": utc_now(),
-                    "used_count": ServerIdentityKey.used_count + 1,
-                },
-                synchronize_session=False,
-            )
+
+    updated = (
+        session.query(ServerIdentityKey)
+        .filter(ServerIdentityKey.key_index == key_id)
+        .update(
+            {
+                "last_used_at": utc_now(),
+                "used_count": ServerIdentityKey.used_count + 1,
+            },
+            synchronize_session=False,
         )
-        if not updated:
-            raise ValueError(f"Server identity key {key_id} not found")
+    )
+
+    if not updated:
+        raise ValueError(f"Server identity key {key_id} not found")

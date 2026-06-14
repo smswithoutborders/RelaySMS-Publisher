@@ -92,10 +92,35 @@ message ExchangeOAuth2CodeAndStoreResponse {
   uint32 key_id = 7;
 }
 
+// Request message for revoking an OAuth2 token
+//
+// Required headers:
+//   X-Payload-bin:    Encrypted request payload ciphertext (binary)
+//   X-Public-Key-bin: Client ephemeral public key (eC_pk, 32 bytes, binary)
+//   X-Key-ID:         Server identity key ID used for encrypting the payload (string)
+//   X-Nonce-bin:      Request nonce (16 bytes, binary)
+//   X-Timestamp:      Unix timestamp in seconds (string)
+message RevokeOAuth2TokenRequest {
+  // The unique identifier of the stored token
+  bytes token_id = 1;
+  // The key ID used for encrypting the token in the payload
+  uint32 key_id = 2;
+}
+
+// Response message for RevokeOAuth2Token
+message RevokeOAuth2TokenResponse {
+  // Indicates if the token revocation and deletion was successful
+  bool success = 1;
+  // A response message
+  string message = 2;
+}
+
 // Publisher service
 service Publisher {
   // Get an OAuth2 authorization URL for a platform
   rpc GetOAuth2AuthorizationUrl(GetOAuth2AuthorizationUrlRequest) returns (GetOAuth2AuthorizationUrlResponse);
   // Exchange an OAuth2 authorization code for a token, store it, and return encrypted token data
   rpc ExchangeOAuth2CodeAndStore(ExchangeOAuth2CodeAndStoreRequest) returns (ExchangeOAuth2CodeAndStoreResponse);
+  // Revoke and delete a stored OAuth2 token
+  rpc RevokeOAuth2Token(RevokeOAuth2TokenRequest) returns (RevokeOAuth2TokenResponse);
 }

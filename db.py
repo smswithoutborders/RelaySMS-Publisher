@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Generator, Optional
 from urllib.parse import quote, quote_plus
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool, StaticPool
@@ -33,7 +33,7 @@ def _make_sqlcipher3_creator(db_path: str, key: str):
     import sqlcipher3
 
     def connect():
-        conn = sqlcipher3.connect(db_path, check_same_thread=False)
+        conn = sqlcipher3.connect(db_path, check_same_thread=False, timeout=30)
         conn.execute("PRAGMA cipher_compatibility = 4;")
         conn.execute(f"PRAGMA key = \"x'{key}'\";")
 
@@ -179,11 +179,18 @@ def _create_engine() -> Engine:
             engine = create_engine(
                 url,
                 echo=False,
-                connect_args={"check_same_thread": False},
+                connect_args={"check_same_thread": False, "timeout": 30},
                 poolclass=QueuePool,
                 pool_size=5,
                 pool_pre_ping=True,
             )
+
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.close()
 
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))

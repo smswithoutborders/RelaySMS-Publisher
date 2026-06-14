@@ -7,6 +7,7 @@
 - [Version 3 API](#version-3-api)
   - [v3: Get OAuth2 Authorization URL](#v3-get-oauth2-authorization-url)
   - [v3: Exchange OAuth2 Code and Store Token](#v3-exchange-oauth2-code-and-store-token)
+  - [v3: Revoke and Delete OAuth2 Token](#v3-revoke-and-delete-oauth2-token)
 - [Version 2 API](#version-2-api)
   - [v2: Get OAuth2 Authorization URL](#v2-get-oauth2-authorization-url)
   - [v2: Exchange OAuth2 Code and Store Token](#v2-exchange-oauth2-code-and-store-token)
@@ -218,6 +219,43 @@ grpcurl -plaintext \
   ]
 }
 EOF
+```
+
+---
+
+### v3: Revoke and Delete OAuth2 Token
+
+Revokes and deletes an OAuth2 token from the vault using the token ID and the key ID used for its encryption.
+
+**Request:** `RevokeOAuth2TokenRequest`
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| token_id | bytes | Yes | Unique identifier for the stored token |
+| key_id | uint32 | Yes | Key index used for encrypting the token |
+
+**Response:** `RevokeOAuth2TokenResponse`
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| success | bool | Operation success |
+| message | string | Response message |
+
+**Example:**
+
+```bash
+grpcurl -plaintext \
+  -H 'x-payload-bin: <encrypted_payload_binary>' \
+  -H 'x-public-key-bin: <client_pk_binary>' \
+  -H 'x-key-id: <key_id>' \
+  -H 'x-nonce-bin: <nonce_binary>' \
+  -H 'x-timestamp: <timestamp>' \
+  -d '{
+    "token_id": "<token_id_binary>",
+    "key_id": 123
+  }' \
+  -proto protos/v3/publisher.proto \
+  <your_host>:<your_port> publisher.v3.Publisher/RevokeOAuth2Token
 ```
 
 ---
