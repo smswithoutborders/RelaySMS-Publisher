@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""gRPC Publisher Service V3"""
+"""PublisherServiceV3 gRPC service handler."""
 
 import threading
 
@@ -8,8 +8,11 @@ import sentry_sdk
 from cachetools import TTLCache
 
 from grpc_services.v3.exchange_oauth2_code import ExchangeOAuth2CodeAndStore
+from grpc_services.v3.exchange_pnba_code import ExchangePNBACodeAndStore
 from grpc_services.v3.get_oauth2_auth_url import GetOAuth2AuthorizationUrl
+from grpc_services.v3.get_pnba_code import GetPNBACode
 from grpc_services.v3.revoke_oauth2_token import RevokeOAuth2Token
+from grpc_services.v3.revoke_pnba_token import RevokePNBAToken
 from grpc_services.v3.utils import verify_v1_request
 from logutils import get_logger
 from protos.v3 import publisher_pb2_grpc
@@ -21,7 +24,7 @@ NONCE_TTL_SECONDS = int(get_configs("NONCE_TTL_SECONDS", default_value="600"))
 
 
 class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
-    """Publisher gRPC Service V3"""
+    """PublisherServiceV3 gRPC service handler."""
 
     _nonce_cache: TTLCache = TTLCache(maxsize=10000, ttl=NONCE_TTL_SECONDS)
     _nonce_lock: threading.Lock = threading.Lock()
@@ -29,6 +32,9 @@ class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
     GetOAuth2AuthorizationUrl = GetOAuth2AuthorizationUrl
     ExchangeOAuth2CodeAndStore = ExchangeOAuth2CodeAndStore
     RevokeOAuth2Token = RevokeOAuth2Token
+    GetPNBACode = GetPNBACode
+    ExchangePNBACodeAndStore = ExchangePNBACodeAndStore
+    RevokePNBAToken = RevokePNBAToken
 
     @classmethod
     def _get_nonce_lock(cls) -> threading.Lock:

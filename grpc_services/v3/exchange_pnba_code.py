@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""ExchangeOAuth2CodeAndStore gRPC service handler."""
+"""ExchangePNBACodeAndStore gRPC service handler."""
 
 import grpc
 
 from db import get_session
 from grpc_services.v3.utils import (
     create_token_pools_and_encrypt,
-    get_oauth2_adapter,
+    get_pnba_adapter,
     validate_client_ephemeral_public_keys,
 )
 from logutils import get_logger
@@ -17,10 +17,10 @@ from protos.v3 import publisher_pb2
 logger = get_logger(__name__)
 
 
-def ExchangeOAuth2CodeAndStore(self, request, context):
-    """Handles ExchangeOAuth2CodeAndStore."""
+def ExchangePNBACodeAndStore(self, request, context):
+    """Handles ExchangePNBACodeAndStore."""
 
-    response = publisher_pb2.ExchangeOAuth2CodeAndStoreResponse
+    response = publisher_pb2.ExchangePNBACodeAndStoreResponse
 
     _, auth_error = self.handle_v1_request_auth(context, response)
     if auth_error:
@@ -30,7 +30,12 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
         context,
         request,
         response,
-        ["platform", "authorization_code", "client_ephemeral_public_keys"],
+        [
+            "platform",
+            "phone_number",
+            "authorization_code",
+            "client_ephemeral_public_keys",
+        ],
     )
     if invalid:
         return invalid
@@ -47,20 +52,30 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
                 grpc.StatusCode.INVALID_ARGUMENT,
             )
 
-        adapter = get_oauth2_adapter(request.platform)
+        adapter = get_pnba_adapter(request.platform)
 
-        pipe = AdapterIPCHandler.invoke(
-            adapter_path=adapter["path"],
-            venv_path=adapter["venv_path"],
-            method="exchange_code_and_fetch_user_info",
-            params={
-                "code": request.authorization_code,
-                "code_verifier": request.code_verifier or None,
-                "redirect_url": request.redirect_url or None,
-                "request_identifier": request.request_identifier or None,
-                "base_path": adapter["assets_path"],
-            },
-        )
+        params = {
+            "code": request.authorization_code,
+            "phone_number": request.phone_number,
+            "base_path": adapter["assets_path"],
+            "password": request.password or None,
+            "request_identifier": request.request_identifier or None,
+        }
+
+        if params.get("password"):
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="validate_password_and_fetch_user_info",
+                params=params,
+            )
+        else:
+            pipe = AdapterIPCHandler.invoke(
+                adapter_path=adapter["path"],
+                venv_path=adapter["venv_path"],
+                method="validate_code_and_fetch_user_info",
+                params=params,
+            )
 
         if pipe.get("error"):
             return self.handle_create_grpc_error_response(
@@ -72,13 +87,19 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
             )
 
         result = pipe["result"]
+        if result.get("two_step_verification_enabled"):
+            return response(
+                success=True,
+                two_step_verification_enabled=True,
+                message="two-steps verification is enabled and a password is required",
+            )
 
         with get_session() as s:
             token = create_token(
                 platform=request.platform.lower(),
                 token_data={
                     "account_id": result["userinfo"]["account_identifier"],
-                    "token": result["token"],
+                    "token": result["userinfo"]["account_identifier"],
                 },
                 session=s,
             )

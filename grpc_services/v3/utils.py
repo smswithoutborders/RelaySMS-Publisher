@@ -67,6 +67,17 @@ def get_oauth2_adapter(platform: str) -> dict:
     return adapter
 
 
+def get_pnba_adapter(platform: str) -> dict:
+    """Resolve the PNBA adapter for a platform or raise NotImplementedError."""
+    adapter = AdapterManager.get_adapter_path(name=platform.lower(), protocol="pnba")
+    if not adapter:
+        raise NotImplementedError(
+            f"Platform '{platform.lower()}' with protocol 'pnba' is not supported. "
+            "Contact the developers for implementation status."
+        )
+    return adapter
+
+
 def verify_v1_request(
     context: grpc.ServicerContext,
     nonce_cache: TTLCache,

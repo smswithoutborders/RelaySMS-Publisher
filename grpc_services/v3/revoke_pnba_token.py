@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""RevokeOAuth2Token gRPC service handler."""
+"""RevokePNBAToken gRPC service handler."""
 
 import hashlib
 import secrets
@@ -7,7 +7,7 @@ import secrets
 import grpc
 
 from db import get_session
-from grpc_services.v3.utils import get_keys_for_decryption, get_oauth2_adapter
+from grpc_services.v3.utils import get_keys_for_decryption, get_pnba_adapter
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
 from models.server_identity_key import mark_key_used as mark_ss_key_used
@@ -17,9 +17,9 @@ from protos.v3 import publisher_pb2
 logger = get_logger(__name__)
 
 
-def RevokeOAuth2Token(self, request, context):
-    """Handles RevokeOAuth2Token."""
-    response = publisher_pb2.RevokeOAuth2TokenResponse
+def RevokePNBAToken(self, request, context):
+    """Handles RevokePNBAToken."""
+    response = publisher_pb2.RevokePNBATokenResponse
 
     payload_bin, auth_error = self.handle_v1_request_auth(context, response)
     if auth_error:
@@ -34,9 +34,7 @@ def RevokeOAuth2Token(self, request, context):
     try:
         with get_session() as s:
             token, token_hash_obj, ss_kid, es_kid, ec_kid_pk = get_keys_for_decryption(
-                token_id_bytes=request.token_id,
-                key_id=request.key_id,
-                session=s,
+                token_id_bytes=request.token_id, key_id=request.key_id, session=s
             )
 
             try:
@@ -65,14 +63,14 @@ def RevokeOAuth2Token(self, request, context):
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
-            adapter = get_oauth2_adapter(token.platform)
+            adapter = get_pnba_adapter(token.platform)
 
             pipe = AdapterIPCHandler.invoke(
                 adapter_path=adapter["path"],
                 venv_path=adapter["venv_path"],
-                method="revoke_token",
+                method="invalidate_session",
                 params={
-                    "token": token.token_data["token"],
+                    "phone_number": token.token_data["token"],
                     "base_path": adapter["assets_path"],
                 },
             )
