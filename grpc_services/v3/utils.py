@@ -43,7 +43,7 @@ def get_keys_for_decryption(
     if not token_hash_obj:
         raise ValueError("Token hash not found")
 
-    ss_kid = get_private_key(key_id).private_bytes_raw()
+    ss_kid = get_private_key(key_id, session).private_bytes_raw()
 
     se_key = token_hash_obj.server_keys.filter_by(key_index=key_id).first()
     if not se_key:
@@ -227,3 +227,54 @@ def create_token_pools_and_encrypt(
     mark_key_used(kid_index, session)
 
     return token_ciphertext, kid_index, server_public_keys
+
+
+def sync_token_pools(
+    token_hash_obj: TokenHash, client_ephemeral_public_keys: list, session: Session
+) -> list[publisher_pb2.PublicKey]:
+    """
+    Clear old server and client ephemeral key pools, create 256 new ones,
+    and save them all to the database.
+    """
+    session.query(ServerEphemeralKey).filter(
+        ServerEphemeralKey.token_hash_id == token_hash_obj.id
+    ).delete()
+    session.query(ClientEphemeralKey).filter(
+        ClientEphemeralKey.token_hash_id == token_hash_obj.id
+    ).delete()
+
+    server_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
+
+    server_public_keys = [
+        publisher_pb2.PublicKey(key_id=i, public_key=kp.public_key().public_bytes_raw())
+        for i, kp in enumerate(server_keypairs)
+    ]
+
+    session.execute(
+        insert(ServerEphemeralKey),
+        [
+            {
+                "token_hash_id": token_hash_obj.id,
+                "key_index": i,
+                "private_key": kp.private_bytes_raw(),
+                "public_key": server_public_keys[i].public_key,
+                "used": False,
+            }
+            for i, kp in enumerate(server_keypairs)
+        ],
+    )
+
+    session.execute(
+        insert(ClientEphemeralKey),
+        [
+            {
+                "token_hash_id": token_hash_obj.id,
+                "key_index": k.key_id,
+                "public_key": k.public_key,
+                "used": False,
+            }
+            for k in client_ephemeral_public_keys
+        ],
+    )
+
+    return server_public_keys

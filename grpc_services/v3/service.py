@@ -13,6 +13,7 @@ from grpc_services.v3.get_oauth2_auth_url import GetOAuth2AuthorizationUrl
 from grpc_services.v3.get_pnba_code import GetPNBACode
 from grpc_services.v3.revoke_oauth2_token import RevokeOAuth2Token
 from grpc_services.v3.revoke_pnba_token import RevokePNBAToken
+from grpc_services.v3.sync_keys import SyncKeys
 from grpc_services.v3.utils import verify_v1_request
 from logutils import get_logger
 from protos.v3 import publisher_pb2_grpc
@@ -35,6 +36,7 @@ class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
     GetPNBACode = GetPNBACode
     ExchangePNBACodeAndStore = ExchangePNBACodeAndStore
     RevokePNBAToken = RevokePNBAToken
+    SyncKeys = SyncKeys
 
     @classmethod
     def _get_nonce_lock(cls) -> threading.Lock:

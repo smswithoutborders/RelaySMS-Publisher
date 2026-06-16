@@ -534,6 +534,131 @@ def cmd_revoke_pnba_token(args: argparse.Namespace) -> bool:
     return True
 
 
+def cmd_sync_keys(args: argparse.Namespace) -> bool:
+    """Sync client and server key pools for a token."""
+    tokens = db_get("tokens") or {}
+    if not tokens:
+        logger.error("no tokens found")
+        return False
+
+    if args.token:
+        account_id = next(
+            (ident for ident, d in tokens.items() if d.get("token") == args.token), None
+        )
+        if not account_id:
+            logger.error("token not found")
+            return False
+    else:
+        account_id = select_token_interactively(tokens)
+
+    if not account_id:
+        return False
+
+    token_data = tokens[account_id]
+    remaining_keypairs = token_data.get("client_ephemeral_keypairs", [])
+    if not remaining_keypairs:
+        logger.error("no client keypairs remaining for %s", account_id)
+        return False
+
+    kp = secrets.choice(remaining_keypairs)
+    kid_index = kp["key_id"]
+
+    es_entry = next(
+        (
+            k
+            for k in token_data["server_ephemeral_public_keys"]
+            if k["key_id"] == kid_index
+        ),
+        None,
+    )
+    if not es_entry:
+        logger.error("es_kid_pk not found for kid_index=%d", kid_index)
+        return False
+
+    try:
+        ss_kid_pk = fetch_server_identity_public_key(args.rest_api, kid_index)
+    except Exception as e:
+        logger.error("failed to fetch ss_kid_pk for kid_index=%d: %s", kid_index, e)
+        return False
+
+    try:
+        encrypted_token = rrs.v1_token_encrypt_client(
+            ec_kid=b64d(kp["private_key"]),
+            ss_kid_pk=ss_kid_pk,
+            es_kid_pk=b64d(es_entry["public_key"]),
+            key_id=kid_index,
+            token=b64d(token_data["token"]),
+        )
+    except Exception as e:
+        logger.error("v1_token_encrypt_client failed: %s", e)
+        return False
+
+    try:
+        _, _, metadata = build_v1_request_metadata(
+            rest_api=args.rest_api,
+            method_name="/publisher.v3.Publisher/SyncKeys",
+            payload=encrypted_token,
+        )
+    except Exception as e:
+        logger.error("build_v1_request_metadata failed: %s", e)
+        return False
+
+    logger.info(
+        "syncing keys for %s platform=%s kid_index=%d",
+        account_id,
+        token_data["platform"],
+        kid_index,
+    )
+
+    new_client_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
+
+    with grpc_channel(args.host, args.port, args.tls) as channel:
+        stub = publisher_pb2_grpc.PublisherStub(channel)
+        response, err = grpc_call(
+            stub.SyncKeys,
+            publisher_pb2.SyncKeysRequest(
+                token_id=b64d(token_data["token_id"]),
+                key_id=kid_index,
+                client_ephemeral_public_keys=[
+                    publisher_pb2.PublicKey(
+                        key_id=i, public_key=nkp.public_key().public_bytes_raw()
+                    )
+                    for i, nkp in enumerate(new_client_keypairs)
+                ],
+            ),
+            metadata=metadata,
+        )
+        if err:
+            logger.error(err)
+            return False
+
+    if not response.success:
+        logger.error("sync failed: %s", response.message)
+        return False
+
+    tokens[account_id].update(
+        {
+            "server_ephemeral_public_keys": [
+                {"key_id": k.key_id, "public_key": b64(k.public_key)}
+                for k in response.server_ephemeral_public_keys
+            ],
+            "client_ephemeral_keypairs": [
+                {
+                    "key_id": i,
+                    "public_key": b64(nkp.public_key().public_bytes_raw()),
+                    "private_key": b64(nkp.private_bytes_raw()),
+                }
+                for i, nkp in enumerate(new_client_keypairs)
+            ],
+        }
+    )
+    db_set("tokens", tokens)
+
+    print(f"Success    : {response.success}")
+    print(f"Message    : {response.message}")
+    return True
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -545,6 +670,7 @@ COMMANDS = {
     "get-pnba-code": cmd_get_pnba_code,
     "exchange-pnba-code": cmd_exchange_pnba_code,
     "revoke-pnba-token": cmd_revoke_pnba_token,
+    "sync-keys": cmd_sync_keys,
 }
 
 
@@ -560,6 +686,7 @@ Examples:
   python -m tests.client get-pnba-code --platform telegram --phone-number +123456789
   python -m tests.client exchange-pnba-code --platform telegram --phone-number +123456789 --code 12345
   python -m tests.client revoke-pnba-token
+  python -m tests.client sync-keys
         """,
     )
 
@@ -628,6 +755,17 @@ Examples:
         "--token",
         metavar="TOKEN",
         help="Raw token (base64) to revoke, omit for interactive prompt",
+    )
+
+    p_sync = sub.add_parser(
+        "sync-keys",
+        parents=[shared],
+        help="Sync client and server key pools for a token",
+    )
+    p_sync.add_argument(
+        "--token",
+        metavar="TOKEN",
+        help="Raw token (base64) to sync, omit for interactive prompt",
     )
 
     return root

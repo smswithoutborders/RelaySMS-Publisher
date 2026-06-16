@@ -1,58 +1,103 @@
-# Test Configuration
+# gRPC Flow Test CLI Client
 
-## Instructions
-
-1. Copy the `test_config_template.ini` file to `test_config.ini`:
-
-   ```sh
-   cp tests/test_config_template.ini tests/test_config.ini
-   ```
-
-2. Update the `test_config.ini` file with the appropriate values for your environment.
-
-3. The `test_config.ini` file is ignored by git and should not be committed to the repository.
-
-# Running Tests
+This directory contains a CLI test tool `tests/client.py` designed to test the gRPC flows of the publisher service.
 
 ## Installation
 
-First, ensure you have all the necessary dependencies installed. You can install the required packages using pip:
+Ensure you have all the necessary dependencies installed by running:
 
 ```sh
 pip install -r requirements.txt
-pip install -r requirements-test.txt
 ```
 
-## Running Tests
+## Running the CLI Client
 
-To run the tests, you can use the following command:
+To run the CLI tool, use python with the module syntax:
 
 ```sh
-pytest --env=<environment>
+python -m tests.client [COMMAND] [ARGS]
 ```
 
-Replace `<environment>` with one of the following options: `local`, `staging`, or `prod`.
+### Shared Options
 
-For example, to run the tests in the local environment:
+The following arguments can be passed to configure the connection:
+
+* `--host`: gRPC server host (default: `127.0.0.1`)
+* `--port`: gRPC server port (default: `6000`)
+* `--tls`: Use TLS for the connection
+* `--rest-api`: REST API base URL (default: `http://localhost:16000`)
+* `--platform`, `-p`: Platform name (e.g. `gmail`, `telegram`)
+* `--phone-number`: Phone number for PNBA
+* `--request-identifier`: Optional request identifier
+
+---
+
+## Available Commands
+
+### 1. Get OAuth2 Authorization URL
+
+Generates and displays the authorization URL for starting the OAuth2 flow.
 
 ```sh
-pytest --env=local
+python -m tests.client get-oauth2-url --platform gmail
 ```
 
-## Running Isolated Test Suites
+### 2. Exchange OAuth2 Code
 
-To run a specific test file, use the following command:
+Exchanges the authorization code for access and refresh tokens, decrypts the token, and stores the session data.
 
 ```sh
-pytest --env=<environment> path/to/test_file.py
+python -m tests.client exchange-oauth2-code --platform gmail --code <AUTH_CODE>
 ```
 
-For example, to run the tests in `test_publishing.py` in the local environment:
+### 3. Sync Keys
+
+Rotates client and server ephemeral key pools for a token. It uploads 256 new client ephemeral public keys, gets 256 new server public keys.
 
 ```sh
-pytest --env=local tests/test_publishing.py
+python -m tests.client sync-keys
 ```
 
-## Additional Resources
+> [!NOTE]
+> If multiple tokens are stored, you will be prompted interactively to select one
+> or you can specify the token using the `--token` argument.
 
-For more information on running tests with pytest, refer to the [pytest documentation](https://docs.pytest.org/en/stable/how-to/usage.html).
+### 4. Revoke OAuth2 Token
+
+Revokes a stored OAuth2 token.
+
+```sh
+python -m tests.client revoke-oauth2-token
+```
+
+> [!NOTE]
+> If multiple tokens are stored, you will be prompted interactively to select one
+> or you can specify the token using the `--token` argument.
+
+### 5. Get PNBA Code
+
+Requests a passcode/OTP for Phone Number-Based Authentication (PNBA).
+
+```sh
+python -m tests.client get-pnba-code --platform telegram --phone-number +123456789
+```
+
+### 6. Exchange PNBA Code
+
+Exchanges the PNBA OTP code for a token, decrypts it, and stores the session data.
+
+```sh
+python -m tests.client exchange-pnba-code --platform telegram --phone-number +123456789 --code <OTP_CODE>
+```
+
+### 7. Revoke PNBA Token
+
+Revokes a stored PNBA token.
+
+```sh
+python -m tests.client revoke-pnba-token
+```
+
+> [!NOTE]
+> If multiple tokens are stored, you will be prompted interactively to select one
+> or you can specify the token using the `--token` argument.

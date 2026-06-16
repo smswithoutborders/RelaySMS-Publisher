@@ -175,10 +175,7 @@ Supported platforms can be retrieved via the REST API: [/v1/platforms](https://p
 - [Installation Guide](INSTALL.md) - Detailed setup instructions
 - [gRPC API](docs/grpc.md) - gRPC interface documentation
 - [REST API](docs/rest.md) - REST API reference
-- [Content Specifications](docs/specification.md) - Payload format specs
-- [REST API (Swagger)](https://publisher.smswithoutborders.com/docs) - Interactive API reference
 - [Platform Adapters](platforms/README.md) - Extending functionality
-- [Reliability Testing](docs/reliability_test.md) - Testing guidelines
 
 ## Testing
 
