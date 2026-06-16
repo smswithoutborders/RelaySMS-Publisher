@@ -91,6 +91,8 @@ def ExchangePNBACodeAndStore(self, request, context):
             return response(
                 success=True,
                 two_step_verification_enabled=True,
+                platform=adapter["name"],
+                cat_id=adapter["cat_id"],
                 message="two-steps verification is enabled and a password is required",
             )
 
@@ -120,6 +122,8 @@ def ExchangePNBACodeAndStore(self, request, context):
             token_id=token.token_id,
             server_ephemeral_public_keys=server_public_keys,
             key_id=kid_index,
+            platform=adapter["name"],
+            cat_id=adapter["cat_id"],
         )
 
     except NotImplementedError as exc:

@@ -99,6 +99,8 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
             token_id=token.token_id,
             server_ephemeral_public_keys=server_public_keys,
             key_id=kid_index,
+            platform=adapter["name"],
+            cat_id=adapter["cat_id"],
         )
 
     except NotImplementedError as exc:

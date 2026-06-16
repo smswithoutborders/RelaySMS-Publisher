@@ -252,6 +252,8 @@ class AdapterManager:
                 "path": manifest.get("path"),
                 "venv_path": manifest.get("venv_path"),
                 "assets_path": manifest.get("assets_path"),
+                "cat_id": int(manifest.get("cat_id")),
+                "name": manifest.get("name"),
             }
 
         logger.warning(

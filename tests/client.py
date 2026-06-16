@@ -159,7 +159,8 @@ def cmd_exchange_oauth2_code(args: argparse.Namespace) -> bool:
 
     tokens = db_get("tokens") or {}
     tokens[response.account_identifier] = {
-        "platform": args.platform,
+        "platform": response.platform,
+        "cat_id": response.cat_id,
         "account_identifier": response.account_identifier,
         "token": b64(raw_token),
         "token_id": b64(response.token_id),
@@ -402,7 +403,8 @@ def cmd_exchange_pnba_code(args: argparse.Namespace) -> bool:
 
     tokens = db_get("tokens") or {}
     tokens[response.account_identifier] = {
-        "platform": args.platform,
+        "platform": response.platform,
+        "cat_id": response.cat_id,
         "account_identifier": response.account_identifier,
         "token": b64(raw_token),
         "token_id": b64(response.token_id),
