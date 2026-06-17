@@ -128,6 +128,13 @@ def build_v1_request_metadata(
     )
 
 
+def fetch_platform_info(rest_api_url: str, platform: str) -> dict | None:
+    url = f"{rest_api_url}/v1/platforms/{platform}"
+    resp = requests.get(url)
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ---------------------------------------------------------------------------
 # Interactive
 # ---------------------------------------------------------------------------

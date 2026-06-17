@@ -3,13 +3,9 @@
 
 import datetime
 import secrets
-from typing import Any
-
-import datetime
-import secrets
 from typing import Any, Optional
 
-from sqlalchemy import Column, DateTime, Integer, LargeBinary, String
+from sqlalchemy import Column, DateTime, Integer, LargeBinary, SmallInteger, String
 from sqlalchemy.orm import Session, relationship
 
 from db import Base
@@ -31,7 +27,11 @@ class Token(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     token_id = Column(LargeBinary(4), nullable=False, unique=True)
     platform = Column(String(100), nullable=False, index=True)
-    token_data = Column(EncryptedJSON(), nullable=False)
+    cat_id = Column(SmallInteger(), nullable=False)
+    protocol = Column(String(100), nullable=False)
+    token_data = Column(
+        EncryptedJSON(), nullable=False
+    )  # {"account_id": "...", "token": {...}}
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -43,11 +43,19 @@ class Token(Base):
     )
 
 
-def create(platform: str, token_data: dict[str, Any], session: Session) -> Token:
+def create(
+    platform: str,
+    cat_id: int,
+    protocol: str,
+    token_data: dict[str, Any],
+    session: Session,
+) -> Token:
     """Create and persist a new token."""
     token = Token(
         token_id=secrets.token_bytes(4),
         platform=platform,
+        cat_id=cat_id,
+        protocol=protocol,
         token_data=token_data,
     )
     session.add(token)

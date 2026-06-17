@@ -1,16 +1,27 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import base64
 import json
+import struct
 from pathlib import Path as PathLib
 from typing import List
 
 from fastapi import APIRouter, HTTPException, Path, Request
 from fastapi.responses import HTMLResponse
 
-from api_schemas import OAuthClientMetadata, PlatformManifest, ServerStaticPublicKey
+from db import get_session
+from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
 from models.server_identity_key import get_public_key, get_public_keys
 from platforms.adapter_manager import AdapterManager
+from rest_services.v1.schemas import (
+    OAuthClientMetadata,
+    PlatformManifest,
+    PublishContentRequest,
+    PublishContentResponse,
+    ServerStaticPublicKey,
+)
+from rest_services.v1.services import publish_content
 
 logger = get_logger(__name__)
 
@@ -185,3 +196,45 @@ async def oauth_callback(
     </html>
     """
     return HTMLResponse(content=html_content)
+
+
+@router.post("/publications")
+def create_publications(body: PublishContentRequest) -> PublishContentResponse:
+    """Handle message publication requests."""
+    try:
+        payload_raw = base64.b64decode(body.text)
+    except Exception as exc:
+        logger.error("failed to decode base64 payload: %s", exc)
+        raise HTTPException(
+            status_code=400, detail="Invalid base64-encoded text field"
+        ) from exc
+
+    try:
+        payload = rrs.V1Payloads.deserialize(payload_raw)
+    except Exception as exc:
+        logger.error("failed to deserialize payload: %s", exc)
+        raise HTTPException(
+            status_code=400, detail="Failed to deserialize payload"
+        ) from exc
+
+    k_id = payload.get_kid()
+    t_id = payload.get_t_id()
+    t_id_bytes = struct.pack("<I", t_id)
+    len_att = payload.get_len_att()
+    sess_id = payload.get_sess_id()
+
+    if sess_id is None:
+        with get_session() as db:
+            publish_content(
+                token_id=t_id_bytes,
+                key_id=k_id,
+                len_att=len_att,
+                content_ciphertext=payload.get_payload(),
+                session=db,
+            )
+    else:
+        raise HTTPException(
+            status_code=501, detail="Multi-segment payloads not yet supported"
+        )
+
+    return PublishContentResponse(message="Content published successfully")

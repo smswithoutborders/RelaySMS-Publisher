@@ -3,7 +3,9 @@
 """CLI tool for testing gRPC flows."""
 
 import argparse
+import json
 import secrets
+import struct
 import sys
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
@@ -16,6 +18,7 @@ from tests.helpers import (
     build_v1_request_metadata,
     db_get,
     db_set,
+    fetch_platform_info,
     fetch_server_identity_public_key,
     grpc_call,
     grpc_channel,
@@ -34,7 +37,11 @@ logger = get_logger("test_cli")
 def cmd_get_oauth2_url(args: argparse.Namespace) -> bool:
     """Fetch an OAuth2 authorization URL."""
     logger.info(
-        "platform=%s grpc=%s:%d tls=%s", args.platform, args.host, args.port, args.tls
+        "platform=%s | grpc=%s:%d | tls=%s",
+        args.platform,
+        args.host,
+        args.port,
+        args.tls,
     )
 
     try:
@@ -88,7 +95,7 @@ def cmd_exchange_oauth2_code(args: argparse.Namespace) -> bool:
         "code_verifier", ""
     )
 
-    logger.info("platform=%s code=%s...", args.platform, args.code[:12])
+    logger.info("platform=%s | code=%s...", args.platform, args.code[:12])
 
     client_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
 
@@ -292,7 +299,7 @@ def cmd_revoke_oauth2_token(args: argparse.Namespace) -> bool:
 
 def cmd_get_pnba_code(args: argparse.Namespace) -> bool:
     """Request a PNBA code."""
-    logger.info("platform=%s phone_number=%s", args.platform, args.phone_number)
+    logger.info("platform=%s | phone_number=%s", args.platform, args.phone_number)
 
     try:
         _, _, metadata = build_v1_request_metadata(
@@ -326,7 +333,7 @@ def cmd_get_pnba_code(args: argparse.Namespace) -> bool:
 def cmd_exchange_pnba_code(args: argparse.Namespace) -> bool:
     """Exchange a PNBA code, decrypt the token, and store session data."""
     logger.info(
-        "platform=%s phone=%s code=%s", args.platform, args.phone_number, args.code
+        "platform=%s | phone=%s | code=%s", args.platform, args.phone_number, args.code
     )
 
     client_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
@@ -659,6 +666,167 @@ def cmd_sync_keys(args: argparse.Namespace) -> bool:
     return True
 
 
+def cmd_send(args: argparse.Namespace) -> bool:
+    """Encrypt and publish a message to any platform via the REST publications endpoint."""
+    import requests
+
+    platform = args.platform.lower()
+    tokens = db_get("tokens") or {}
+    if not tokens:
+        logger.error("no tokens found")
+        return False
+
+    platform_tokens = {
+        ident: d
+        for ident, d in tokens.items()
+        if d.get("platform", "").lower() == platform
+    }
+    if not platform_tokens:
+        logger.error("no tokens found for platform %r.", platform)
+        return False
+
+    if args.token:
+        account_id = next(
+            (
+                ident
+                for ident, d in platform_tokens.items()
+                if d.get("token") == args.token
+            ),
+            None,
+        )
+        if not account_id:
+            logger.error("token not found for platform %r", platform)
+            return False
+    else:
+        account_id = select_token_interactively(platform_tokens)
+
+    if not account_id:
+        return False
+
+    token_data = tokens[account_id]
+    remaining_keypairs = token_data.get("client_ephemeral_keypairs", [])
+    if not remaining_keypairs:
+        logger.error("no client keypairs remaining for %s.", account_id)
+        return False
+
+    kp = secrets.choice(remaining_keypairs)
+    kid_index = kp["key_id"]
+
+    es_entry = next(
+        (
+            k
+            for k in token_data["server_ephemeral_public_keys"]
+            if k["key_id"] == kid_index
+        ),
+        None,
+    )
+    if not es_entry:
+        logger.error("es_kid_pk not found for kid_index=%d", kid_index)
+        return False
+
+    try:
+        ss_kid_pk = fetch_server_identity_public_key(args.rest_api, kid_index)
+    except Exception as e:
+        logger.error("failed to fetch ss_kid_pk for kid_index=%d: %s", kid_index, e)
+        return False
+
+    try:
+        platform_info = fetch_platform_info(args.rest_api, platform)
+    except Exception as e:
+        logger.error("failed to fetch platform info for %r: %s", platform, e)
+        return False
+
+    logger.info(
+        "platform=%s | shortcode=%s | cat_id=%s",
+        platform_info["name"],
+        platform_info["shortcode"],
+        platform_info["cat_id"],
+    )
+
+    try:
+        cat_id = rrs.v1_content_category_from_u8(platform_info["cat_id"])
+        content_bytes = rrs.V1ContentsContainer(
+            cat_id=cat_id,
+            body=args.body.encode(),
+            to=args.to.encode() if args.to else None,
+            subject=args.subject.encode() if args.subject else None,
+            attachment=None,
+        ).serialize()
+    except Exception as e:
+        logger.error("V1ContentsContainer.serialize failed: %s", e)
+        return False
+
+    try:
+        encrypted_content = rrs.v1_platform_publisher_encrypt(
+            ec_kid=b64d(kp["private_key"]),
+            ss_kid_pk=ss_kid_pk,
+            es_kid_pk=b64d(es_entry["public_key"]),
+            key_id=kid_index,
+            plaintext=content_bytes,
+        )
+    except Exception as e:
+        logger.error("v1_platform_publisher_encrypt failed: %s", e)
+        return False
+
+    token_id_bytes = b64d(token_data["token_id"])
+    t_id_int = struct.unpack("<I", token_id_bytes)[0]
+
+    try:
+        payload_bytes = rrs.V1Payloads(
+            contents=encrypted_content,
+            k_id=kid_index,
+            len_att=0,
+            t_id=t_id_int,
+            sess_id=None,
+        ).serialize()
+    except Exception as e:
+        logger.error("V1Payloads.serialize failed: %s", e)
+        return False
+
+    url = f"{args.rest_api}/v1/publications"
+    body = {"address": args.address, "text": b64(payload_bytes)}
+
+    if args.dry_run:
+        print("--- dry run: would POST to", url)
+        print(json.dumps(body, indent=2))
+        return True
+
+    logger.info(
+        "publishing platform=%s | phone_number=%s | account=%s | kid_index=%d",
+        platform,
+        args.phone_number,
+        account_id,
+        kid_index,
+    )
+
+    try:
+        resp = requests.post(url, json=body, timeout=30)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        logger.error("HTTP error: %s -- %s", e, resp.text)
+        return False
+    except Exception as e:
+        logger.error("request failed: %s", e)
+        return False
+
+    token_data["client_ephemeral_keypairs"] = [
+        k for k in token_data["client_ephemeral_keypairs"] if k["key_id"] != kid_index
+    ]
+    token_data["server_ephemeral_public_keys"] = [
+        k
+        for k in token_data["server_ephemeral_public_keys"]
+        if k["key_id"] != kid_index
+    ]
+
+    db_set("tokens", tokens)
+
+    result = resp.json()
+    print(f"Status  : {resp.status_code}")
+    print(f"Error : {result.get('error', '')}")
+    print(f"Message : {result.get('message', '')}")
+    return True
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -671,6 +839,7 @@ COMMANDS = {
     "exchange-pnba-code": cmd_exchange_pnba_code,
     "revoke-pnba-token": cmd_revoke_pnba_token,
     "sync-keys": cmd_sync_keys,
+    "send": cmd_send,
 }
 
 
@@ -687,6 +856,8 @@ Examples:
   python -m tests.client exchange-pnba-code --platform telegram --phone-number +123456789 --code 12345
   python -m tests.client revoke-pnba-token
   python -m tests.client sync-keys
+  python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "Test"
+  python -m tests.client send --platform telegram --address +237123456789 --to +237123456789 --body "Hi there"
         """,
     )
 
@@ -766,6 +937,44 @@ Examples:
         "--token",
         metavar="TOKEN",
         help="Raw token (base64) to sync, omit for interactive prompt",
+    )
+
+    p_send = sub.add_parser(
+        "send",
+        parents=[shared],
+        help="Publish an encrypted message to any platform via the REST API",
+    )
+    p_send.add_argument(
+        "--address",
+        required=True,
+        metavar="MSISDN",
+        help="Sender's phone number (e.g. +237123456789)",
+    )
+    p_send.add_argument(
+        "--to",
+        metavar="ADDRESS",
+        help="Recipient address (email or phone). Required for email/message platforms.",
+    )
+    p_send.add_argument(
+        "--subject",
+        metavar="TEXT",
+        help="Message subject (optional, email platforms only)",
+    )
+    p_send.add_argument(
+        "--body",
+        required=True,
+        metavar="TEXT",
+        help="Message body",
+    )
+    p_send.add_argument(
+        "--token",
+        metavar="TOKEN",
+        help="Raw token (base64) to use, omit for interactive prompt",
+    )
+    p_send.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the request body instead of sending it",
     )
 
     return root

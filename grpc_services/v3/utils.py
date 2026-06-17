@@ -30,10 +30,10 @@ logger = get_logger(__name__)
 
 def get_keys_for_decryption(
     token_id_bytes: bytes, key_id: int, session: Session
-) -> tuple[Token, TokenHash, bytes, bytes, bytes]:
+) -> tuple[Token, TokenHash, bytes, bytes, bytes, bytes]:
     """
     Fetch token and all necessary keys for decryption.
-    Returns (Token, TokenHash, ss_kid, es_kid, ec_kid_pk).
+    Returns (Token, TokenHash, ss_kid, es_kid, es_kid_pk, ec_kid_pk).
     """
     token = get_by_token_id(token_id_bytes, session)
     if not token:
@@ -53,7 +53,14 @@ def get_keys_for_decryption(
     if not ce_key:
         raise ValueError(f"Client ephemeral key not found for kid {key_id}")
 
-    return token, token_hash_obj, ss_kid, se_key.private_key, ce_key.public_key
+    return (
+        token,
+        token_hash_obj,
+        ss_kid,
+        se_key.private_key,
+        se_key.public_key,
+        ce_key.public_key,
+    )
 
 
 def get_oauth2_adapter(platform: str) -> dict:

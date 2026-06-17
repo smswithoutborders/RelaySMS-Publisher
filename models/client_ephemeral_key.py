@@ -13,7 +13,7 @@ from sqlalchemy import (
     LargeBinary,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Session, relationship
 
 from db import Base
 
@@ -46,3 +46,10 @@ class ClientEphemeralKey(Base):
         ),
         Index("ix_client_ephemeral_keys_token_hash_id_used", "token_hash_id", "used"),
     )
+
+
+def delete_by_index(token_hash_id: int, key_index: int, session: Session) -> None:
+    """Delete a client ephemeral key by token_hash_id and key_index."""
+    session.query(ClientEphemeralKey).filter_by(
+        token_hash_id=token_hash_id, key_index=key_index
+    ).delete()

@@ -2,12 +2,16 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
-from api_v1 import router
 from db import dispose_engine
 from platforms.adapter_manager import AdapterManager
+from rest_services.v1.routes import router as v1_router
 from server_identity_keys import initialize_server_identity_keys
+from utils import get_logger
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -20,4 +24,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.include_router(router, prefix="/v1")
+app.include_router(v1_router, prefix="/v1")
+
+
+@app.exception_handler(ValueError)
+@app.exception_handler(NotImplementedError)
+async def error_exception_handler(request: Request, exc: ValueError):
+    return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.exception(exc)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Something went wrong. Please try again later."},
+    )

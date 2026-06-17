@@ -76,6 +76,8 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
         with get_session() as s:
             token = create_token(
                 platform=request.platform.lower(),
+                cat_id=adapter["cat_id"],
+                protocol="oauth2",
                 token_data={
                     "account_id": result["userinfo"]["account_identifier"],
                     "token": result["token"],

@@ -99,6 +99,8 @@ def ExchangePNBACodeAndStore(self, request, context):
         with get_session() as s:
             token = create_token(
                 platform=request.platform.lower(),
+                cat_id=adapter["cat_id"],
+                protocol="pnba",
                 token_data={
                     "account_id": result["userinfo"]["account_identifier"],
                     "token": result["userinfo"]["account_identifier"],

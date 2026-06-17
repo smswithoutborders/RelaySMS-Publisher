@@ -3,7 +3,7 @@
 import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PublicationsCreate(BaseModel):
@@ -60,3 +60,20 @@ class OAuthClientMetadata(BaseModel):
 class ServerStaticPublicKey(BaseModel):
     key_id: int
     public_key: str
+
+
+class PublishContentRequest(BaseModel):
+    address: str = Field(
+        ...,
+        description="Sender phone number in E.164 format",
+        examples=["+12025550123"],
+    )
+    text: str = Field(
+        ...,
+        description="Base64-encoded SMS payload",
+    )
+
+
+class PublishContentResponse(BaseModel):
+    message: Optional[str] = None
+    error: Optional[str] = None

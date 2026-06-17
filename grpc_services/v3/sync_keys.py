@@ -50,7 +50,7 @@ def SyncKeys(self, request, context):
             )
 
         with get_session() as s:
-            _, token_hash_obj, ss_kid, es_kid, ec_kid_pk = get_keys_for_decryption(
+            _, token_hash_obj, ss_kid, es_kid, _, ec_kid_pk = get_keys_for_decryption(
                 token_id_bytes=request.token_id, key_id=request.key_id, session=s
             )
 

@@ -33,10 +33,10 @@ def RevokeOAuth2Token(self, request, context):
 
     try:
         with get_session() as s:
-            token, token_hash_obj, ss_kid, es_kid, ec_kid_pk = get_keys_for_decryption(
-                token_id_bytes=request.token_id,
-                key_id=request.key_id,
-                session=s,
+            token, token_hash_obj, ss_kid, es_kid, _, ec_kid_pk = (
+                get_keys_for_decryption(
+                    token_id_bytes=request.token_id, key_id=request.key_id, session=s
+                )
             )
 
             try:

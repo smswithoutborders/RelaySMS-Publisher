@@ -23,6 +23,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("token_id", sa.LargeBinary(4), nullable=False, unique=True),
         sa.Column("platform", sa.String(length=100), nullable=False),
+        sa.Column("cat_id", sa.SmallInteger(), nullable=False),
+        sa.Column("protocol", sa.String(length=100), nullable=False),
         sa.Column("token_data", sa.Text(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
