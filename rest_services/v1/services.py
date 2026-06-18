@@ -17,6 +17,7 @@ from models.server_ephemeral_key import (
     delete_by_index as delete_server_key_by_index,
 )
 from models.server_identity_key import mark_key_used as mark_ss_kid_used
+from models.token import update_token_data
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 
 logger = get_logger(__name__)
@@ -83,7 +84,7 @@ def publish_content(
             received_payload=content_ciphertext,
         )
     except Exception as exc:
-        logger.error("decryption failed for key_id=%d: %s", key_id, exc)
+        logger.exception("decryption failed for key_id=%d: %s", key_id, exc)
         raise ValueError("failed to decrypt content") from exc
 
     _consume_used_keys(
@@ -93,13 +94,13 @@ def publish_content(
     try:
         cat_id = rrs.v1_content_category_from_u8(token.cat_id)
     except Exception as exc:
-        logger.error("unknown cat_id=%r on token: %s", token.cat_id, exc)
+        logger.exception("unknown cat_id=%r on token: %s", token.cat_id, exc)
         raise
 
     try:
         content = rrs.V1ContentsContainer.deserialize(content_bytes, cat_id, len_att)
     except Exception as exc:
-        logger.error("content deserialization failed: %s", exc)
+        logger.exception("content deserialization failed: %s", exc)
         raise ValueError("failed to deserialize content") from exc
 
     if token.protocol == "oauth2":
@@ -135,3 +136,17 @@ def publish_content(
     if pipe.get("error"):
         logger.error("failed to publish content: %s", pipe["error"])
         raise ValueError("failed to publish content")
+
+    result = pipe.get("result", {})
+
+    if token.protocol == "oauth2":
+        refreshed_token = result.get("refreshed_token") or {}
+        new_refresh_token = refreshed_token.get("refresh_token")
+        old_refresh_token = token.token_data["token"].get("refresh_token")
+        if new_refresh_token and new_refresh_token != old_refresh_token:
+            update_token_data(
+                token, {**token.token_data, "token": refreshed_token}, session
+            )
+            logger.info(
+                "Successfully refreshed OAuth2 token for platform %r", token.platform
+            )

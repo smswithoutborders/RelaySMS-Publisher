@@ -100,11 +100,33 @@ Retrieve OAuth2 client metadata for platforms that require dynamic registration 
 
 ---
 
+### 6. Publish Content
+
+Submit an encrypted payload for publication to a target platform.
+
+**URL:** `/publications`
+**Method:** `POST`
+
+**Request Body:** `PublishContentRequest`
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| address | string | Sender phone number in E.164 format (e.g., `+12025550123`) |
+| text | string | Base64-encoded serialized payload |
+
+**Response Body:** `PublishContentResponse`
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| message | string | (Optional) Confirmation message on success |
+| error | string | (Optional) Error description on failure |
+
 ## Error Handling
 
 The API returns standard HTTP status codes:
 
 - `200 OK`: Request successful.
+- `400 Bad Request`: Invalid request parameters or payload.
 - `404 Not Found`: Platform or Key not found.
 - `422 Unprocessable Entity`: Validation error in request parameters.
 - `500 Internal Server Error`: Unexpected server error.

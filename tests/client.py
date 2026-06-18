@@ -737,10 +737,11 @@ def cmd_send(args: argparse.Namespace) -> bool:
         return False
 
     logger.info(
-        "platform=%s | shortcode=%s | cat_id=%s",
+        "platform=%s | shortcode=%s | cat_id=%s | key_id=%d",
         platform_info["name"],
         platform_info["shortcode"],
         platform_info["cat_id"],
+        kid_index,
     )
 
     try:
@@ -753,7 +754,7 @@ def cmd_send(args: argparse.Namespace) -> bool:
             attachment=None,
         ).serialize()
     except Exception as e:
-        logger.error("V1ContentsContainer.serialize failed: %s", e)
+        logger.exception("V1ContentsContainer.serialize failed: %s", e)
         return False
 
     try:
@@ -765,7 +766,7 @@ def cmd_send(args: argparse.Namespace) -> bool:
             plaintext=content_bytes,
         )
     except Exception as e:
-        logger.error("v1_platform_publisher_encrypt failed: %s", e)
+        logger.exception("v1_platform_publisher_encrypt failed: %s", e)
         return False
 
     token_id_bytes = b64d(token_data["token_id"])
@@ -778,13 +779,13 @@ def cmd_send(args: argparse.Namespace) -> bool:
             len_att=0,
             t_id=t_id_int,
             sess_id=None,
-        ).serialize()
+        ).serialize_without_attachment()
     except Exception as e:
-        logger.error("V1Payloads.serialize failed: %s", e)
+        logger.exception("V1Payloads.serialize_without_attachment failed: %s", e)
         return False
 
     url = f"{args.rest_api}/v1/publications"
-    body = {"address": args.address, "text": b64(payload_bytes)}
+    body = {"address": args.address, "text": b64(payload_bytes, urlsafe=False)}
 
     if args.dry_run:
         print("--- dry run: would POST to", url)

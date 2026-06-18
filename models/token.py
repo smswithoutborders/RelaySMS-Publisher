@@ -66,3 +66,13 @@ def create(
 def get_by_token_id(token_id: bytes, session: Session) -> Optional[Token]:
     """Fetch a token by its public token_id."""
     return session.query(Token).filter(Token.token_id == token_id).first()
+
+
+def update_token_data(
+    token: Token, new_token_data: dict[str, Any], session: Session
+) -> Token:
+    """Update the token_data of an existing token."""
+    token.token_data = new_token_data
+    session.add(token)
+    session.flush()
+    return token

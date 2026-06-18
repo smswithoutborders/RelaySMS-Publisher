@@ -7,7 +7,7 @@ from pathlib import Path as PathLib
 from typing import List
 
 from fastapi import APIRouter, HTTPException, Path, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from db import get_session
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
@@ -209,32 +209,34 @@ def create_publications(body: PublishContentRequest) -> PublishContentResponse:
             status_code=400, detail="Invalid base64-encoded text field"
         ) from exc
 
-    try:
-        payload = rrs.V1Payloads.deserialize(payload_raw)
-    except Exception as exc:
-        logger.error("failed to deserialize payload: %s", exc)
-        raise HTTPException(
-            status_code=400, detail="Failed to deserialize payload"
-        ) from exc
+    payload_type = rrs.v1_get_payload_type(payload_raw)
 
-    k_id = payload.get_kid()
-    t_id = payload.get_t_id()
-    t_id_bytes = struct.pack("<I", t_id)
-    len_att = payload.get_len_att()
-    sess_id = payload.get_sess_id()
+    match payload_type:
+        case rrs.V1PayloadsTypes.WITHOUT_ATTACHMENT:
+            try:
+                payload = rrs.V1Payloads.deserialize_without_attachment(payload_raw)
+            except Exception as exc:
+                logger.exception("failed to deserialize payload: %s", exc)
+                raise HTTPException(
+                    status_code=400, detail="Failed to deserialize payload"
+                ) from exc
 
-    if sess_id is None:
-        with get_session() as db:
-            publish_content(
-                token_id=t_id_bytes,
-                key_id=k_id,
-                len_att=len_att,
-                content_ciphertext=payload.get_payload(),
-                session=db,
+            k_id = payload.get_kid()
+            t_id = payload.get_t_id()
+            t_id_bytes = struct.pack("<I", t_id)
+            len_att = payload.get_len_att()
+
+            with get_session() as db:
+                publish_content(
+                    token_id=t_id_bytes,
+                    key_id=k_id,
+                    len_att=len_att,
+                    content_ciphertext=payload.get_content(),
+                    session=db,
+                )
+        case _:
+            raise ValueError(
+                f"Payload type {payload_type!r} not yet supported. Contact the developers for implementation status."
             )
-    else:
-        raise HTTPException(
-            status_code=501, detail="Multi-segment payloads not yet supported"
-        )
 
     return PublishContentResponse(message="Content published successfully")

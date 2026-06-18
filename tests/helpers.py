@@ -48,8 +48,12 @@ def db_set(key: str, value) -> None:
 # ---------------------------------------------------------------------------
 
 
-def b64(data: bytes, *, truncate: int = 0) -> str:
-    encoded = base64.urlsafe_b64encode(data).decode()
+def b64(data: bytes, *, urlsafe: bool = True, truncate: int = 0) -> str:
+    encoded = (
+        base64.urlsafe_b64encode(data).decode()
+        if urlsafe
+        else base64.b64encode(data).decode()
+    )
     return encoded[:truncate] + "..." if truncate else encoded
 
 

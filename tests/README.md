@@ -61,7 +61,7 @@ python -m tests.client sync-keys
 > [!NOTE]
 > If multiple tokens are stored, you will be prompted interactively to select one
 > or you can specify the token using the `--token` argument.
-
+>
 ### 4. Revoke OAuth2 Token
 
 Revokes a stored OAuth2 token.
@@ -73,7 +73,7 @@ python -m tests.client revoke-oauth2-token
 > [!NOTE]
 > If multiple tokens are stored, you will be prompted interactively to select one
 > or you can specify the token using the `--token` argument.
-
+>
 ### 5. Get PNBA Code
 
 Requests a passcode/OTP for Phone Number-Based Authentication (PNBA).
@@ -90,6 +90,12 @@ Exchanges the PNBA OTP code for a token, decrypts it, and stores the session dat
 python -m tests.client exchange-pnba-code --platform telegram --phone-number +123456789 --code <OTP_CODE>
 ```
 
+If the account has two-step verification enabled, re-run with `--password`:
+
+```sh
+python -m tests.client exchange-pnba-code --platform telegram --phone-number +123456789 --code <OTP_CODE> --password <PASSWORD>
+```
+
 ### 7. Revoke PNBA Token
 
 Revokes a stored PNBA token.
@@ -101,3 +107,29 @@ python -m tests.client revoke-pnba-token
 > [!NOTE]
 > If multiple tokens are stored, you will be prompted interactively to select one
 > or you can specify the token using the `--token` argument.
+
+### 8. Send
+
+Encrypts a message and publishes it to a platform via the REST `POST /v1/publications` endpoint. Constructs and serializes a `V1Payloads` payload, encrypts the content, and POSTs it with the sender's phone number as the `address`.
+
+```sh
+python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "Test message"
+```
+
+```sh
+python -m tests.client send --platform telegram --address +237123456789 --to +237123456789 --body "Hi there"
+```
+
+**Arguments:**
+
+| Argument | Required | Description |
+| :--- | :--- | :--- |
+| `--address` | Yes | Sender's phone number in E.164 format (e.g. `+237123456789`) |
+| `--body` | Yes | Message body |
+| `--to` | No | Recipient address (email or phone number). Required for email/messaging platforms. |
+| `--subject` | No | Message subject. Email platforms only. |
+| `--token` | No | Raw token (base64) to use. Omit for interactive prompt. |
+| `--dry-run` | No | Print the request body instead of sending it. |
+
+> [!NOTE]
+> Each send consumes one ephemeral keypair. The used keypair is removed from local state after a successful publish. Run `sync-keys` to replenish the pool when it runs low.
