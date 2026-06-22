@@ -1,4 +1,4 @@
-FROM python:3.14.1-slim AS builder
+FROM python:3.14.6-slim AS builder
 
 WORKDIR /publisher
 
@@ -28,7 +28,7 @@ ENV PATH="/venv/bin:${PATH}"
 RUN make build-setup
 
 
-FROM python:3.14.1-slim
+FROM python:3.14.6-slim
 
 WORKDIR /publisher
 
