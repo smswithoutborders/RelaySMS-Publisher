@@ -1,113 +1,92 @@
-"""
-This program is free software: you can redistribute it under the terms
-of the GNU General Public License, v. 3.0. If a copy of the GNU General
-Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
-"""
+# SPDX-License-Identifier: GPL-3.0-only
 
-import os
 import json
 import subprocess
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 from logutils import get_logger
 
 logger = get_logger(__name__)
 
 
 class AdapterIPCHandler:
-    """
-    Handles inter-process communication (IPC) with an adapter script using JSON over pipes.
-    """
+    """Handles secure inter-process communication with adapter scripts via JSON pipes."""
 
     @staticmethod
-    def invoke(adapter_path, venv_path, method, params=None):
-        """
-        Invokes the adapter using JSON over pipes and subprocess IPC.
+    def invoke(
+        adapter_path: str, venv_path: str, method: str, params: Optional[dict] = None
+    ) -> Dict[str, Any]:
+        """Invokes an adapter method securely using JSON payload piping over standard IO."""
+        a_base = Path(adapter_path).resolve()
+        v_base = Path(venv_path).resolve()
 
-        Args:
-            adapter_path (str): Path to the adapter script.
-            venv_path (str): Path to the virtual environment containing the Python executable.
-            method (str): The method to invoke on the adapter.
-            params (dict): Parameters to pass to the adapter method.
-                Defaults to an empty dictionary if None.
+        exec_name = "bin/python3"
+        python_exec = v_base / exec_name
+        adapter_main = a_base / "main.py"
 
-        Returns:
-            dict: A dictionary containing 'result' and 'error' keys.
+        if not python_exec.is_file():
+            raise FileNotFoundError(f"[!] Python executable missing at: {python_exec}")
+        if not adapter_main.is_file():
+            raise FileNotFoundError(
+                f"[!] Adapter script entry point missing at: {adapter_main}"
+            )
 
-        Raises:
-            FileNotFoundError: If the Python executable is not found.
-            RuntimeError: For subprocess failures or invalid adapter responses.
-        """
-        logger.debug(
-            "Invoking adapter: %s, Method: %s, Params: %s",
-            os.path.basename(adapter_path),
-            method,
-            params,
-        )
-        python_exec = os.path.join(venv_path, "bin", "python3")
-        adapter_main_path = os.path.join(adapter_path, "main.py")
-        if not os.path.isfile(python_exec):
-            raise FileNotFoundError(f"Python executable not found at: {python_exec}")
-
-        command = [python_exec, adapter_main_path]
+        command = [str(python_exec), str(adapter_main)]
         payload = json.dumps({"method": method, "params": params or {}})
-        logger.debug("Command: %s", " ".join(command))
+
         logger.info(
-            "Starting subprocess for: %s on %s", method, os.path.basename(adapter_path)
+            "[+] Starting subprocess for method '%s' on %s", method, a_base.name
         )
+        process = None
 
         try:
-            with subprocess.Popen(
+            process = subprocess.Popen(
                 command,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
-            ) as process:
-                logger.info("Subprocess started for: %s", method)
+            )
 
-                stdout, stderr = process.communicate(input=payload, timeout=60)
-                logger.debug(
-                    "\n\n=========== SUBPROCESS STREAM OUTPUT ==========="
-                    "\n%s\n"
-                    "=========== SUBPROCESS STREAM OUTPUT ===========\n\n",
-                    stderr.strip(),
-                )
-                logger.debug("Subprocess response: %s", stdout.strip())
+            stdout, stderr = process.communicate(input=payload, timeout=60)
 
-                if process.returncode != 0:
-                    logger.error(
-                        "Subprocess failed. Code: %s, Error: %s",
-                        process.returncode,
-                        stderr.strip(),
-                    )
-                    raise RuntimeError(
-                        f"Adapter subprocess exited with error:\n{stderr.strip()}"
-                    )
+            if stderr.strip():
+                for line in stderr.strip().splitlines():
+                    if line.strip():
+                        logger.debug("[--> SUBPROCESS] %s", line.strip())
 
-                if not stdout.strip():
-                    logger.error("No response from adapter.")
-                    return {"result": None, "error": "No response from adapter."}
+            if process.returncode != 0:
+                logger.error("[!] Subprocess failed with code %s", process.returncode)
+                raise RuntimeError(stderr.strip())
 
-                try:
-                    response = json.loads(stdout.strip())
-                except json.JSONDecodeError:
-                    logger.error("Invalid JSON: %s", stdout.strip())
-                    return {
-                        "result": None,
-                        "error": f"Invalid JSON from adapter: {stdout.strip()}",
-                    }
-                logger.info(
-                    "Completed: %s on %s", method, os.path.basename(adapter_path)
-                )
-                return {
-                    "result": response.get("result"),
-                    "error": response.get("error"),
-                }
+            clean_stdout = stdout.strip()
+            if not clean_stdout:
+                logger.error("[!] Empty output response from adapter.")
+                return {"result": None, "error": "Empty response from adapter."}
+
+            try:
+                response = json.loads(clean_stdout)
+            except json.JSONDecodeError:
+                logger.error("[!] Malformed JSON response received: %s", clean_stdout)
+                return {"result": None, "error": "Invalid JSON response payload."}
+
+            logger.info("[+] Completed method '%s' execution successfully", method)
+            return {"result": response.get("result"), "error": response.get("error")}
 
         except subprocess.TimeoutExpired as exc:
-            process.kill()
-            logger.error("Invocation timed out.")
+            if process:
+                process.kill()
+                process.communicate()
+            logger.error("[!] Subprocess execution timed out.")
             raise RuntimeError("Adapter invocation timed out.") from exc
-        except Exception:
-            process.kill()
+
+        except Exception as e:
+            if process:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            logger.error("[!] Unexpected failure during IPC invocation loop: %s", e)
             raise

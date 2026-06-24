@@ -22,7 +22,7 @@ from models.server_identity_key import get_private_key, mark_key_used
 from models.token import Token, get_by_token_id
 from models.token_hash import TokenHash
 from models.token_hash import create as create_token_hash
-from platforms.adapter_manager import AdapterManager
+from platforms.adapter_manager import AdapterManager, PlatformManifest
 from protos.v3 import publisher_pb2
 
 logger = get_logger(__name__)
@@ -63,26 +63,26 @@ def get_keys_for_decryption(
     )
 
 
-def get_oauth2_adapter(platform: str) -> dict:
+def get_oauth2_adapter(manager: AdapterManager, platform: str) -> PlatformManifest:
     """Resolve the OAuth2 adapter for a platform or raise NotImplementedError."""
-    adapter = AdapterManager.get_adapter_path(name=platform.lower(), protocol="oauth2")
+    adapter = manager.list_adapters(name=platform.lower(), proto_id=0)
     if not adapter:
         raise NotImplementedError(
             f"Platform '{platform.lower()}' with protocol 'oauth2' is not supported. "
             "Contact the developers for implementation status."
         )
-    return adapter
+    return adapter[0]
 
 
-def get_pnba_adapter(platform: str) -> dict:
+def get_pnba_adapter(manager: AdapterManager, platform: str) -> PlatformManifest:
     """Resolve the PNBA adapter for a platform or raise NotImplementedError."""
-    adapter = AdapterManager.get_adapter_path(name=platform.lower(), protocol="pnba")
+    adapter = manager.list_adapters(name=platform.lower(), proto_id=1)
     if not adapter:
         raise NotImplementedError(
             f"Platform '{platform.lower()}' with protocol 'pnba' is not supported. "
             "Contact the developers for implementation status."
         )
-    return adapter
+    return adapter[0]
 
 
 def verify_v1_request(

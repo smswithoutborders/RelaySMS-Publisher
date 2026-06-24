@@ -19,6 +19,7 @@ from models.server_ephemeral_key import (
 from models.server_identity_key import mark_key_used as mark_ss_kid_used
 from models.token import update_token_data
 from platforms.adapter_ipc_handler import AdapterIPCHandler
+from platforms.adapter_manager import AdapterManager
 
 logger = get_logger(__name__)
 
@@ -68,6 +69,7 @@ def publish_content(
     len_att: int,
     content_ciphertext: bytes,
     session: Session,
+    adapter_manager: AdapterManager,
 ) -> None:
     """Decrypt and publish content to its target platform."""
     token, token_hash_obj, ss_kid, es_kid, es_kid_pk, ec_kid_pk = (
@@ -104,7 +106,7 @@ def publish_content(
         raise ValueError("failed to deserialize content") from exc
 
     if token.protocol == "oauth2":
-        adapter = get_oauth2_adapter(token.platform)
+        adapter = get_oauth2_adapter(adapter_manager, token.platform)
         params = _get_adapter_params(
             token.token_data,
             content,
@@ -114,21 +116,21 @@ def publish_content(
             },
         )
     elif token.protocol == "pnba":
-        adapter = get_pnba_adapter(token.platform)
+        adapter = get_pnba_adapter(adapter_manager, token.platform)
         params = _get_adapter_params(
             token.token_data,
             content,
             extras={
                 "phone_number": token.token_data["token"],
-                "base_path": adapter["assets_path"],
+                "base_path": adapter.assets_path,
             },
         )
     else:
         raise ValueError(f"unsupported protocol: {token.protocol!r}")
 
     pipe = AdapterIPCHandler.invoke(
-        adapter_path=adapter["path"],
-        venv_path=adapter["venv_path"],
+        adapter_path=adapter.path,
+        venv_path=adapter.venv_path,
         method="send_message",
         params=params,
     )

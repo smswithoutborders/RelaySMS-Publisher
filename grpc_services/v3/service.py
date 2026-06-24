@@ -16,6 +16,7 @@ from grpc_services.v3.revoke_pnba_token import RevokePNBAToken
 from grpc_services.v3.sync_keys import SyncKeys
 from grpc_services.v3.utils import verify_v1_request
 from logutils import get_logger
+from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2_grpc
 from utils import get_configs
 
@@ -27,6 +28,7 @@ NONCE_TTL_SECONDS = int(get_configs("NONCE_TTL_SECONDS", default_value="600"))
 class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
     """PublisherServiceV3 gRPC service handler."""
 
+    adapter_manager: AdapterManager
     _nonce_cache: TTLCache = TTLCache(maxsize=10000, ttl=NONCE_TTL_SECONDS)
     _nonce_lock: threading.Lock = threading.Lock()
 

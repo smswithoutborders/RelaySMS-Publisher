@@ -37,7 +37,7 @@ class PublicationsResponse(BaseModel):
 class PlatformManifest(BaseModel):
     name: str
     shortcode: str
-    protocol_type: str
+    proto_id: int
     cat_id: int
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None

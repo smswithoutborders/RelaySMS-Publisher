@@ -65,15 +65,15 @@ def RevokePNBAToken(self, request, context):
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
-            adapter = get_pnba_adapter(token.platform)
+            adapter = get_pnba_adapter(self.adapter_manager, token.platform)
 
             pipe = AdapterIPCHandler.invoke(
-                adapter_path=adapter["path"],
-                venv_path=adapter["venv_path"],
+                adapter_path=adapter.path,
+                venv_path=adapter.venv_path,
                 method="invalidate_session",
                 params={
                     "phone_number": token.token_data["token"],
-                    "base_path": adapter["assets_path"],
+                    "base_path": adapter.assets_path,
                 },
             )
 

@@ -67,6 +67,8 @@ def serve():
     )
 
     initialize_server_identity_keys()
+
+    PublisherServiceV3.adapter_manager = AdapterManager()
     v3_grpc.add_PublisherServicer_to_server(PublisherServiceV3(), grpc_server)
 
     if mode == "production":
@@ -91,7 +93,6 @@ def serve():
         logger.warning("Insecure mode: %s:%s", hostname, port)
 
     grpc_server.start()
-    AdapterManager._populate_registry()
 
     def shutdown(signum, frame):
         logger.info("Shutting down (signal %s) ...", signum)

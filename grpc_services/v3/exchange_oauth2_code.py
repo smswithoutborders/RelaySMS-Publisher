@@ -47,18 +47,18 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
                 grpc.StatusCode.INVALID_ARGUMENT,
             )
 
-        adapter = get_oauth2_adapter(request.platform)
+        adapter = get_oauth2_adapter(self.adapter_manager, request.platform)
 
         pipe = AdapterIPCHandler.invoke(
-            adapter_path=adapter["path"],
-            venv_path=adapter["venv_path"],
+            adapter_path=adapter.path,
+            venv_path=adapter.venv_path,
             method="exchange_code_and_fetch_user_info",
             params={
                 "code": request.authorization_code,
                 "code_verifier": request.code_verifier or None,
                 "redirect_url": request.redirect_url or None,
                 "request_identifier": request.request_identifier or None,
-                "base_path": adapter["assets_path"],
+                "base_path": adapter.assets_path,
             },
         )
 
@@ -76,7 +76,7 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
         with get_session() as s:
             token = create_token(
                 platform=request.platform.lower(),
-                cat_id=adapter["cat_id"],
+                cat_id=adapter.cat_id,
                 protocol="oauth2",
                 token_data={
                     "account_id": result["userinfo"]["account_identifier"],
@@ -101,8 +101,8 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
             token_id=token.token_id,
             server_ephemeral_public_keys=server_public_keys,
             key_id=kid_index,
-            platform=adapter["name"],
-            cat_id=adapter["cat_id"],
+            platform=adapter.name,
+            cat_id=adapter.cat_id,
         )
 
     except NotImplementedError as exc:

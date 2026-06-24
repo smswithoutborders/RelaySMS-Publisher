@@ -27,11 +27,11 @@ def GetOAuth2AuthorizationUrl(self, request, context):
         return invalid
 
     try:
-        adapter = get_oauth2_adapter(request.platform)
+        adapter = get_oauth2_adapter(self.adapter_manager, request.platform)
 
         pipe = AdapterIPCHandler.invoke(
-            adapter_path=adapter["path"],
-            venv_path=adapter["venv_path"],
+            adapter_path=adapter.path,
+            venv_path=adapter.venv_path,
             method="get_authorization_url",
             params={
                 "state": request.state or None,
@@ -39,7 +39,7 @@ def GetOAuth2AuthorizationUrl(self, request, context):
                 "autogenerate_code_verifier": request.autogenerate_code_verifier,
                 "redirect_url": request.redirect_url or None,
                 "request_identifier": request.request_identifier or None,
-                "base_path": adapter["assets_path"],
+                "base_path": adapter.assets_path,
             },
         )
 

@@ -27,15 +27,15 @@ def GetPNBACode(self, request, context):
         return invalid
 
     try:
-        adapter = get_pnba_adapter(request.platform)
+        adapter = get_pnba_adapter(self.adapter_manager, request.platform)
 
         pipe = AdapterIPCHandler.invoke(
-            adapter_path=adapter["path"],
-            venv_path=adapter["venv_path"],
+            adapter_path=adapter.path,
+            venv_path=adapter.venv_path,
             method="send_authorization_code",
             params={
                 "phone_number": request.phone_number,
-                "base_path": adapter["assets_path"],
+                "base_path": adapter.assets_path,
                 "request_identifier": request.request_identifier or None,
             },
         )

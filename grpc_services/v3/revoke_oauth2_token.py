@@ -65,15 +65,15 @@ def RevokeOAuth2Token(self, request, context):
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
-            adapter = get_oauth2_adapter(token.platform)
+            adapter = get_oauth2_adapter(self.adapter_manager, token.platform)
 
             pipe = AdapterIPCHandler.invoke(
-                adapter_path=adapter["path"],
-                venv_path=adapter["venv_path"],
+                adapter_path=adapter.path,
+                venv_path=adapter.venv_path,
                 method="revoke_token",
                 params={
                     "token": token.token_data["token"],
-                    "base_path": adapter["assets_path"],
+                    "base_path": adapter.assets_path,
                 },
             )
 

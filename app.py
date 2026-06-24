@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown."""
     initialize_server_identity_keys()
-    AdapterManager._populate_registry()
+    app.state.adapter_manager = AdapterManager()
     yield
     dispose_engine()
 

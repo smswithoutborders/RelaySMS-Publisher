@@ -4,10 +4,10 @@ import base64
 import json
 import struct
 from pathlib import Path as PathLib
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Path, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi.responses import HTMLResponse
 
 from db import get_session
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
@@ -30,7 +30,7 @@ router = APIRouter()
 ALLOWED_PLATFORM_MANIFEST_KEYS = [
     "name",
     "shortcode",
-    "protocol_type",
+    "proto_id",
     "cat_id",
     "icon_svg",
     "icon_png",
@@ -40,17 +40,29 @@ ALLOWED_PLATFORMS_WITH_CLIENT_METADATA = ["bluesky"]
 
 
 @router.get("/platforms")
-def get_platforms() -> List[PlatformManifest]:
+def get_platforms(
+    request: Request,
+    name: Optional[str] = Query(
+        None,
+        max_length=50,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+        description="Filter by platform name",
+    ),
+    proto_id: Optional[int] = Query(None, description="Filter by protocol ID"),
+    cat_id: Optional[int] = Query(None, description="Filter by category ID"),
+) -> List[PlatformManifest]:
     """
-    Retrieve a list of platform adapter manifests.
+    Retrieve a list of platform adapter manifests matching optional criteria.
     """
-    AdapterManager._populate_registry()
+    manager: AdapterManager = request.app.state.adapter_manager
+    manifests = manager.list_adapters(name=name, proto_id=proto_id, cat_id=cat_id)
+
     platforms = []
-    for manifest in AdapterManager._registry.values():
+    for manifest in manifests:
         manifest_copy = {
-            key: value
-            for key, value in manifest.items()
-            if key in ALLOWED_PLATFORM_MANIFEST_KEYS
+            key: getattr(manifest, key)
+            for key in ALLOWED_PLATFORM_MANIFEST_KEYS
+            if hasattr(manifest, key) and getattr(manifest, key) is not None
         }
         platforms.append(manifest_copy)
     return platforms
@@ -79,50 +91,18 @@ def get_server_static_key(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.get("/platforms/{platform_name}")
-def get_platform_data(
-    platform_name: str = Path(
-        ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
-    ),
-) -> PlatformManifest:
-    """Retrieve the manifest of a platform adapter."""
-    AdapterManager._populate_registry()
-    adapter = next(
-        (
-            manifest
-            for manifest in AdapterManager._registry.values()
-            if manifest["name"].lower() == platform_name.lower()
-        ),
-        None,
-    )
-    if not adapter:
-        raise HTTPException(status_code=404, detail="Platform not found")
-
-    adapter_copy = {
-        key: value
-        for key, value in adapter.items()
-        if key in ALLOWED_PLATFORM_MANIFEST_KEYS
-    }
-    return adapter_copy
-
-
 @router.get("/platforms/{platform_name}/oauth/client-metadata.json")
 def get_platform_oauth_client_metadata(
+    request: Request,
     platform_name: str = Path(
         ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
     ),
 ) -> OAuthClientMetadata:
     """Retrieve the OAuth client metadata for a platform adapter."""
-    AdapterManager._populate_registry()
-    adapter = next(
-        (
-            manifest
-            for manifest in AdapterManager._registry.values()
-            if manifest["name"].lower() == platform_name.lower()
-        ),
-        None,
-    )
-    if not adapter:
+    manager: AdapterManager = request.app.state.adapter_manager
+    adapters = manager.list_adapters(name=platform_name)
+
+    if not adapters:
         raise HTTPException(status_code=404, detail="Platform not found")
 
     if platform_name.lower() not in ALLOWED_PLATFORMS_WITH_CLIENT_METADATA:
@@ -131,7 +111,7 @@ def get_platform_oauth_client_metadata(
             detail="OAuth client metadata not available for this platform",
         )
 
-    adapter_credentials = PathLib(adapter.get("path")) / "credentials.json"
+    adapter_credentials = PathLib(adapters[0].path) / "credentials.json"
 
     if not adapter_credentials.exists():
         raise HTTPException(
@@ -161,16 +141,10 @@ async def oauth_callback(
     """
     Handle the OAuth callback from the platform.
     """
-    AdapterManager._populate_registry()
-    adapter = next(
-        (
-            manifest
-            for manifest in AdapterManager._registry.values()
-            if manifest["name"].lower() == platform_name.lower()
-        ),
-        None,
-    )
-    if not adapter:
+    manager: AdapterManager = request.app.state.adapter_manager
+    adapters = manager.list_adapters(name=platform_name)
+
+    if not adapters:
         raise HTTPException(status_code=404, detail="Platform not found")
 
     if platform_name.lower() not in ALLOWED_PLATFORMS_WITH_CLIENT_METADATA:
@@ -199,7 +173,9 @@ async def oauth_callback(
 
 
 @router.post("/publications")
-def create_publications(body: PublishContentRequest) -> PublishContentResponse:
+def create_publications(
+    body: PublishContentRequest, request: Request
+) -> PublishContentResponse:
     """Handle message publication requests."""
     try:
         payload_raw = base64.b64decode(body.text)
@@ -233,6 +209,7 @@ def create_publications(body: PublishContentRequest) -> PublishContentResponse:
                     len_att=len_att,
                     content_ciphertext=payload.get_content(),
                     session=db,
+                    adapter_manager=request.app.state.adapter_manager,
                 )
         case _:
             raise ValueError(

@@ -7,6 +7,7 @@ grpc-interceptor==0.15.4
 grpcio==1.80.0
 grpcio-testing==1.80.0
 grpcio-tools==1.80.0
+msgspec==0.21.1
 phonenumbers==9.0.30
 pymysql==1.1.3
 requests==2.34.2

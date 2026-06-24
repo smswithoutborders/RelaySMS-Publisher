@@ -1,441 +1,409 @@
-"""
-This program is free software: you can redistribute it under the terms
-of the GNU General Public License, v. 3.0. If a copy of the GNU General
-Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
-"""
+# SPDX-License-Identifier: GPL-3.0-only
 
+import configparser
 import os
-import sys
 import shutil
 import subprocess
-import configparser
-import hashlib
-from typing import Optional
-from git import Repo, RemoteProgress
+import sys
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import msgspec
+from git import RemoteProgress, Repo
 from tqdm import tqdm
 
 from logutils import get_logger
 from utils import get_configs
 
-BASE_DIR = os.path.dirname(__file__)
-adapters_dir = get_configs(
-    "PLATFORMS_ADAPTERS_DIR", default_value=os.path.join(BASE_DIR, "adapters")
+BASE_DIR = Path(__file__).resolve().parent
+adapters_dir = Path(
+    get_configs("PLATFORMS_ADAPTERS_DIR", default_value=str(BASE_DIR / "adapters"))
 )
-adapters_venv_dir = get_configs(
-    "PLATFORMS_ADAPTERS_VENV_DIR", default_value=os.path.join(BASE_DIR, "adapters_venv")
+adapters_venv_dir = Path(
+    get_configs(
+        "PLATFORMS_ADAPTERS_VENV_DIR", default_value=str(BASE_DIR / "adapters_venv")
+    )
 )
-adapters_assets_dir = get_configs(
-    "PLATFORMS_ADAPTERS_ASSETS_DIR",
-    default_value=os.path.join(BASE_DIR, "adapters_assets"),
+adapters_assets_dir = Path(
+    get_configs(
+        "PLATFORMS_ADAPTERS_ASSETS_DIR", default_value=str(BASE_DIR / "adapters_assets")
+    )
 )
 
+REGISTRY_FILE = BASE_DIR / "registry.json"
 logger = get_logger(__name__)
 
 
+class PlatformManifest(msgspec.Struct):
+    id: str
+    name: str
+    path: str
+    venv_path: str
+    assets_path: str
+    cat_id: int
+    proto_id: int
+    shortcode: Optional[str] = None
+    icon_svg: Optional[str] = None
+    icon_png: Optional[str] = None
+    support_url_scheme: Optional[str] = None
+
+
+class CloneProgress(RemoteProgress):
+    """Displays progress bar for git clone tasks."""
+
+    def __init__(self):
+        super().__init__()
+        self.pbar = None
+
+    def update(self, op_code, cur_count, max_count=None, message=""):
+        if max_count and not self.pbar:
+            self.pbar = tqdm(
+                total=max_count, unit="objects", desc="Cloning repository", leave=False
+            )
+        if self.pbar:
+            self.pbar.n = cur_count
+            self.pbar.refresh()
+
+    def close(self):
+        if self.pbar:
+            self.pbar.close()
+            self.pbar = None
+
+
 class AdapterManager:
-    """
-    Handles discovery, validation, and installation of platform adapters.
-    """
+    """Manages adapter lifecycle operations using a JSON registry."""
 
-    _adapters_dir = adapters_dir
-    _adapters_venv_dir = adapters_venv_dir
-    _adapters_assets_dir = adapters_assets_dir
-    _registry = {}
-    _cache_hash = None
+    _adapters_dir: Path = adapters_dir
+    _adapters_venv_dir: Path = adapters_venv_dir
+    _adapters_assets_dir: Path = adapters_assets_dir
 
-    @classmethod
-    def _calculate_directory_hash(cls) -> str:
-        """
-        Calculate a hash of the current state of the adapters directory.
+    def __init__(self, registry_file: Path = REGISTRY_FILE):
+        self.registry_file = registry_file
+        self._app_registry: Dict[str, PlatformManifest] = {}
+        self._last_modified: float = 0.0
 
-        Returns:
-            str: The MD5 hash of the adapters directory.
-        """
-        hash_md5 = hashlib.md5()
-        if not os.path.isdir(cls._adapters_dir):
-            return ""
+    def _load_registry(self) -> Dict[str, PlatformManifest]:
+        """Loads registry from JSON file."""
+        try:
+            current_mtime = os.stat(self.registry_file).st_mtime
+        except FileNotFoundError:
+            return {}
 
-        for root, dirs, files in os.walk(cls._adapters_dir):
-            for name in sorted(dirs + files):
-                path = os.path.join(root, name)
-                hash_md5.update(path.encode("utf-8"))
-                if os.path.isfile(path):
-                    with open(path, "rb") as f:
-                        hash_md5.update(f.read())
+        if current_mtime == self._last_modified:
+            return self._app_registry
 
-        return hash_md5.hexdigest()
+        try:
+            with open(self.registry_file, "rb") as f:
+                self._app_registry = msgspec.json.decode(
+                    f.read(), type=Dict[str, PlatformManifest]
+                )
+            self._last_modified = current_mtime
+            return self._app_registry
+        except Exception as e:
+            logger.error("[!] Registry read failed: %s", e)
+            return {}
 
-    @classmethod
-    def _is_registry_outdated(cls) -> bool:
-        """
-        Check if the registry is outdated by comparing the directory hash.
+    def _save_registry(self, data: Dict[str, PlatformManifest]):
+        """Saves registry data to JSON file."""
+        try:
+            encoded_bytes = msgspec.json.encode(data)
+            self.registry_file.write_bytes(encoded_bytes)
 
-        Returns:
-            bool: True if the registry is outdated, False otherwise.
-        """
-        current_hash = cls._calculate_directory_hash()
-        if cls._cache_hash != current_hash:
-            cls._cache_hash = current_hash
-            return True
-        return False
+            self._last_modified = os.stat(self.registry_file).st_mtime
+            self._app_registry = data
+        except (OSError, msgspec.ValidationError) as e:
+            logger.error("[!] Registry write failed: %s", e)
 
     @classmethod
-    def _load_ini_file(cls, path: str, section: str) -> Optional[dict]:
-        """
-        Load a specified section from an .ini file.
+    def _generate_id(cls, url: str) -> str:
+        """Generates deterministic ID from a URL string."""
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, url.strip().lower()))
 
-        Args:
-            path (str): The path to the .ini file.
-            section (str): The section to load from the .ini file.
+    @classmethod
+    def _is_safe_path(cls, base_folder: Path, target_path: Path) -> bool:
+        """Checks if a path sits safely within its intended base folder boundaries."""
+        try:
+            return (
+                base_folder.resolve() in target_path.resolve().parents
+                or base_folder.resolve() == target_path.resolve()
+            )
+        except (OSError, ValueError):
+            return False
 
-        Returns:
-            Optional[dict]: A dictionary containing the section data, or None if invalid.
-        """
-        if not os.path.isfile(path):
-            logger.error("Missing .ini file at '%s'", path)
+    @classmethod
+    def _load_ini_file(cls, path: Path, section: str) -> Optional[dict]:
+        """Reads a section from an INI file as raw string values."""
+        if not path.is_file():
+            logger.error("[!] Missing file: %s", path)
             return None
 
         config = configparser.ConfigParser()
-        config.read(path)
-
-        if section not in config:
-            logger.error("Section '%s' missing in .ini file: '%s'", section, path)
+        try:
+            config.read(path)
+            if section not in config:
+                logger.error("[!] Section '%s' missing in: %s", section, path)
+                return None
+            return dict(config[section])
+        except Exception as e:
+            logger.error("[!] INI parse failed %s: %s", path, e)
             return None
 
-        return dict(config[section])
-
-    @classmethod
-    def _populate_registry(cls):
-        """
-        Populate the registry with adapter metadata if there are changes in the adapters directory.
-        """
-        if not os.path.isdir(cls._adapters_dir):
-            logger.warning(
-                "Adapters directory '%s' does not exist. Creating it.",
-                cls._adapters_dir,
-            )
-            os.makedirs(cls._adapters_dir, exist_ok=True)
-
-        if not cls._is_registry_outdated():
-            logger.debug("Registry is up-to-date. No changes detected.")
-            return
-
-        cls._registry.clear()
-
-        for item in os.listdir(cls._adapters_dir):
-            adapter_path = os.path.join(cls._adapters_dir, item)
-            if not os.path.isdir(adapter_path):
-                continue
-
-            manifest_path = os.path.join(adapter_path, "manifest.ini")
-            manifest_data = cls._load_ini_file(manifest_path, "platform")
-            if manifest_data and (adapter_name := manifest_data.get("name")):
-                protocol = manifest_data.get("protocol_type", "").lower()
-                key = f"{adapter_name}_{protocol}".lower()
-                adapter_dir_name = os.path.basename(adapter_path)
-                manifest_data["path"] = adapter_path
-                manifest_data["venv_path"] = os.path.join(
-                    cls._adapters_venv_dir, adapter_dir_name
-                )
-                manifest_data["assets_path"] = os.path.join(
-                    cls._adapters_assets_dir, adapter_dir_name
-                )
-
-                cls._registry[key] = manifest_data
-                logger.info(
-                    "Registered adapter '%s' with protocol '%s' from '%s'",
-                    adapter_name,
-                    protocol,
-                    adapter_path,
-                )
-            else:
-                logger.warning("Skipping invalid adapter directory: '%s'", adapter_path)
-
-        logger.info("Adapter registry populated with %d adapters.", len(cls._registry))
-
     @staticmethod
-    def _rollback_directory(path: str):
-        """
-        Roll back changes by removing a specified directory.
-
-        Args:
-            path (str): The path of the directory to remove.
-        """
+    def _rollback_directory(path: Path):
+        """Deletes a directory if a task fails."""
         try:
-            shutil.rmtree(path)
-            logger.info("Rolled back and removed directory: %s", path)
-        except Exception as e:
-            logger.error("Failed to remove directory '%s': %s", path, e)
+            if path.is_dir():
+                shutil.rmtree(path)
+                logger.info("[-] Rolled back directory: %s", path)
+        except OSError as e:
+            logger.error("[!] Rollback failed for %s: %s", path, e)
 
     @staticmethod
-    def _validate_adapter_files(path: str) -> bool:
-        """
-        Validate the presence of required files in an adapter directory.
-
-        Args:
-            path (str): The path to the adapter directory.
-
-        Returns:
-            bool: True if all required files are present, False otherwise.
-        """
+    def _validate_adapter_files(path: Path) -> bool:
+        """Checks if required core files exist."""
         required = ["manifest.ini", "main.py", "config.ini"]
-        missing = [f for f in required if not os.path.isfile(os.path.join(path, f))]
+        missing = [f for f in required if not (path / f).is_file()]
         if missing:
             logger.warning(
-                "Missing required files in '%s': %s", path, ", ".join(missing)
+                "[!] Missing adapter files in %s: %s", path, ", ".join(missing)
             )
             return False
         return True
 
-    @staticmethod
-    def _install_adapter_dependencies(requirements_path: str, venv_path: str):
-        """
-        Install adapter dependencies in a virtual environment.
+    @classmethod
+    def _install_dependencies(cls, requirements_path: Path, venv_path: Path):
+        """Creates venv and runs pip install."""
+        if not cls._is_safe_path(cls._adapters_venv_dir, venv_path):
+            raise ValueError("Invalid virtual environment path localization.")
 
-        Args:
-            requirements_path (str): Path to the requirements.txt file.
-            venv_path (str): Path to the virtual environment directory.
-
-        Raises:
-            ValueError: If dependency installation fails.
-        """
         try:
-            subprocess.check_call([sys.executable, "-m", "venv", venv_path])
-            pip_path = os.path.join(venv_path, "bin", "pip")
-            subprocess.check_call([pip_path, "install", "-r", requirements_path])
-            logger.info("Dependencies installed in virtual environment: %s", venv_path)
-        except Exception as e:
-            logger.error("Dependency installation failed: %s", e)
-            raise ValueError("Adapter dependency installation failed.") from e
+            subprocess.check_call([sys.executable, "-m", "venv", str(venv_path)])
+            pip_name = "bin/pip3"
+            pip_executable = venv_path / pip_name
+            subprocess.check_call(
+                [str(pip_executable), "install", "-r", str(requirements_path)]
+            )
+            logger.info("[+] Dependencies installed: %s", venv_path)
+        except subprocess.SubprocessError as e:
+            logger.error("[!] Pip install failed: %s", e)
+            raise ValueError("Dependency installation failed.") from e
 
-    @classmethod
-    def get_adapter(cls, shortcode: Optional[str] = None) -> Optional[dict]:
-        """
-        Retrieve an adapter's manifest based on its shortcode.
+    def find_adapter_ids(
+        self,
+        name: Optional[str] = None,
+        proto_id: Optional[Any] = None,
+        cat_id: Optional[Any] = None,
+    ) -> List[str]:
+        """Finds matching registry item keys using string metadata inputs."""
+        registry = self._load_registry()
+        if not registry:
+            return []
 
-        Args:
-            shortcode (Optional[str]): The shortcode of the adapter.
+        n_term = name.strip().lower() if name else None
+        p_term = str(proto_id).strip().lower() if proto_id is not None else None
+        c_term = str(cat_id).strip().lower() if cat_id is not None else None
 
-        Returns:
-            Optional[dict]: The adapter's manifest data, or None if not found.
-        """
-        cls._populate_registry()
+        matches = []
+        for adapter_id, manifest in registry.items():
+            if n_term and str(manifest.name).strip().lower() != n_term:
+                continue
+            if p_term and str(manifest.proto_id).strip().lower() != p_term:
+                continue
+            if c_term and str(manifest.cat_id).strip().lower() != c_term:
+                continue
+            matches.append(adapter_id)
 
-        if shortcode:
-            for manifest in cls._registry.values():
-                if manifest.get("shortcode") == shortcode:
-                    return manifest
-            logger.warning("Adapter with shortcode '%s' not found.", shortcode)
-            return None
+        return matches
 
-        logger.warning("Shortcode must be provided to get an adapter.")
-        return None
+    def list_adapters(
+        self,
+        name: Optional[str] = None,
+        proto_id: Optional[Any] = None,
+        cat_id: Optional[Any] = None,
+    ) -> List[PlatformManifest]:
+        """Returns a list of adapter records matching any combination of optional filters."""
+        registry = self._load_registry()
+        if not registry:
+            return []
 
-    @classmethod
-    def get_adapter_path(cls, name: str, protocol: str) -> Optional[dict]:
-        """
-        Retrieve the adapter's path, virtual environment path, and assets path.
+        n_term = name.strip().lower() if name else None
+        p_term = str(proto_id).strip().lower() if proto_id is not None else None
+        c_term = str(cat_id).strip().lower() if cat_id is not None else None
 
-        Args:
-            name (str): The name of the adapter.
-            protocol (str): The protocol used by the adapter.
+        results = []
+        for manifest in registry.values():
+            if n_term and str(manifest.name).strip().lower() != n_term:
+                continue
+            if p_term and str(manifest.proto_id).strip().lower() != p_term:
+                continue
+            if c_term and str(manifest.cat_id).strip().lower() != c_term:
+                continue
+            results.append(manifest)
 
-        Returns:
-            Optional[dict]: A dictionary containing the adapter path,
-                virtual environment path, and assets path, or None if not found.
-        """
-        cls._populate_registry()
+        return results
 
-        manifest = cls._registry.get(f"{name}_{protocol}".lower())
-        if manifest:
-            return {
-                "path": manifest.get("path"),
-                "venv_path": manifest.get("venv_path"),
-                "assets_path": manifest.get("assets_path"),
-                "cat_id": int(manifest.get("cat_id")),
-                "name": manifest.get("name"),
-            }
+    def add_adapter_from_github(self, url: str):
+        """Clones a repository and registers its metadata."""
+        self._adapters_dir.mkdir(parents=True, exist_ok=True)
+        adapter_id = self._generate_id(url)
+        dest_path = self._adapters_dir / adapter_id
 
-        logger.warning(
-            "Adapter with name '%s' and protocol '%s' not found.",
-            name,
-            protocol,
-        )
-        return None
+        if not self._is_safe_path(self._adapters_dir, dest_path):
+            raise ValueError("Invalid target folder destination.")
 
-    @classmethod
-    def add_adapter_from_github(cls, url: str):
-        """
-        Add a new adapter by cloning a GitHub repository.
-
-        Args:
-            url (str): The URL of the GitHub repository.
-
-        Raises:
-            ValueError: If the adapter structure is invalid or dependencies fail to install.
-        """
-        os.makedirs(cls._adapters_dir, exist_ok=True)
-
-        class CloneProgress(RemoteProgress):
-            def __init__(self):
-                super().__init__()
-                self.progress_bar = None
-
-            def update(self, op_code, cur_count, max_count=None, message=""):
-                if max_count and not self.progress_bar:
-                    self.progress_bar = tqdm(
-                        total=max_count, unit="objects", desc="Cloning", leave=False
-                    )
-                if self.progress_bar:
-                    self.progress_bar.n = cur_count
-                    self.progress_bar.refresh()
-                if message:
-                    logger.debug("Git progress: %s", message)
-
-            def __del__(self):
-                if self.progress_bar:
-                    self.progress_bar.close()
-
-        repo_name = url.rstrip("/").split("/")[-1].replace(".git", "")
-        dest_path = os.path.join(cls._adapters_dir, repo_name)
-
-        if os.path.exists(dest_path):
-            logger.info("Repository already exists: %s", dest_path)
+        registry = self._load_registry()
+        if adapter_id in registry or dest_path.exists():
+            logger.info("[-] Adapter already registered at %s, skipping.", dest_path)
             return
 
-        Repo.clone_from(url, dest_path, progress=CloneProgress())
-        logger.info("Cloned adapter repository to '%s'", dest_path)
+        progress = CloneProgress()
+        try:
+            Repo.clone_from(url, dest_path, progress=progress)
+            logger.info("[+] Repository cloned: %s", dest_path)
+        except Exception as e:
+            logger.error("[!] Git clone failed for %s: %s", url, e)
+            self._rollback_directory(dest_path)
+            raise
+        finally:
+            progress.close()
 
-        if not cls._validate_adapter_files(dest_path):
-            cls._rollback_directory(dest_path)
-            raise ValueError(f"Invalid adapter structure at '{dest_path}'.")
+        if not self._validate_adapter_files(dest_path):
+            self._rollback_directory(dest_path)
+            raise ValueError(f"Validation failed for files at: {dest_path}")
 
-        manifest_path = os.path.join(dest_path, "manifest.ini")
-        manifest_data = cls._load_ini_file(manifest_path, "platform")
-        if not manifest_data:
-            cls._rollback_directory(dest_path)
-            raise ValueError(f"Manifest load failed for '{dest_path}'.")
+        manifest_data = self._load_ini_file(dest_path / "manifest.ini", "platform")
+        if (
+            not manifest_data
+            or not manifest_data.get("name")
+            or not manifest_data.get("cat_id")
+            or not manifest_data.get("proto_id")
+        ):
+            self._rollback_directory(dest_path)
+            raise ValueError(
+                "Manifest content incomplete (missing name, cat_id, or proto_id)."
+            )
 
-        adapter_name = manifest_data.get("name")
-        protocol = manifest_data.get("protocol_type")
+        venv_path = self._adapters_venv_dir / adapter_id
+        requirements_path = dest_path / "requirements.txt"
 
-        if not adapter_name:
-            cls._rollback_directory(dest_path)
-            raise ValueError("Adapter manifest missing 'name'.")
-
-        new_dir_name = f"{adapter_name}_{protocol}".lower()
-        new_dest_path = os.path.join(cls._adapters_dir, new_dir_name)
-
-        if os.path.exists(new_dest_path):
-            cls._rollback_directory(dest_path)
-            raise ValueError(f"Adapter '{new_dir_name}' already exists.")
-
-        os.rename(dest_path, new_dest_path)
-
-        requirements_path = os.path.join(new_dest_path, "requirements.txt")
-        if os.path.isfile(requirements_path):
-            venv_path = os.path.join(cls._adapters_venv_dir, new_dir_name)
-
-            if os.path.exists(venv_path):
-                raise ValueError(f"Virtual environment already exists: {venv_path}")
-
-            os.makedirs(venv_path, exist_ok=True)
-
+        if requirements_path.is_file():
+            venv_path.mkdir(parents=True, exist_ok=True)
             try:
-                cls._install_adapter_dependencies(requirements_path, venv_path)
+                self._install_dependencies(requirements_path, venv_path)
             except ValueError:
-                cls._rollback_directory(new_dest_path)
-                cls._rollback_directory(venv_path)
+                self._rollback_directory(dest_path)
+                self._rollback_directory(venv_path)
                 raise
 
-        logger.info(
-            "Adapter '%s' added successfully with protocol '%s'.",
-            adapter_name,
-            protocol,
+        manifest_record = PlatformManifest(
+            id=adapter_id,
+            name=manifest_data["name"],
+            path=str(dest_path),
+            venv_path=str(venv_path),
+            assets_path=str(self._adapters_assets_dir / adapter_id),
+            cat_id=int(manifest_data["cat_id"]),
+            proto_id=int(manifest_data["proto_id"]),
+            shortcode=manifest_data.get("shortcode"),
+            icon_svg=manifest_data.get("icon_svg"),
+            icon_png=manifest_data.get("icon_png"),
+            support_url_scheme=manifest_data.get("support_url_scheme"),
         )
 
-    @classmethod
-    def remove_adapter(cls, name: str):
-        """
-        Remove an adapter by its name.
+        registry[adapter_id] = manifest_record
+        self._save_registry(registry)
+        logger.info("[+] Registered adapter: '%s'", manifest_data["name"])
 
-        Args:
-            name (str): The name of the adapter to remove.
+    def remove_adapter(self, adapter_id: str):
+        """Removes adapter workspace folders and keys from registry."""
+        registry = self._load_registry()
+        if adapter_id not in registry:
+            raise ValueError(f"Adapter ID '{adapter_id}' missing from registry.")
 
-        Raises:
-            ValueError: If the adapter does not exist.
-        """
-        cls._populate_registry()
+        manifest = registry[adapter_id]
+        p_target = Path(manifest.path)
+        v_target = Path(manifest.venv_path)
 
-        manifest = cls._registry.get(name)
-        if not manifest:
-            raise ValueError(f"Adapter '{name}' does not exist.")
+        if not self._is_safe_path(
+            self._adapters_dir, p_target
+        ) or not self._is_safe_path(self._adapters_venv_dir, v_target):
+            raise ValueError("Deletion paths run outside system target roots.")
 
-        adapter_path = manifest.get("path")
-        adapter_dir_name = os.path.basename(adapter_path)
-        venv_path = os.path.join(cls._adapters_venv_dir, adapter_dir_name)
+        self._rollback_directory(p_target)
+        self._rollback_directory(v_target)
 
-        if os.path.exists(adapter_path):
-            cls._rollback_directory(adapter_path)
+        del registry[adapter_id]
+        self._save_registry(registry)
+        logger.info("[-] Removed adapter entry: %s", adapter_id)
 
-        if os.path.exists(venv_path):
-            cls._rollback_directory(venv_path)
+    def update_adapter(self, adapter_id: Optional[str] = None, install: bool = False):
+        """Pulls updates from remote source targets for targeted items."""
+        registry = self._load_registry()
+        targets = [adapter_id] if adapter_id else list(registry.keys())
 
-        logger.info("Adapter '%s' removed successfully.", name)
-
-    @classmethod
-    def update_adapter(cls, name: Optional[str] = None, install: bool = False):
-        """
-        Update adapters by pulling the latest changes from their Git repositories.
-
-        Args:
-            name (Optional[str]): The name of the adapter to update. If None, update all adapters.
-            install (bool): Whether to reinstall dependencies after updating.
-
-        Raises:
-            ValueError: If the adapter does not exist or update fails.
-        """
-        cls._populate_registry()
-
-        adapters_to_update = (
-            [cls._registry.get(name)] if name else cls._registry.values()
-        )
-
-        for manifest in adapters_to_update:
+        for target_id in targets:
+            manifest = registry.get(target_id)
             if not manifest:
-                raise ValueError(f"Adapter '{name}' does not exist.")
+                continue
 
-            adapter_path = manifest.get("path")
-            adapter_dir_name = os.path.basename(adapter_path)
-            venv_path = os.path.join(cls._adapters_venv_dir, adapter_dir_name)
-            repo = Repo(adapter_path)
+            adapter_path = Path(manifest.path)
+            if not self._is_safe_path(self._adapters_dir, adapter_path):
+                logger.error(
+                    "[!] Update skipped: Invalid file folder track path on %s",
+                    target_id,
+                )
+                continue
 
             try:
+                repo = Repo(manifest.path)
                 repo.git.pull()
-                logger.info(
-                    "Updated adapter '%s' at '%s'.", manifest.get("name"), adapter_path
-                )
+                logger.info("[+] Pulled source updates for: %s", target_id)
             except Exception as e:
-                logger.error(
-                    "Failed to update adapter '%s': %s", manifest.get("name"), e
-                )
-                raise ValueError(
-                    f"Failed to update adapter '{manifest.get('name')}'."
-                ) from e
+                logger.error("[!] Git pull failed for %s: %s", target_id, e)
+                continue
+
+            updated_manifest = self._load_ini_file(
+                adapter_path / "manifest.ini", "platform"
+            )
+
+            if updated_manifest:
+                try:
+                    registry[target_id] = PlatformManifest(
+                        id=target_id,
+                        name=updated_manifest["name"],
+                        path=manifest.path,
+                        venv_path=manifest.venv_path,
+                        assets_path=manifest.assets_path,
+                        cat_id=int(updated_manifest["cat_id"]),
+                        proto_id=int(updated_manifest["proto_id"]),
+                        shortcode=updated_manifest.get("shortcode"),
+                        icon_svg=updated_manifest.get("icon_svg"),
+                        icon_png=updated_manifest.get("icon_png"),
+                        support_url_scheme=updated_manifest.get("support_url_scheme"),
+                    )
+                    logger.info("[+] Manifest cleanly overwritten for: %s", target_id)
+                except KeyError as ke:
+                    logger.error(
+                        "[!] Missing required manifest field for %s: %s", target_id, ke
+                    )
+                    continue
+                except Exception as e:
+                    logger.error(
+                        "[!] Failed to instantiate manifest for %s: %s", target_id, e
+                    )
+                    continue
 
             if install:
-                requirements_path = os.path.join(adapter_path, "requirements.txt")
-                if os.path.isfile(requirements_path):
+                requirements_path = adapter_path / "requirements.txt"
+                if requirements_path.is_file():
                     try:
-                        cls._install_adapter_dependencies(requirements_path, venv_path)
-                    except ValueError as e:
-                        logger.error(
-                            "Failed to reinstall dependencies for '%s': %s",
-                            manifest.get("name"),
-                            e,
+                        self._install_dependencies(
+                            requirements_path, Path(manifest.venv_path)
                         )
-                        raise ValueError(
-                            f"Failed to reinstall dependencies for '{manifest.get('name')}'."
-                        ) from e
+                    except ValueError:
+                        logger.error(
+                            "[!] Dependency reinstall failed for: %s", target_id
+                        )
 
-        logger.info("Adapter update process completed.")
+        self._save_registry(registry)
+        logger.info("[+] Update process completed.")
