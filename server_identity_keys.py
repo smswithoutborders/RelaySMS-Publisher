@@ -2,7 +2,7 @@
 """Server identity keys initialization on application startup."""
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy import insert
+from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from db import get_session
@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 def initialize_server_identity_keys(count: int = 256) -> None:
     """Generate and store server identity keys on first startup."""
     with get_session() as s:
-        existing = s.query(ServerIdentityKey).count()
+        existing = s.scalar(select(func.count(ServerIdentityKey.id)))
         if existing > 0:
             logger.info(
                 "Server identity keys already exist (%d keys), skipping", existing

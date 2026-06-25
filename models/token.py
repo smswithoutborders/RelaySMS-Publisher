@@ -5,7 +5,15 @@ import datetime
 import secrets
 from typing import Any, Optional
 
-from sqlalchemy import Column, DateTime, Integer, LargeBinary, SmallInteger, String
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Integer,
+    LargeBinary,
+    SmallInteger,
+    String,
+    select,
+)
 from sqlalchemy.orm import Session, relationship
 
 from db import Base
@@ -36,10 +44,7 @@ class Token(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     token_hash = relationship(
-        "TokenHash",
-        back_populates="token",
-        cascade="all, delete-orphan",
-        uselist=False,
+        "TokenHash", back_populates="token", cascade="all, delete-orphan", uselist=False
     )
 
 
@@ -65,7 +70,7 @@ def create(
 
 def get_by_token_id(token_id: bytes, session: Session) -> Optional[Token]:
     """Fetch a token by its public token_id."""
-    return session.query(Token).filter(Token.token_id == token_id).first()
+    return session.scalar(select(Token).where(Token.token_id == token_id))
 
 
 def update_token_data(
@@ -73,6 +78,5 @@ def update_token_data(
 ) -> Token:
     """Update the token_data of an existing token."""
     token.token_data = new_token_data
-    session.add(token)
     session.flush()
     return token

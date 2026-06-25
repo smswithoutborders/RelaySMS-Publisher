@@ -5,8 +5,16 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from db import Base, get_engine, _build_sqlite_url, _build_mysql_url, _has_mysql_config
-from models import ClientEphemeralKey, Publication, ServerEphemeralKey, Token, TokenHash
+from db import Base, _build_mysql_url, _build_sqlite_url, _has_mysql_config, get_engine
+from models import (
+    ClientEphemeralKey,
+    PayloadSegment,
+    PayloadSession,
+    Publication,
+    ServerEphemeralKey,
+    Token,
+    TokenHash,
+)
 from utils import get_configs
 
 config = context.config

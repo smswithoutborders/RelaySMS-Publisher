@@ -3,10 +3,9 @@
 
 import base64
 import datetime
-from typing import Optional
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy import Column, DateTime, Integer, LargeBinary
+from sqlalchemy import Column, DateTime, Integer, LargeBinary, select, update
 from sqlalchemy.orm import Session
 
 from db import Base, get_session
@@ -35,7 +34,9 @@ class ServerIdentityKey(Base):
 def get_public_keys() -> list[dict]:
     """Get all public keys for API responses."""
     with get_session() as s:
-        keys = s.query(ServerIdentityKey).order_by(ServerIdentityKey.key_index).all()
+        keys = s.scalars(
+            select(ServerIdentityKey).order_by(ServerIdentityKey.key_index)
+        ).all()
         return [
             {
                 "key_id": key.key_index,
@@ -50,10 +51,8 @@ def get_public_key(key_id: int) -> dict:
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
     with get_session() as s:
-        key = (
-            s.query(ServerIdentityKey)
-            .filter(ServerIdentityKey.key_index == key_id)
-            .first()
+        key = s.scalar(
+            select(ServerIdentityKey).where(ServerIdentityKey.key_index == key_id)
         )
         if not key:
             raise ValueError(f"Server identity key {key_id} not found")
@@ -63,27 +62,15 @@ def get_public_key(key_id: int) -> dict:
         }
 
 
-def get_private_key(key_id: int, session: Optional[Session] = None) -> X25519PrivateKey:
+def get_private_key(key_id: int, session: Session) -> X25519PrivateKey:
     """Fetch a private key for cryptographic operations."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
-
-    def fetch(s):
-        k = (
-            s.query(ServerIdentityKey)
-            .filter(ServerIdentityKey.key_index == key_id)
-            .first()
-        )
-        if not k:
-            raise ValueError(f"Server identity key {key_id} not found")
-        return k
-
-    if session:
-        key = fetch(session)
-    else:
-        with get_session() as s:
-            key = fetch(s)
-
+    key = session.scalar(
+        select(ServerIdentityKey).where(ServerIdentityKey.key_index == key_id)
+    )
+    if not key:
+        raise ValueError(f"Server identity key {key_id} not found")
     return X25519PrivateKey.from_private_bytes(key.private_key)
 
 
@@ -91,18 +78,13 @@ def mark_key_used(key_id: int, session: Session) -> None:
     """Mark a server identity key as used after a successful operation."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
-
-    updated = (
-        session.query(ServerIdentityKey)
-        .filter(ServerIdentityKey.key_index == key_id)
-        .update(
-            {
-                "last_used_at": utc_now(),
-                "used_count": ServerIdentityKey.used_count + 1,
-            },
-            synchronize_session=False,
+    result = session.execute(
+        update(ServerIdentityKey)
+        .where(ServerIdentityKey.key_index == key_id)
+        .values(
+            last_used_at=utc_now(),
+            used_count=ServerIdentityKey.used_count + 1,
         )
     )
-
-    if not updated:
+    if result.rowcount == 0:
         raise ValueError(f"Server identity key {key_id} not found")

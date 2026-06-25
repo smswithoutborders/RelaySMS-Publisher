@@ -3,11 +3,14 @@
 """CLI tool for testing gRPC flows."""
 
 import json
+import random
 import secrets
 import struct
 import sys
+import time
 
 import click
+import requests
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
@@ -66,7 +69,10 @@ Examples:\n
   python -m tests.client revoke-pnba-token\n
   python -m tests.client sync-keys\n
   python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "Test"\n
-  python -m tests.client send --platform telegram --address +237123456789 --to +237123456789 --body "Hi there"
+  python -m tests.client send --platform telegram --address +237123456789 --to +237123456789 --body "Hi there"\n
+  python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf\n
+  python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf --interval 2.5 --shuffle\n
+  python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --body "Dry run" --attachment ./file.pdf --dry-run --shuffle\n
 """
 )
 def cli():
@@ -769,7 +775,22 @@ def cmd_sync_keys(host, port, tls, rest_api, token, **_):
 )
 @click.option("--body", required=True, metavar="TEXT", help="Message body.")
 @click.option(
-    "--dry-run", is_flag=True, help="Print the request body instead of sending it."
+    "--attachment", type=click.Path(exists=True), help="Path to attachment file."
+)
+@click.option(
+    "--interval",
+    type=float,
+    default=1.0,
+    show_default=True,
+    help="Seconds between segment transmissions.",
+)
+@click.option(
+    "--shuffle",
+    is_flag=True,
+    help="Send segments in random order to simulate out-of-order delivery.",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Print all segments instead of sending them."
 )
 def cmd_send(
     rest_api,
@@ -779,11 +800,13 @@ def cmd_send(
     subject,
     body,
     token,
+    attachment,
+    interval,
+    shuffle,
     dry_run,
     **_,
 ):
     """Publish an encrypted message to any platform via the REST API."""
-    import requests
 
     if not platform:
         logger.error("--platform is required for this command.")
@@ -859,6 +882,19 @@ def cmd_send(
         kid_index,
     )
 
+    attachment_bytes = None
+    if attachment:
+        try:
+            with open(attachment, "rb") as f:
+                attachment_bytes = f.read()
+            logger.info(
+                "attachment loaded: %d bytes from %s", len(attachment_bytes), attachment
+            )
+            print(">>>>> ATTACHMENT BYTES:", attachment_bytes)
+        except Exception as e:
+            logger.error("failed to read attachment: %s", e)
+            sys.exit(1)
+
     try:
         cat_id = rrs.v1_content_category_from_u8(platform_info["cat_id"])
         content_bytes = rrs.V1ContentsContainer(
@@ -866,7 +902,7 @@ def cmd_send(
             body=body.encode(),
             to=to.encode() if to else None,
             subject=subject.encode() if subject else None,
-            attachment=None,
+            attachment=attachment_bytes,
         ).serialize()
     except Exception as e:
         logger.exception("V1ContentsContainer.serialize failed: %s", e)
@@ -886,43 +922,86 @@ def cmd_send(
 
     token_id_bytes = b64d(token_data["token_id"])
     t_id_int = struct.unpack("<I", token_id_bytes)[0]
+    len_att = len(attachment_bytes) if attachment_bytes else 0
+
+    has_attachment = len_att > 0
+    sess_id = secrets.randbelow(256) if has_attachment else None
 
     try:
-        payload_bytes = rrs.V1Payloads(
+        payload = rrs.V1Payloads(
             contents=encrypted_content,
             k_id=kid_index,
-            len_att=0,
+            len_att=len_att,
             t_id=t_id_int,
-            sess_id=None,
-        ).serialize_without_attachment()
+            sess_id=sess_id,
+        )
+        if has_attachment:
+            segments = payload.split(rrs.Transports.SMS)
+            segments_b64 = [
+                seg.decode() if isinstance(seg, (bytes, bytearray)) else seg
+                for seg in segments
+            ]
+        else:
+            raw = payload.serialize_without_attachment()
+            segments_b64 = [b64(raw, urlsafe=False)]
     except Exception as e:
-        logger.exception("V1Payloads.serialize_without_attachment failed: %s", e)
+        logger.exception("payload build/split failed: %s", e)
         sys.exit(1)
 
     url = f"{rest_api}/v1/publications"
-    req_body = {"address": address, "text": b64(payload_bytes, urlsafe=False)}
 
     if dry_run:
-        click.echo(f"--- dry run: would POST to {url}")
-        click.echo(json.dumps(req_body, indent=2))
+        click.echo(f"--- dry run: would POST {len(segments_b64)} segment(s) to {url}")
+        click.echo(f"    attachment : {attachment or 'none'} ({len_att} bytes)")
+        click.echo(f"    sess_id    : {sess_id}")
+        click.echo(f"    interval   : {interval}s")
+        click.echo(f"    shuffle    : {shuffle}")
+        click.echo()
+        order = list(range(len(segments_b64)))
+        if shuffle:
+            random.shuffle(order)
+            click.echo(f"    send order : {order}")
+        for pos, idx in enumerate(order):
+            req_body = {"address": address, "text": segments_b64[idx]}
+            click.echo(f"  segment [{pos + 1}/{len(order)}] (seg_num={idx}):")
+            click.echo(json.dumps(req_body, indent=4))
         return
 
     logger.info(
-        "publishing platform=%s | account=%s | kid_index=%d",
+        "publishing platform=%s | account=%s | kid_index=%d | segments=%d | shuffle=%s",
         p_lower,
         account_id,
         kid_index,
+        len(segments_b64),
+        shuffle,
     )
 
-    try:
-        resp = requests.post(url, json=req_body, timeout=30)
-        resp.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        logger.error("HTTP error: %s -- %s", e, resp.text)
-        sys.exit(1)
-    except Exception as e:
-        logger.error("request failed: %s", e)
-        sys.exit(1)
+    order = list(range(len(segments_b64)))
+    if shuffle:
+        random.shuffle(order)
+        logger.info("shuffled send order: %s", order)
+
+    for pos, idx in enumerate(order):
+        req_body = {"address": address, "text": segments_b64[idx]}
+        logger.info("sending segment [%d/%d] seg_num=%d", pos + 1, len(order), idx)
+        try:
+            resp = requests.post(url, json=req_body, timeout=30)
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            logger.error("HTTP error on seg %d: %s -- %s", idx, e, resp.text)
+            sys.exit(1)
+        except Exception as e:
+            logger.error("request failed on seg %d: %s", idx, e)
+            sys.exit(1)
+
+        result = resp.json()
+        click.echo(
+            f"  segment [{pos + 1}/{len(order)}] seg_num={idx} | "
+            f"status={resp.status_code} | message={result.get('message', '')}"
+        )
+
+        if pos < len(order) - 1:
+            time.sleep(interval)
 
     token_data["client_ephemeral_keypairs"] = [
         k for k in token_data["client_ephemeral_keypairs"] if k["key_id"] != kid_index
@@ -932,13 +1011,9 @@ def cmd_send(
         for k in token_data["server_ephemeral_public_keys"]
         if k["key_id"] != kid_index
     ]
-
     db_set("tokens", tokens)
 
-    result = resp.json()
-    click.echo(f"Status  : {resp.status_code}")
-    click.echo(f"Error   : {result.get('error', '')}")
-    click.echo(f"Message : {result.get('message', '')}")
+    click.echo(f"\nDone. {len(order)} segment(s) sent.")
 
 
 if __name__ == "__main__":

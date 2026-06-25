@@ -11,15 +11,16 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey,
     X25519PublicKey,
 )
-from sqlalchemy import insert
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, insert, select
+from sqlalchemy.orm import Session, contains_eager
 
+from db import get_session
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
 from models.client_ephemeral_key import ClientEphemeralKey
 from models.server_ephemeral_key import ServerEphemeralKey
 from models.server_identity_key import get_private_key, mark_key_used
-from models.token import Token, get_by_token_id
+from models.token import Token
 from models.token_hash import TokenHash
 from models.token_hash import create as create_token_hash
 from platforms.adapter_manager import AdapterManager, PlatformManifest
@@ -35,23 +36,37 @@ def get_keys_for_decryption(
     Fetch token and all necessary keys for decryption.
     Returns (Token, TokenHash, ss_kid, es_kid, es_kid_pk, ec_kid_pk).
     """
-    token = get_by_token_id(token_id_bytes, session)
+    stmt = (
+        select(Token)
+        .join(Token.token_hash)
+        .join(TokenHash.server_keys)
+        .join(TokenHash.client_keys)
+        .where(Token.token_id == token_id_bytes)
+        .where(ServerEphemeralKey.key_index == key_id)
+        .where(ClientEphemeralKey.key_index == key_id)
+        .options(
+            contains_eager(Token.token_hash).contains_eager(TokenHash.server_keys),
+            contains_eager(Token.token_hash).contains_eager(TokenHash.client_keys),
+        )
+    )
+
+    token = session.scalars(stmt).first()
     if not token:
-        raise ValueError("Token not found")
+        raise ValueError("Token or associated keys not found")
 
     token_hash_obj = token.token_hash
     if not token_hash_obj:
         raise ValueError("Token hash not found")
 
-    ss_kid = get_private_key(key_id, session).private_bytes_raw()
-
-    se_key = token_hash_obj.server_keys.filter_by(key_index=key_id).first()
-    if not se_key:
+    if not token_hash_obj.server_keys:
         raise ValueError(f"Server ephemeral key not found for kid {key_id}")
+    se_key = token_hash_obj.server_keys[0]
 
-    ce_key = token_hash_obj.client_keys.filter_by(key_index=key_id).first()
-    if not ce_key:
+    if not token_hash_obj.client_keys:
         raise ValueError(f"Client ephemeral key not found for kid {key_id}")
+    ce_key = token_hash_obj.client_keys[0]
+
+    ss_kid = get_private_key(key_id, session).private_bytes_raw()
 
     return (
         token,
@@ -140,7 +155,8 @@ def verify_v1_request(
         nonce_cache[nonce] = True
 
     try:
-        ss_kid = get_private_key(key_id).private_bytes_raw()
+        with get_session() as s:
+            ss_kid = get_private_key(key_id, s).private_bytes_raw()
     except ValueError as e:
         logger.warning("key lookup failed for key_id=%s: %s", key_id, e)
         return None, str(e)
@@ -176,12 +192,14 @@ def create_token_pools_and_encrypt(
 ) -> tuple[bytes, int, list[publisher_pb2.PublicKey]]:
     """
     Create 256 server and client ephemeral key pools, pick a single random
-    kid_index across all three key roles (ss, es, ec), encrypt the raw token,
-    and mark the identity key used.
+    kid_index in the range [16, 255] across all three key roles (ss, es, ec),
+    encrypt the raw token, and mark the identity key used.
+
+    kid_index 0-15 are reserved and never selected.
     """
     token_hash_obj, raw_token = create_token_hash(token_id=token_id, session=session)
 
-    kid_index = secrets.randbelow(256)
+    kid_index = secrets.randbelow(240) + 16
 
     server_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
 
@@ -243,12 +261,16 @@ def sync_token_pools(
     Clear old server and client ephemeral key pools, create 256 new ones,
     and save them all to the database.
     """
-    session.query(ServerEphemeralKey).filter(
-        ServerEphemeralKey.token_hash_id == token_hash_obj.id
-    ).delete()
-    session.query(ClientEphemeralKey).filter(
-        ClientEphemeralKey.token_hash_id == token_hash_obj.id
-    ).delete()
+    session.execute(
+        delete(ServerEphemeralKey).where(
+            ServerEphemeralKey.token_hash_id == token_hash_obj.id
+        )
+    )
+    session.execute(
+        delete(ClientEphemeralKey).where(
+            ClientEphemeralKey.token_hash_id == token_hash_obj.id
+        )
+    )
 
     server_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
 

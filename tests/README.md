@@ -61,7 +61,7 @@ python -m tests.client sync-keys
 > [!NOTE]
 > If multiple tokens are stored, you will be prompted interactively to select one
 > or you can specify the token using the `--token` argument.
->
+
 ### 4. Revoke OAuth2 Token
 
 Revokes a stored OAuth2 token.
@@ -73,7 +73,7 @@ python -m tests.client revoke-oauth2-token
 > [!NOTE]
 > If multiple tokens are stored, you will be prompted interactively to select one
 > or you can specify the token using the `--token` argument.
->
+
 ### 5. Get PNBA Code
 
 Requests a passcode/OTP for Phone Number-Based Authentication (PNBA).
@@ -112,12 +112,32 @@ python -m tests.client revoke-pnba-token
 
 Encrypts a message and publishes it to a platform via the REST `POST /v1/publications` endpoint. Constructs and serializes a `V1Payloads` payload, encrypts the content, and POSTs it with the sender's phone number as the `address`.
 
+For messages without attachments the payload is sent as a single request. For messages with attachments the payload is split into SMS-sized segments and sent sequentially with a configurable interval between each, simulating real-world multi-segment SMS delivery.
+
 ```sh
 python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "Test message"
 ```
 
 ```sh
 python -m tests.client send --platform telegram --address +237123456789 --to +237123456789 --body "Hi there"
+```
+
+**With attachment:**
+
+```sh
+python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf
+```
+
+**With attachment, custom interval, and shuffled segment order:**
+
+```sh
+python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf --interval 2.5 --shuffle
+```
+
+**Dry run (prints all segments without sending):**
+
+```sh
+python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf --dry-run --shuffle
 ```
 
 **Arguments:**
@@ -128,8 +148,14 @@ python -m tests.client send --platform telegram --address +237123456789 --to +23
 | `--body` | Yes | Message body |
 | `--to` | No | Recipient address (email or phone number). Required for email/messaging platforms. |
 | `--subject` | No | Message subject. Email platforms only. |
+| `--attachment` | No | Path to a file to attach. Triggers multi-segment SMS payload assembly. |
+| `--interval` | No | Seconds between segment transmissions (default: `1.0`). |
+| `--shuffle` | No | Send segments in random order to simulate out-of-order delivery. |
 | `--token` | No | Raw token (base64) to use. Omit for interactive prompt. |
-| `--dry-run` | No | Print the request body instead of sending it. |
+| `--dry-run` | No | Print all segments and their send order instead of transmitting. |
 
 > [!NOTE]
 > Each send consumes one ephemeral keypair. The used keypair is removed from local state after a successful publish. Run `sync-keys` to replenish the pool when it runs low.
+
+> [!TIP]
+> Use `--shuffle` together with `--dry-run` to inspect the randomised segment order before committing to a live send. This is useful for verifying that the server correctly reassembles out-of-order segments.

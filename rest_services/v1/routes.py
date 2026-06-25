@@ -21,7 +21,7 @@ from rest_services.v1.schemas import (
     PublishContentResponse,
     ServerStaticPublicKey,
 )
-from rest_services.v1.services import publish_content
+from rest_services.v1.services import publish_content, store_segment_and_try_join
 
 logger = get_logger(__name__)
 
@@ -51,36 +51,29 @@ def get_platforms(
     proto_id: Optional[int] = Query(None, description="Filter by protocol ID"),
     cat_id: Optional[int] = Query(None, description="Filter by category ID"),
 ) -> List[PlatformManifest]:
-    """
-    Retrieve a list of platform adapter manifests matching optional criteria.
-    """
+    """Retrieve a list of platform adapter manifests matching optional criteria."""
     manager: AdapterManager = request.app.state.adapter_manager
     manifests = manager.list_adapters(name=name, proto_id=proto_id, cat_id=cat_id)
 
-    platforms = []
-    for manifest in manifests:
-        manifest_copy = {
-            key: getattr(manifest, key)
-            for key in ALLOWED_PLATFORM_MANIFEST_KEYS
-            if hasattr(manifest, key) and getattr(manifest, key) is not None
-        }
-        platforms.append(manifest_copy)
-    return platforms
+    return [
+        PlatformManifest(
+            **{
+                key: getattr(manifest, key)
+                for key in ALLOWED_PLATFORM_MANIFEST_KEYS
+                if hasattr(manifest, key) and getattr(manifest, key) is not None
+            }
+        )
+        for manifest in manifests
+    ]
 
 
-@router.get(
-    "/server-keys",
-    response_model=List[ServerStaticPublicKey],
-)
+@router.get("/server-keys", response_model=List[ServerStaticPublicKey])
 def list_server_static_keys():
     """List all server static public keys."""
     return get_public_keys()
 
 
-@router.get(
-    "/server-keys/{key_id}",
-    response_model=ServerStaticPublicKey,
-)
+@router.get("/server-keys/{key_id}", response_model=ServerStaticPublicKey)
 def get_server_static_key(
     key_id: int = Path(..., ge=0, le=255, description="Static key identifier"),
 ):
@@ -120,10 +113,8 @@ def get_platform_oauth_client_metadata(
         )
 
     try:
-        with open(adapter_credentials, "r", encoding="utf-8") as file:
-            creds = file.read()
-            client_metadata = OAuthClientMetadata(**json.loads(creds))
-        return client_metadata
+        with open(adapter_credentials, "r", encoding="utf-8") as f:
+            return OAuthClientMetadata(**json.loads(f.read()))
     except FileNotFoundError as exc:
         logger.error("OAuth client metadata file not found")
         raise HTTPException(
@@ -138,9 +129,7 @@ async def oauth_callback(
         ..., description="Platform name", pattern=r"^[a-zA-Z0-9_-]+$"
     ),
 ) -> HTMLResponse:
-    """
-    Handle the OAuth callback from the platform.
-    """
+    """Handle the OAuth callback from the platform."""
     manager: AdapterManager = request.app.state.adapter_manager
     adapters = manager.list_adapters(name=platform_name)
 
@@ -153,11 +142,13 @@ async def oauth_callback(
             detail="OAuth client metadata not available for this platform",
         )
 
-    table_rows = ""
-    for key, value in request.query_params.items():
-        table_rows += f"<tr><td>{key}</td><td>{value}</td></tr>"
+    table_rows = "".join(
+        f"<tr><td>{key}</td><td>{value}</td></tr>"
+        for key, value in request.query_params.items()
+    )
 
-    html_content = f"""
+    return HTMLResponse(
+        content=f"""
     <html>
         <head><title>{platform_name.capitalize()} OAuth Callback Params</title></head>
         <body>
@@ -169,7 +160,7 @@ async def oauth_callback(
         </body>
     </html>
     """
-    return HTMLResponse(content=html_content)
+    )
 
 
 @router.post("/publications")
@@ -197,23 +188,45 @@ def create_publications(
                     status_code=400, detail="Failed to deserialize payload"
                 ) from exc
 
-            k_id = payload.get_kid()
-            t_id = payload.get_t_id()
-            t_id_bytes = struct.pack("<I", t_id)
-            len_att = payload.get_len_att()
-
             with get_session() as db:
                 publish_content(
-                    token_id=t_id_bytes,
-                    key_id=k_id,
-                    len_att=len_att,
+                    token_id=struct.pack("<I", payload.get_t_id()),
+                    key_id=payload.get_kid(),
+                    len_att=payload.get_len_att(),
                     content_ciphertext=payload.get_content(),
                     session=db,
                     adapter_manager=request.app.state.adapter_manager,
                 )
+
+        case (
+            rrs.V1PayloadsTypes.WITH_ATTACHMENT_HEADER
+            | rrs.V1PayloadsTypes.WITH_ATTACHMENT_NO_HEADER
+        ):
+            with get_session() as db:
+                joined = store_segment_and_try_join(
+                    sender_id=body.address,
+                    payload_raw=payload_raw,
+                    raw_segment=body.text.encode(),
+                    db=db,
+                )
+                if joined is None:
+                    return PublishContentResponse(
+                        message="Segment stored. Waiting for remaining segments."
+                    )
+                publish_content(
+                    token_id=struct.pack("<I", joined.get_t_id()),
+                    key_id=joined.get_kid(),
+                    len_att=joined.get_len_att(),
+                    content_ciphertext=joined.get_content(),
+                    session=db,
+                    adapter_manager=request.app.state.adapter_manager,
+                )
+
         case _:
-            raise ValueError(
-                f"Payload type {payload_type!r} not yet supported. Contact the developers for implementation status."
+            logger.error("unsupported payload type: %r", payload_type)
+            raise HTTPException(
+                status_code=422,
+                detail=f"Payload type {payload_type!r} is not supported.",
             )
 
     return PublishContentResponse(message="Content published successfully")
