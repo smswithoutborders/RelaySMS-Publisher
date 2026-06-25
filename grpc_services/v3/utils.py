@@ -41,7 +41,7 @@ def get_keys_for_decryption(
         raise ValueError("token not found")
 
     token_hash_obj = session.scalar(
-        select(TokenHash).where(TokenHash.id == token.token_hash_id)
+        select(TokenHash).where(TokenHash.token_id == token.id)
     )
     if not token_hash_obj:
         raise ValueError("token hash not found")

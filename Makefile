@@ -45,14 +45,13 @@ payload-specs-fetch:
 payload-specs-build:
 	$(call log,INFO,Building payload specs library ...)
 	@cd lib_relaysms_payload_specs && \
-		cargo clean && \
-		rm -rf generated/* target/ && \
 		cargo build --release
 	$(call log,INFO,Payload specs built)
 
 payload-specs-compile: payload-specs-fetch payload-specs-build
 	$(call log,INFO,Compiling payload specs bindings ...)
 	@cd lib_relaysms_payload_specs && \
+		mkdir -p generated && \
 		cargo run --bin uniffi_bindgen -- generate \
 			--library target/release/librelaysms_spec_payload.so \
 			--language python \
