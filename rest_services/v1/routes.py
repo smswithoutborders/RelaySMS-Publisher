@@ -196,6 +196,7 @@ def create_publications(
                 )
 
             with get_session() as db:
+                print(">>>>>>", t_id)
                 publish_content(
                     token_id=struct.pack("<I", t_id),
                     key_id=payload.get_kid(),
