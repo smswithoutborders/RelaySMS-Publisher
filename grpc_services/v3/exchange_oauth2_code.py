@@ -77,7 +77,7 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
             token = create_token(
                 platform=request.platform.lower(),
                 cat_id=adapter.cat_id,
-                protocol="oauth2",
+                proto_id=adapter.proto_id,
                 token_data={
                     "account_id": result["userinfo"]["account_identifier"],
                     "token": result["token"],
@@ -87,7 +87,7 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
 
             token_ciphertext, kid_index, server_public_keys = (
                 create_token_pools_and_encrypt(
-                    token_id=token.id,
+                    token_pk_id=token.id,
                     client_ephemeral_public_keys=request.client_ephemeral_public_keys,
                     session=s,
                 )

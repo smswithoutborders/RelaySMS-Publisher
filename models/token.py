@@ -3,24 +3,23 @@
 
 import datetime
 import secrets
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from sqlalchemy import (
-    Column,
-    DateTime,
-    Integer,
-    LargeBinary,
-    SmallInteger,
-    String,
-    select,
-)
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy import BigInteger, SmallInteger, String, select
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from db import Base
 from db_types import EncryptedJSON
 
+if TYPE_CHECKING:
+    from models import TokenHash
 
-def utc_now() -> datetime.datetime:
+
+def _generate_uint32_token() -> int:
+    return secrets.randbits(32)
+
+
+def _utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
 
@@ -32,18 +31,19 @@ class Token(Base):
 
     __tablename__ = "tokens"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    token_id = Column(LargeBinary(4), nullable=False, unique=True)
-    platform = Column(String(100), nullable=False, index=True)
-    cat_id = Column(SmallInteger(), nullable=False)
-    protocol = Column(String(100), nullable=False)
-    token_data = Column(
-        EncryptedJSON(), nullable=False
-    )  # {"account_id": "...", "token": {...}}
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
-
-    token_hash = relationship(
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    token_id: Mapped[int] = mapped_column(
+        BigInteger, default=_generate_uint32_token, unique=True
+    )
+    platform: Mapped[str] = mapped_column(String(100), index=True)
+    cat_id: Mapped[int] = mapped_column(SmallInteger)
+    proto_id: Mapped[int] = mapped_column(SmallInteger)
+    token_data: Mapped[Dict[str, Any]] = mapped_column(EncryptedJSON)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        default=_utc_now, onupdate=_utc_now
+    )
+    token_hash: Mapped["TokenHash"] = relationship(
         "TokenHash", back_populates="token", cascade="all, delete-orphan", uselist=False
     )
 
@@ -51,17 +51,13 @@ class Token(Base):
 def create(
     platform: str,
     cat_id: int,
-    protocol: str,
-    token_data: dict[str, Any],
+    proto_id: int,
+    token_data: Dict[str, Any],
     session: Session,
 ) -> Token:
     """Create and persist a new token."""
     token = Token(
-        token_id=secrets.token_bytes(4),
-        platform=platform,
-        cat_id=cat_id,
-        protocol=protocol,
-        token_data=token_data,
+        platform=platform, cat_id=cat_id, proto_id=proto_id, token_data=token_data
     )
     session.add(token)
     session.flush()

@@ -5,7 +5,6 @@
 import json
 import random
 import secrets
-import struct
 import sys
 import time
 
@@ -244,7 +243,7 @@ def cmd_exchange_oauth2_code(
         "cat_id": response.cat_id,
         "account_identifier": response.account_identifier,
         "token": b64(raw_token),
-        "token_id": b64(response.token_id),
+        "token_id": response.token_id,
         "server_ephemeral_public_keys": [
             {"key_id": k.key_id, "public_key": b64(k.public_key)}
             for k in response.server_ephemeral_public_keys
@@ -265,7 +264,7 @@ def cmd_exchange_oauth2_code(
     click.echo(f"Success            : {response.success}")
     click.echo(f"Message            : {response.message}")
     click.echo(f"Account Identifier : {response.account_identifier}")
-    click.echo(f"Token ID           : {b64(response.token_id)}")
+    click.echo(f"Token ID           : {response.token_id}")
     click.echo(f"Token              : {b64(raw_token, truncate=40)}")
     click.echo(f"kid_index          : {kid_index}")
 
@@ -353,8 +352,7 @@ def cmd_revoke_oauth2_token(host, port, tls, rest_api, token, **_):
         response, err = grpc_call(
             stub.RevokeOAuth2Token,
             publisher_pb2.RevokeOAuth2TokenRequest(
-                token_id=b64d(token_data["token_id"]),
-                key_id=kid_index,
+                token_id=token_data["token_id"], key_id=kid_index
             ),
             metadata=metadata,
         )
@@ -506,7 +504,7 @@ def cmd_exchange_pnba_code(
         "cat_id": response.cat_id,
         "account_identifier": response.account_identifier,
         "token": b64(raw_token),
-        "token_id": b64(response.token_id),
+        "token_id": response.token_id,
         "server_ephemeral_public_keys": [
             {"key_id": k.key_id, "public_key": b64(k.public_key)}
             for k in response.server_ephemeral_public_keys
@@ -527,7 +525,7 @@ def cmd_exchange_pnba_code(
     click.echo(f"Success            : {response.success}")
     click.echo(f"Message            : {response.message}")
     click.echo(f"Account Identifier : {response.account_identifier}")
-    click.echo(f"Token ID           : {b64(response.token_id)}")
+    click.echo(f"Token ID           : {response.token_id}")
     click.echo(f"Token              : {b64(raw_token, truncate=40)}")
     click.echo(f"kid_index          : {kid_index}")
 
@@ -615,8 +613,7 @@ def cmd_revoke_pnba_token(host, port, tls, rest_api, token, **_):
         response, err = grpc_call(
             stub.RevokePNBAToken,
             publisher_pb2.RevokePNBATokenRequest(
-                token_id=b64d(token_data["token_id"]),
-                key_id=kid_index,
+                token_id=token_data["token_id"], key_id=kid_index
             ),
             metadata=metadata,
         )
@@ -718,7 +715,7 @@ def cmd_sync_keys(host, port, tls, rest_api, token, **_):
         response, err = grpc_call(
             stub.SyncKeys,
             publisher_pb2.SyncKeysRequest(
-                token_id=b64d(token_data["token_id"]),
+                token_id=token_data["token_id"],
                 key_id=kid_index,
                 client_ephemeral_public_keys=[
                     publisher_pb2.PublicKey(
@@ -847,7 +844,19 @@ def cmd_send(
         logger.error("no client keypairs remaining for %s.", account_id)
         sys.exit(1)
 
-    kp = secrets.choice(remaining_keypairs)
+    has_attachment = bool(attachment)
+
+    if has_attachment:
+        eligible_keypairs = [k for k in remaining_keypairs if k["key_id"] <= 15]
+        if not eligible_keypairs:
+            logger.error(
+                "no eligible keypairs (key_id <= 15) remaining for %s.", account_id
+            )
+            sys.exit(1)
+    else:
+        eligible_keypairs = remaining_keypairs
+
+    kp = secrets.choice(eligible_keypairs)
     kid_index = kp["key_id"]
 
     es_entry = next(
@@ -890,7 +899,6 @@ def cmd_send(
             logger.info(
                 "attachment loaded: %d bytes from %s", len(attachment_bytes), attachment
             )
-            print(">>>>> ATTACHMENT BYTES:", attachment_bytes)
         except Exception as e:
             logger.error("failed to read attachment: %s", e)
             sys.exit(1)
@@ -920,11 +928,7 @@ def cmd_send(
         logger.exception("v1_platform_publisher_encrypt failed: %s", e)
         sys.exit(1)
 
-    token_id_bytes = b64d(token_data["token_id"])
-    t_id_int = struct.unpack("<I", token_id_bytes)[0]
     len_att = len(attachment_bytes) if attachment_bytes else 0
-
-    has_attachment = len_att > 0
     sess_id = secrets.randbelow(256) if has_attachment else None
 
     try:
@@ -932,7 +936,7 @@ def cmd_send(
             contents=encrypted_content,
             k_id=kid_index,
             len_att=len_att,
-            t_id=t_id_int,
+            t_id=token_data["token_id"],
             sess_id=sess_id,
         )
         if has_attachment:

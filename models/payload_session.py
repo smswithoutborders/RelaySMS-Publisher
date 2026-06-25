@@ -2,12 +2,15 @@
 """Payload session model and related functions."""
 
 import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, select
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy import String, UniqueConstraint, select
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from db import Base
+
+if TYPE_CHECKING:
+    from models import PayloadSegment
 
 
 def _utc_now() -> datetime.datetime:
@@ -17,13 +20,15 @@ def _utc_now() -> datetime.datetime:
 class PayloadSession(Base):
     __tablename__ = "payload_sessions"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    sender_id = Column(String, nullable=False)
-    session_id = Column(Integer, nullable=False)
-    created_at = Column(DateTime, default=_utc_now, nullable=False)
-    updated_at = Column(DateTime, default=_utc_now, onupdate=_utc_now, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    sender_id: Mapped[str] = mapped_column(String)
+    session_id: Mapped[int] = mapped_column()
+    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        default=_utc_now, onupdate=_utc_now
+    )
 
-    segments = relationship(
+    segments: Mapped[List["PayloadSegment"]] = relationship(
         "PayloadSegment", back_populates="session", cascade="all, delete-orphan"
     )
 

@@ -2,23 +2,18 @@
 """Client ephemeral key model and related functions."""
 
 import datetime
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    LargeBinary,
-    UniqueConstraint,
-)
-from sqlalchemy.orm import relationship
+from sqlalchemy import ForeignKey, Index, LargeBinary, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db import Base
 
+if TYPE_CHECKING:
+    from models import TokenHash
 
-def utc_now() -> datetime.datetime:
+
+def _utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
 
@@ -27,18 +22,22 @@ class ClientEphemeralKey(Base):
 
     __tablename__ = "client_ephemeral_keys"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    token_hash_id = Column(
-        Integer, ForeignKey("token_hashes.id", ondelete="CASCADE"), nullable=False
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    token_hash_id: Mapped[int] = mapped_column(
+        ForeignKey("token_hashes.id", ondelete="CASCADE")
     )
-    key_index = Column(Integer, nullable=False)
-    public_key = Column(LargeBinary(32), nullable=False)
-    used = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
-    used_at = Column(DateTime, nullable=True)
+    key_index: Mapped[int] = mapped_column()
+    public_key: Mapped[bytes] = mapped_column(LargeBinary(32))
+    used: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        default=_utc_now, onupdate=_utc_now
+    )
+    used_at: Mapped[Optional[datetime.datetime]] = mapped_column(default=None)
 
-    token_hash = relationship("TokenHash", back_populates="client_keys")
+    token_hash: Mapped["TokenHash"] = relationship(
+        "TokenHash", back_populates="client_keys"
+    )
 
     __table_args__ = (
         UniqueConstraint(

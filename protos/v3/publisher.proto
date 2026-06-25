@@ -85,7 +85,7 @@ message ExchangeOAuth2CodeAndStoreResponse {
   // Encrypted token ciphertext
   bytes token_ciphertext = 4;
   // Unique identifier of the stored token
-  bytes token_id = 5;
+  uint32 token_id = 5;
   // Server ephemeral public keys associated with the token
   repeated PublicKey server_ephemeral_public_keys = 6;
   // Key ID used for encrypting the token ciphertext
@@ -106,7 +106,7 @@ message ExchangeOAuth2CodeAndStoreResponse {
 //   X-Timestamp:      Unix timestamp in seconds (string)
 message RevokeOAuth2TokenRequest {
   // The unique identifier of the stored token
-  bytes token_id = 1;
+  uint32 token_id = 1;
   // The key ID used for encrypting the token in the payload
   uint32 key_id = 2;
 }
@@ -180,7 +180,7 @@ message ExchangePNBACodeAndStoreResponse {
   // Encrypted token ciphertext
   bytes token_ciphertext = 5;
   // Unique identifier of the stored token
-  bytes token_id = 6;
+  uint32 token_id = 6;
   // Server ephemeral public keys associated with the token
   repeated PublicKey server_ephemeral_public_keys = 7;
   // Key ID used for encrypting the token ciphertext
@@ -201,7 +201,7 @@ message ExchangePNBACodeAndStoreResponse {
 //   X-Timestamp:      Unix timestamp in seconds (string)
 message RevokePNBATokenRequest {
   // The unique identifier of the stored token
-  bytes token_id = 1;
+  uint32 token_id = 1;
   // The key ID used for encrypting the token in the payload
   uint32 key_id = 2;
 }
@@ -224,7 +224,7 @@ message RevokePNBATokenResponse {
 //   X-Timestamp:      Unix timestamp in seconds (string)
 message SyncKeysRequest {
   // The unique identifier of the stored token
-  bytes token_id = 1;
+  uint32 token_id = 1;
   // The key ID used for encrypting the token in the payload
   uint32 key_id = 2;
   // Client ephemeral public keys to associate with the stored token

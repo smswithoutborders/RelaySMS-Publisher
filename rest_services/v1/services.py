@@ -72,7 +72,7 @@ def _consume_used_keys(token_hash: TokenHash, key_index: int, session: Session) 
 
 
 def publish_content(
-    token_id: bytes,
+    token_id: int,
     key_id: int,
     len_att: int,
     content_ciphertext: bytes,
@@ -81,7 +81,7 @@ def publish_content(
 ) -> None:
     """Decrypt and publish content to its target platform."""
     token, token_hash_obj, ss_kid, es_kid, es_kid_pk, ec_kid_pk = (
-        get_keys_for_decryption(token_id_bytes=token_id, key_id=key_id, session=session)
+        get_keys_for_decryption(token_id=token_id, key_id=key_id, session=session)
     )
 
     try:

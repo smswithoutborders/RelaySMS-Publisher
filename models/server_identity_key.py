@@ -3,16 +3,17 @@
 
 import base64
 import datetime
+from typing import Any, Dict, List, Optional
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy import Column, DateTime, Integer, LargeBinary, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import LargeBinary, select, update
+from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from db import Base, get_session
 from db_types import PrivateEncryptedBinary
 
 
-def utc_now() -> datetime.datetime:
+def _utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
 
@@ -21,17 +22,19 @@ class ServerIdentityKey(Base):
 
     __tablename__ = "server_identity_keys"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    key_index = Column(Integer, nullable=False, unique=True)
-    private_key = Column(PrivateEncryptedBinary(), nullable=False)
-    public_key = Column(LargeBinary(32), nullable=False)
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
-    last_used_at = Column(DateTime, nullable=True)
-    used_count = Column(Integer, default=0, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    key_index: Mapped[int] = mapped_column(unique=True)
+    private_key: Mapped[bytes] = mapped_column(PrivateEncryptedBinary)
+    public_key: Mapped[bytes] = mapped_column(LargeBinary(32))
+    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        default=_utc_now, onupdate=_utc_now
+    )
+    last_used_at: Mapped[Optional[datetime.datetime]] = mapped_column(default=None)
+    used_count: Mapped[int] = mapped_column(default=0)
 
 
-def get_public_keys() -> list[dict]:
+def get_public_keys() -> List[Dict[str, Any]]:
     """Get all public keys for API responses."""
     with get_session() as s:
         keys = s.scalars(
@@ -46,7 +49,7 @@ def get_public_keys() -> list[dict]:
         ]
 
 
-def get_public_key(key_id: int) -> dict:
+def get_public_key(key_id: int) -> Dict[str, Any]:
     """Get a single public key for API response."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")

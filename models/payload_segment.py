@@ -2,14 +2,17 @@
 """Payload segment model and related functions."""
 
 import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, LargeBinary, select
+from sqlalchemy import ForeignKey, LargeBinary, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from db import Base
 from logutils import get_logger
+
+if TYPE_CHECKING:
+    from models import PayloadSession
 
 logger = get_logger(__name__)
 
@@ -21,15 +24,19 @@ def _utc_now() -> datetime.datetime:
 class PayloadSegment(Base):
     __tablename__ = "payload_segments"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(
-        Integer, ForeignKey("payload_sessions.id", ondelete="CASCADE"), nullable=False
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("payload_sessions.id", ondelete="CASCADE")
     )
-    data = Column(LargeBinary, nullable=False)
-    created_at = Column(DateTime, default=_utc_now, nullable=False)
-    updated_at = Column(DateTime, default=_utc_now, onupdate=_utc_now, nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        default=_utc_now, onupdate=_utc_now
+    )
 
-    session = relationship("PayloadSession", back_populates="segments")
+    session: Mapped["PayloadSession"] = relationship(
+        "PayloadSession", back_populates="segments"
+    )
 
 
 def create_if_not_exists(
@@ -47,7 +54,7 @@ def create_if_not_exists(
         return None
 
 
-def get_all_data(session_id: int, session: Session) -> list[bytes]:
+def get_all_data(session_id: int, session: Session) -> List[bytes]:
     """Return all segment data bytes for a session as a flat list."""
     return list(
         session.scalars(

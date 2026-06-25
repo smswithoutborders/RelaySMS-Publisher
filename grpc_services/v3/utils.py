@@ -30,14 +30,13 @@ logger = get_logger(__name__)
 
 
 def get_keys_for_decryption(
-    token_id_bytes: bytes, key_id: int, session: Session
+    token_id: int, key_id: int, session: Session
 ) -> tuple[Token, TokenHash, bytes, bytes, bytes, bytes]:
     """
     Fetch token and all necessary keys for decryption.
     Returns (Token, TokenHash, ss_kid, es_kid, es_kid_pk, ec_kid_pk).
     """
-    print(">>>>", len(token_id_bytes), token_id_bytes, key_id)
-    token = session.scalar(select(Token).where(Token.token_id == token_id_bytes))
+    token = session.scalar(select(Token).where(Token.token_id == token_id))
     if not token:
         raise ValueError("token not found")
 
@@ -187,7 +186,7 @@ def validate_client_ephemeral_public_keys(keys) -> str | None:
 
 
 def create_token_pools_and_encrypt(
-    token_id: int, client_ephemeral_public_keys: list, session: Session
+    token_pk_id: int, client_ephemeral_public_keys: list, session: Session
 ) -> tuple[bytes, int, list[publisher_pb2.PublicKey]]:
     """
     Create 256 server and client ephemeral key pools, pick a single random
@@ -196,7 +195,9 @@ def create_token_pools_and_encrypt(
 
     kid_index 0-15 are reserved and never selected.
     """
-    token_hash_obj, raw_token = create_token_hash(token_id=token_id, session=session)
+    token_hash_obj, raw_token = create_token_hash(
+        token_pk_id=token_pk_id, session=session
+    )
 
     kid_index = secrets.randbelow(240) + 16
 

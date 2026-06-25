@@ -2,7 +2,6 @@
 
 import base64
 import json
-import struct
 from pathlib import Path as PathLib
 from typing import List, Optional
 
@@ -196,9 +195,8 @@ def create_publications(
                 )
 
             with get_session() as db:
-                print(">>>>>>", t_id)
                 publish_content(
-                    token_id=struct.pack("<I", t_id),
+                    token_id=t_id,
                     key_id=payload.get_kid(),
                     len_att=payload.get_len_att(),
                     content_ciphertext=payload.get_content(),
@@ -222,8 +220,16 @@ def create_publications(
                     return PublishContentResponse(
                         message="Segment stored. Waiting for remaining segments."
                     )
+
+                t_id = joined.get_t_id()
+                if t_id is None:
+                    logger.error("joined payload is missing token ID")
+                    raise HTTPException(
+                        status_code=400, detail="Payload is missing token ID"
+                    )
+
                 publish_content(
-                    token_id=struct.pack("<I", joined.get_t_id()),
+                    token_id=t_id,
                     key_id=joined.get_kid(),
                     len_att=joined.get_len_att(),
                     content_ciphertext=joined.get_content(),
