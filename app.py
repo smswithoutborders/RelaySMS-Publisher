@@ -27,10 +27,13 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(v1_router, prefix="/v1")
 
 
-@app.exception_handler(ValueError)
-@app.exception_handler(NotImplementedError)
-async def error_exception_handler(request: Request, exc: ValueError):
+def _bad_request_handler(request: Request, exc: Exception):
+    logger.error("request: %s, error: %s", request.url.path, str(exc))
     return JSONResponse(status_code=400, content={"error": str(exc)})
+
+
+app.add_exception_handler(ValueError, _bad_request_handler)
+app.add_exception_handler(NotImplementedError, _bad_request_handler)
 
 
 @app.exception_handler(Exception)
