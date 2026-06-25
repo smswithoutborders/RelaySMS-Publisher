@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PublicKey,
 )
 from sqlalchemy import delete, insert, select
-from sqlalchemy.orm import Session, contains_eager
+from sqlalchemy.orm import Session
 
 from db import get_session
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
@@ -36,35 +36,33 @@ def get_keys_for_decryption(
     Fetch token and all necessary keys for decryption.
     Returns (Token, TokenHash, ss_kid, es_kid, es_kid_pk, ec_kid_pk).
     """
-    stmt = (
-        select(Token)
-        .join(Token.token_hash)
-        .join(TokenHash.server_keys)
-        .join(TokenHash.client_keys)
-        .where(Token.token_id == token_id_bytes)
-        .where(ServerEphemeralKey.key_index == key_id)
-        .where(ClientEphemeralKey.key_index == key_id)
-        .options(
-            contains_eager(Token.token_hash).contains_eager(TokenHash.server_keys),
-            contains_eager(Token.token_hash).contains_eager(TokenHash.client_keys),
+    token = session.scalar(select(Token).where(Token.token_id == token_id_bytes))
+    if not token:
+        raise ValueError("token not found")
+
+    token_hash_obj = session.scalar(
+        select(TokenHash).where(TokenHash.id == token.token_hash_id)
+    )
+    if not token_hash_obj:
+        raise ValueError("token hash not found")
+
+    se_key = session.scalar(
+        select(ServerEphemeralKey).where(
+            ServerEphemeralKey.token_hash_id == token_hash_obj.id,
+            ServerEphemeralKey.key_index == key_id,
         )
     )
+    if not se_key:
+        raise ValueError(f"server ephemeral key not found: kid={key_id}")
 
-    token = session.scalars(stmt).first()
-    if not token:
-        raise ValueError("Token or associated keys not found")
-
-    token_hash_obj = token.token_hash
-    if not token_hash_obj:
-        raise ValueError("Token hash not found")
-
-    if not token_hash_obj.server_keys:
-        raise ValueError(f"Server ephemeral key not found for kid {key_id}")
-    se_key = token_hash_obj.server_keys[0]
-
-    if not token_hash_obj.client_keys:
-        raise ValueError(f"Client ephemeral key not found for kid {key_id}")
-    ce_key = token_hash_obj.client_keys[0]
+    ce_key = session.scalar(
+        select(ClientEphemeralKey).where(
+            ClientEphemeralKey.token_hash_id == token_hash_obj.id,
+            ClientEphemeralKey.key_index == key_id,
+        )
+    )
+    if not ce_key:
+        raise ValueError(f"client ephemeral key not found: kid={key_id}")
 
     ss_kid = get_private_key(key_id, session).private_bytes_raw()
 

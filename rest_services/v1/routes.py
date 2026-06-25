@@ -188,9 +188,16 @@ def create_publications(
                     status_code=400, detail="Failed to deserialize payload"
                 ) from exc
 
+            t_id = payload.get_t_id()
+            if t_id is None:
+                logger.error("payload is missing token ID")
+                raise HTTPException(
+                    status_code=400, detail="Payload is missing token ID"
+                )
+
             with get_session() as db:
                 publish_content(
-                    token_id=struct.pack("<I", payload.get_t_id()),
+                    token_id=struct.pack("<I", t_id),
                     key_id=payload.get_kid(),
                     len_att=payload.get_len_att(),
                     content_ciphertext=payload.get_content(),
@@ -210,6 +217,7 @@ def create_publications(
                     db=db,
                 )
                 if joined is None:
+                    logger.info("Segment stored. Waiting for remaining segments.")
                     return PublishContentResponse(
                         message="Segment stored. Waiting for remaining segments."
                     )
@@ -229,4 +237,5 @@ def create_publications(
                 detail=f"Payload type {payload_type!r} is not supported.",
             )
 
+    logger.info("Content published successfully.")
     return PublishContentResponse(message="Content published successfully")

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """v1 Services for the REST API."""
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from grpc_services.v3.utils import (
@@ -10,11 +11,13 @@ from grpc_services.v3.utils import (
 )
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
+from models.client_ephemeral_key import ClientEphemeralKey
 from models.payload_segment import create_if_not_exists as create_segment
 from models.payload_segment import get_all_data
 from models.payload_session import create as create_session
 from models.payload_session import delete as delete_session
 from models.payload_session import get_by_sender_and_session
+from models.server_ephemeral_key import ServerEphemeralKey
 from models.server_identity_key import mark_key_used as mark_ss_kid_used
 from models.token import update_token_data
 from models.token_hash import TokenHash
@@ -28,7 +31,6 @@ def _get_adapter_params(
     token_data: dict, content: rrs.V1ContentsContainer, *, extras: dict | None = None
 ) -> dict:
     cat_id = content.get_cat_id()
-    print(">>>>>>>>> ATTACHMENT:", content.get_attachment())
     extra_params = extras or {}
 
     match cat_id:
@@ -54,8 +56,18 @@ def _get_adapter_params(
 
 
 def _consume_used_keys(token_hash: TokenHash, key_index: int, session: Session) -> None:
-    session.delete(token_hash.server_keys[0])
-    session.delete(token_hash.client_keys[0])
+    session.execute(
+        delete(ServerEphemeralKey).where(
+            ServerEphemeralKey.token_hash_id == token_hash.id,
+            ServerEphemeralKey.key_index == key_index,
+        )
+    )
+    session.execute(
+        delete(ClientEphemeralKey).where(
+            ClientEphemeralKey.token_hash_id == token_hash.id,
+            ClientEphemeralKey.key_index == key_index,
+        )
+    )
     mark_ss_kid_used(key_index, session)
 
 
