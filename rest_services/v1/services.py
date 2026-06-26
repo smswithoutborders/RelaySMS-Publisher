@@ -21,6 +21,7 @@ from models.server_ephemeral_key import ServerEphemeralKey
 from models.server_identity_key import mark_key_used as mark_ss_kid_used
 from models.token import update_token_data
 from models.token_hash import TokenHash
+from models.token_hash import update_last_used as mark_token_hash_used
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from platforms.adapter_manager import AdapterManager
 
@@ -111,29 +112,36 @@ def publish_content(
         logger.exception("content deserialization failed: %s", exc)
         raise ValueError("failed to deserialize content") from exc
 
-    if token.protocol == "oauth2":
-        adapter = get_oauth2_adapter(adapter_manager, token.platform)
-        params = _get_adapter_params(
-            token_data=token.token_data,
-            content=content,
-            extras={
-                "sender_id": token.token_data["account_id"],
-                "token": token.token_data["token"],
-            },
-        )
-    elif token.protocol == "pnba":
-        adapter = get_pnba_adapter(adapter_manager, token.platform)
-        params = _get_adapter_params(
-            token_data=token.token_data,
-            content=content,
-            extras={
-                "phone_number": token.token_data["token"],
-                "base_path": adapter.assets_path,
-            },
-        )
-    else:
-        logger.error("unsupported protocol: %r", token.protocol)
-        raise ValueError(f"unsupported protocol: {token.protocol!r}")
+    try:
+        proto_id = rrs.v1_payload_support_protocols_from_u8(token.proto_id)
+    except Exception as exc:
+        logger.exception("unknown proto_id=%r on token: %s", token.proto_id, exc)
+        raise
+
+    match proto_id:
+        case rrs.V1PayloadsSupportedProtocols.O_AUTH20:
+            adapter = get_oauth2_adapter(adapter_manager, token.platform)
+            params = _get_adapter_params(
+                token_data=token.token_data,
+                content=content,
+                extras={
+                    "sender_id": token.token_data["account_id"],
+                    "token": token.token_data["token"],
+                },
+            )
+        case rrs.V1PayloadsSupportedProtocols.PNBA:
+            adapter = get_pnba_adapter(adapter_manager, token.platform)
+            params = _get_adapter_params(
+                token_data=token.token_data,
+                content=content,
+                extras={
+                    "phone_number": token.token_data["token"],
+                    "base_path": adapter.assets_path,
+                },
+            )
+        case _:
+            logger.error("unsupported protocol: %r", token.protocol)
+            raise ValueError(f"unsupported protocol: {token.protocol!r}")
 
     pipe = AdapterIPCHandler.invoke(
         adapter_path=adapter.path,
@@ -146,9 +154,10 @@ def publish_content(
         logger.error("failed to publish content: %s", pipe["error"])
         raise ValueError("failed to publish content")
 
+    mark_token_hash_used(token_hash_obj, session)
     result = pipe.get("result", {})
 
-    if token.protocol == "oauth2":
+    if proto_id == rrs.V1PayloadsSupportedProtocols.O_AUTH20:
         refreshed_token = result.get("refreshed_token") or {}
         new_refresh_token = refreshed_token.get("refresh_token")
         old_refresh_token = token.token_data["token"].get("refresh_token")
@@ -156,7 +165,7 @@ def publish_content(
             update_token_data(
                 token, {**token.token_data, "token": refreshed_token}, session
             )
-            logger.info("refreshed OAuth2 token for platform %r", token.platform)
+            logger.info("successfully refreshed token for platform %r", token.platform)
 
 
 def store_segment_and_try_join(

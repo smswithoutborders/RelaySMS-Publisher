@@ -85,7 +85,7 @@ def mark_key_used(key_id: int, session: Session) -> None:
         update(ServerIdentityKey)
         .where(ServerIdentityKey.key_index == key_id)
         .values(
-            last_used_at=utc_now(),
+            last_used_at=_utc_now(),
             used_count=ServerIdentityKey.used_count + 1,
         )
     )

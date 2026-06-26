@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from models import ClientEphemeralKey, ServerEphemeralKey, Token
 
 
-def utc_now() -> datetime.datetime:
+def _utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
 
@@ -27,9 +27,9 @@ class TokenHash(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True)
     token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"))
-    created_at: Mapped[datetime.datetime] = mapped_column(default=utc_now)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        default=utc_now, onupdate=utc_now
+        default=_utc_now, onupdate=_utc_now
     )
     last_used_at: Mapped[Optional[datetime.datetime]] = mapped_column(default=None)
 
@@ -51,3 +51,10 @@ def create(token_pk_id: int, session: Session) -> tuple[TokenHash, bytes]:
     session.add(token_hash)
     session.flush()
     return token_hash, raw_token
+
+
+def update_last_used(token_hash: TokenHash, session: Session) -> None:
+    """Update the last used timestamp for a token hash."""
+    token_hash.last_used_at = _utc_now()
+    session.add(token_hash)
+    session.flush()
