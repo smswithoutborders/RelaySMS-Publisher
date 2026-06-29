@@ -25,6 +25,15 @@ def RevokePNBAToken(self, request, context):
     if auth_error:
         return auth_error
 
+    if not payload_bin:
+        logger.error("missing token ciphertext in request payload")
+        return self.handle_create_grpc_error_response(
+            context,
+            response,
+            "token ciphertext is required in the request payload",
+            grpc.StatusCode.INVALID_ARGUMENT,
+        )
+
     invalid = self.handle_request_field_validation(
         context, request, response, ["token_id", "key_id"]
     )
