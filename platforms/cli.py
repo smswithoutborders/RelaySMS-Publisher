@@ -91,9 +91,16 @@ def list_command(name, proto_id, cat_id):
             click.echo("No matching adapters found.")
             return
 
-        headers = ["ID", "Name", "Protocol ID", "Category ID"]
+        headers = ["ID", "Name", "Display Name", "Protocol ID", "Category ID"]
         rows = [
-            [str(a.id), str(a.name), str(a.proto_id), str(a.cat_id)] for a in adapters
+            [
+                str(a.id),
+                str(a.name),
+                str(a.display_name),
+                str(a.proto_id),
+                str(a.cat_id),
+            ]
+            for a in adapters
         ]
 
         widths = [
@@ -114,6 +121,18 @@ def list_command(name, proto_id, cat_id):
 
     except Exception as e:
         click.echo(f"Error listing adapters: {e}", err=True)
+
+
+@cli.command()
+@click.confirmation_option(
+    prompt="This will overwrite the current registry with data from disk. Continue?"
+)
+def recover():
+    """Recover registry from existing adapter directories on disk."""
+    try:
+        manager.recover_registry()
+    except Exception as e:
+        click.echo(f"Error during recovery: {e}", err=True)
 
 
 if __name__ == "__main__":

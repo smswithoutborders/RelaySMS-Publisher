@@ -35,13 +35,12 @@ class PublicationsResponse(BaseModel):
 
 
 class PlatformManifest(BaseModel):
+    display_name: str
     name: str
-    shortcode: str
     proto_id: int
     cat_id: int
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None
-    support_url_scheme: Optional[bool] = None
 
 
 class OAuthClientMetadata(BaseModel):

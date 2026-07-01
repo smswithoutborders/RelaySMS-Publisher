@@ -35,7 +35,7 @@ REGISTRY_FILE = BASE_DIR / "registry.json"
 logger = get_logger(__name__)
 
 
-class PlatformManifest(msgspec.Struct):
+class PlatformManifest(msgspec.Struct, forbid_unknown_fields=False):
     id: str
     name: str
     path: str
@@ -43,10 +43,9 @@ class PlatformManifest(msgspec.Struct):
     assets_path: str
     cat_id: int
     proto_id: int
-    shortcode: Optional[str] = None
+    display_name: str = ""
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None
-    support_url_scheme: Optional[str] = None
 
 
 class CloneProgress(RemoteProgress):
@@ -84,7 +83,6 @@ class AdapterManager:
         self._last_modified: float = 0.0
 
     def _load_registry(self) -> Dict[str, PlatformManifest]:
-        """Loads registry from JSON file."""
         try:
             current_mtime = os.stat(self.registry_file).st_mtime
         except FileNotFoundError:
@@ -95,21 +93,19 @@ class AdapterManager:
 
         try:
             with open(self.registry_file, "rb") as f:
-                self._app_registry = msgspec.json.decode(
+                registry = msgspec.json.decode(
                     f.read(), type=Dict[str, PlatformManifest]
                 )
+            self._app_registry = registry
             self._last_modified = current_mtime
             return self._app_registry
         except Exception as e:
             logger.error("[!] Registry read failed: %s", e)
-            return {}
+            return self._app_registry
 
     def _save_registry(self, data: Dict[str, PlatformManifest]):
-        """Saves registry data to JSON file."""
         try:
-            encoded_bytes = msgspec.json.encode(data)
-            self.registry_file.write_bytes(encoded_bytes)
-
+            self.registry_file.write_bytes(msgspec.json.encode(data))
             self._last_modified = os.stat(self.registry_file).st_mtime
             self._app_registry = data
         except (OSError, msgspec.ValidationError) as e:
@@ -117,12 +113,10 @@ class AdapterManager:
 
     @classmethod
     def _generate_id(cls, url: str) -> str:
-        """Generates deterministic ID from a URL string."""
         return str(uuid.uuid5(uuid.NAMESPACE_URL, url.strip().lower()))
 
     @classmethod
     def _is_safe_path(cls, base_folder: Path, target_path: Path) -> bool:
-        """Checks if a path sits safely within its intended base folder boundaries."""
         try:
             return (
                 base_folder.resolve() in target_path.resolve().parents
@@ -132,8 +126,8 @@ class AdapterManager:
             return False
 
     @classmethod
-    def _load_ini_file(cls, path: Path, section: str) -> Optional[dict]:
-        """Reads a section from an INI file as raw string values."""
+    def _load_ini_file(cls, path: Path, *sections: str) -> Optional[dict]:
+        """Reads and merges specified INI sections into a flat dict."""
         if not path.is_file():
             logger.error("[!] Missing file: %s", path)
             return None
@@ -141,17 +135,21 @@ class AdapterManager:
         config = configparser.ConfigParser()
         try:
             config.read(path)
-            if section not in config:
-                logger.error("[!] Section '%s' missing in: %s", section, path)
-                return None
-            return dict(config[section])
         except Exception as e:
             logger.error("[!] INI parse failed %s: %s", path, e)
             return None
 
+        merged = {}
+        for section in sections:
+            if section not in config:
+                logger.error("[!] Section '%s' missing in: %s", section, path)
+                return None
+            merged.update(dict(config[section]))
+
+        return merged
+
     @staticmethod
     def _rollback_directory(path: Path):
-        """Deletes a directory if a task fails."""
         try:
             if path.is_dir():
                 shutil.rmtree(path)
@@ -161,7 +159,6 @@ class AdapterManager:
 
     @staticmethod
     def _validate_adapter_files(path: Path) -> bool:
-        """Checks if required core files exist."""
         required = ["manifest.ini", "main.py", "config.ini"]
         missing = [f for f in required if not (path / f).is_file()]
         if missing:
@@ -173,21 +170,37 @@ class AdapterManager:
 
     @classmethod
     def _install_dependencies(cls, requirements_path: Path, venv_path: Path):
-        """Creates venv and runs pip install."""
         if not cls._is_safe_path(cls._adapters_venv_dir, venv_path):
             raise ValueError("Invalid virtual environment path localization.")
 
         try:
             subprocess.check_call([sys.executable, "-m", "venv", str(venv_path)])
-            pip_name = "bin/pip3"
-            pip_executable = venv_path / pip_name
             subprocess.check_call(
-                [str(pip_executable), "install", "-r", str(requirements_path)]
+                [str(venv_path / "bin/pip3"), "install", "-r", str(requirements_path)]
             )
             logger.info("[+] Dependencies installed: %s", venv_path)
         except subprocess.SubprocessError as e:
             logger.error("[!] Pip install failed: %s", e)
             raise ValueError("Dependency installation failed.") from e
+
+    def _build_manifest_from_ini(
+        self, adapter_id: str, ini_data: dict, existing: PlatformManifest
+    ) -> PlatformManifest:
+        try:
+            return PlatformManifest(
+                id=adapter_id,
+                display_name=ini_data["display_name"],
+                name=ini_data["name"],
+                path=existing.path,
+                venv_path=existing.venv_path,
+                assets_path=existing.assets_path,
+                cat_id=int(ini_data["cat_id"]),
+                proto_id=int(ini_data["proto_id"]),
+                icon_svg=ini_data.get("icon_svg"),
+                icon_png=ini_data.get("icon_png"),
+            )
+        except KeyError as e:
+            raise ValueError(f"Missing required manifest field: {e}") from e
 
     def find_adapter_ids(
         self,
@@ -195,7 +208,7 @@ class AdapterManager:
         proto_id: Optional[Any] = None,
         cat_id: Optional[Any] = None,
     ) -> List[str]:
-        """Finds matching registry item keys using string metadata inputs."""
+        """Return registry keys matching any combination of optional filters."""
         registry = self._load_registry()
         if not registry:
             return []
@@ -204,17 +217,13 @@ class AdapterManager:
         p_term = str(proto_id).strip().lower() if proto_id is not None else None
         c_term = str(cat_id).strip().lower() if cat_id is not None else None
 
-        matches = []
-        for adapter_id, manifest in registry.items():
-            if n_term and str(manifest.name).strip().lower() != n_term:
-                continue
-            if p_term and str(manifest.proto_id).strip().lower() != p_term:
-                continue
-            if c_term and str(manifest.cat_id).strip().lower() != c_term:
-                continue
-            matches.append(adapter_id)
-
-        return matches
+        return [
+            adapter_id
+            for adapter_id, manifest in registry.items()
+            if not (n_term and str(manifest.name).strip().lower() != n_term)
+            and not (p_term and str(manifest.proto_id).strip().lower() != p_term)
+            and not (c_term and str(manifest.cat_id).strip().lower() != c_term)
+        ]
 
     def list_adapters(
         self,
@@ -222,7 +231,7 @@ class AdapterManager:
         proto_id: Optional[Any] = None,
         cat_id: Optional[Any] = None,
     ) -> List[PlatformManifest]:
-        """Returns a list of adapter records matching any combination of optional filters."""
+        """Return manifests matching any combination of optional filters."""
         registry = self._load_registry()
         if not registry:
             return []
@@ -231,20 +240,16 @@ class AdapterManager:
         p_term = str(proto_id).strip().lower() if proto_id is not None else None
         c_term = str(cat_id).strip().lower() if cat_id is not None else None
 
-        results = []
-        for manifest in registry.values():
-            if n_term and str(manifest.name).strip().lower() != n_term:
-                continue
-            if p_term and str(manifest.proto_id).strip().lower() != p_term:
-                continue
-            if c_term and str(manifest.cat_id).strip().lower() != c_term:
-                continue
-            results.append(manifest)
-
-        return results
+        return [
+            manifest
+            for manifest in registry.values()
+            if not (n_term and str(manifest.name).strip().lower() != n_term)
+            and not (p_term and str(manifest.proto_id).strip().lower() != p_term)
+            and not (c_term and str(manifest.cat_id).strip().lower() != c_term)
+        ]
 
     def add_adapter_from_github(self, url: str):
-        """Clones a repository and registers its metadata."""
+        """Clone a repository and register its manifest."""
         self._adapters_dir.mkdir(parents=True, exist_ok=True)
         adapter_id = self._generate_id(url)
         dest_path = self._adapters_dir / adapter_id
@@ -272,16 +277,13 @@ class AdapterManager:
             self._rollback_directory(dest_path)
             raise ValueError(f"Validation failed for files at: {dest_path}")
 
-        manifest_data = self._load_ini_file(dest_path / "manifest.ini", "platform")
-        if (
-            not manifest_data
-            or not manifest_data.get("name")
-            or not manifest_data.get("cat_id")
-            or not manifest_data.get("proto_id")
+        ini_data = self._load_ini_file(dest_path / "manifest.ini", "platform")
+        if not ini_data or not all(
+            ini_data.get(f) for f in ("name", "cat_id", "proto_id")
         ):
             self._rollback_directory(dest_path)
             raise ValueError(
-                "Manifest content incomplete (missing name, cat_id, or proto_id)."
+                "Manifest incomplete: missing one or more of name, cat_id, proto_id."
             )
 
         venv_path = self._adapters_venv_dir / adapter_id
@@ -296,26 +298,30 @@ class AdapterManager:
                 self._rollback_directory(venv_path)
                 raise
 
-        manifest_record = PlatformManifest(
+        stub = PlatformManifest(
             id=adapter_id,
-            name=manifest_data["name"],
+            display_name="",
+            name="",
             path=str(dest_path),
             venv_path=str(venv_path),
             assets_path=str(self._adapters_assets_dir / adapter_id),
-            cat_id=int(manifest_data["cat_id"]),
-            proto_id=int(manifest_data["proto_id"]),
-            shortcode=manifest_data.get("shortcode"),
-            icon_svg=manifest_data.get("icon_svg"),
-            icon_png=manifest_data.get("icon_png"),
-            support_url_scheme=manifest_data.get("support_url_scheme"),
+            cat_id=0,
+            proto_id=0,
         )
+
+        try:
+            manifest_record = self._build_manifest_from_ini(adapter_id, ini_data, stub)
+        except ValueError:
+            self._rollback_directory(dest_path)
+            self._rollback_directory(venv_path)
+            raise
 
         registry[adapter_id] = manifest_record
         self._save_registry(registry)
-        logger.info("[+] Registered adapter: '%s'", manifest_data["name"])
+        logger.info("[+] Registered adapter: '%s'", ini_data["name"])
 
     def remove_adapter(self, adapter_id: str):
-        """Removes adapter workspace folders and keys from registry."""
+        """Remove adapter workspace folders and registry entry."""
         registry = self._load_registry()
         if adapter_id not in registry:
             raise ValueError(f"Adapter ID '{adapter_id}' missing from registry.")
@@ -337,8 +343,12 @@ class AdapterManager:
         logger.info("[-] Removed adapter entry: %s", adapter_id)
 
     def update_adapter(self, adapter_id: Optional[str] = None, install: bool = False):
-        """Pulls updates from remote source targets for targeted items."""
+        """Pull updates and refresh registry entries for targeted adapters."""
         registry = self._load_registry()
+        if not registry:
+            logger.warning("[!] Registry is empty or failed to load, aborting update.")
+            return
+
         targets = [adapter_id] if adapter_id else list(registry.keys())
 
         for target_id in targets:
@@ -348,50 +358,31 @@ class AdapterManager:
 
             adapter_path = Path(manifest.path)
             if not self._is_safe_path(self._adapters_dir, adapter_path):
-                logger.error(
-                    "[!] Update skipped: Invalid file folder track path on %s",
-                    target_id,
-                )
+                logger.error("[!] Update skipped: invalid path for %s", target_id)
                 continue
 
             try:
-                repo = Repo(manifest.path)
-                repo.git.pull()
+                Repo(manifest.path).git.pull()
                 logger.info("[+] Pulled source updates for: %s", target_id)
             except Exception as e:
                 logger.error("[!] Git pull failed for %s: %s", target_id, e)
                 continue
 
-            updated_manifest = self._load_ini_file(
-                adapter_path / "manifest.ini", "platform"
-            )
+            ini_data = self._load_ini_file(adapter_path / "manifest.ini", "platform")
+            if not ini_data:
+                logger.error(
+                    "[!] Could not read updated manifest for %s, skipping.", target_id
+                )
+                continue
 
-            if updated_manifest:
-                try:
-                    registry[target_id] = PlatformManifest(
-                        id=target_id,
-                        name=updated_manifest["name"],
-                        path=manifest.path,
-                        venv_path=manifest.venv_path,
-                        assets_path=manifest.assets_path,
-                        cat_id=int(updated_manifest["cat_id"]),
-                        proto_id=int(updated_manifest["proto_id"]),
-                        shortcode=updated_manifest.get("shortcode"),
-                        icon_svg=updated_manifest.get("icon_svg"),
-                        icon_png=updated_manifest.get("icon_png"),
-                        support_url_scheme=updated_manifest.get("support_url_scheme"),
-                    )
-                    logger.info("[+] Manifest cleanly overwritten for: %s", target_id)
-                except KeyError as ke:
-                    logger.error(
-                        "[!] Missing required manifest field for %s: %s", target_id, ke
-                    )
-                    continue
-                except Exception as e:
-                    logger.error(
-                        "[!] Failed to instantiate manifest for %s: %s", target_id, e
-                    )
-                    continue
+            try:
+                registry[target_id] = self._build_manifest_from_ini(
+                    target_id, ini_data, manifest
+                )
+                logger.info("[+] Manifest updated for: %s", target_id)
+            except ValueError as e:
+                logger.error("[!] Manifest build failed for %s: %s", target_id, e)
+                continue
 
             if install:
                 requirements_path = adapter_path / "requirements.txt"
@@ -407,3 +398,62 @@ class AdapterManager:
 
         self._save_registry(registry)
         logger.info("[+] Update process completed.")
+
+    def recover_registry(self):
+        """Attempt to repopulate the registry from existing adapter directories."""
+        if not self._adapters_dir.is_dir():
+            logger.error("[!] Adapters directory not found: %s", self._adapters_dir)
+            return
+
+        registry = self._load_registry()
+        recovered = 0
+
+        for adapter_path in self._adapters_dir.iterdir():
+            if not adapter_path.is_dir():
+                continue
+
+            adapter_id = adapter_path.name
+
+            if adapter_id in registry:
+                logger.debug("[~] Skipping already registered adapter: %s", adapter_id)
+                continue
+
+            if not self._validate_adapter_files(adapter_path):
+                logger.warning(
+                    "[!] Skipping invalid adapter directory: %s", adapter_path
+                )
+                continue
+
+            ini_data = self._load_ini_file(adapter_path / "manifest.ini", "platform")
+            if not ini_data or not all(
+                ini_data.get(f) for f in ("name", "cat_id", "proto_id")
+            ):
+                logger.warning("[!] Skipping incomplete manifest in: %s", adapter_path)
+                continue
+
+            venv_path = self._adapters_venv_dir / adapter_id
+            stub = PlatformManifest(
+                id=adapter_id,
+                display_name="",
+                name="",
+                path=str(adapter_path),
+                venv_path=str(venv_path),
+                assets_path=str(self._adapters_assets_dir / adapter_id),
+                cat_id=0,
+                proto_id=0,
+            )
+
+            try:
+                registry[adapter_id] = self._build_manifest_from_ini(
+                    adapter_id, ini_data, stub
+                )
+                logger.info("[+] Recovered adapter: '%s'", ini_data["name"])
+                recovered += 1
+            except ValueError as e:
+                logger.error("[!] Failed to recover adapter at %s: %s", adapter_path, e)
+
+        if recovered:
+            self._save_registry(registry)
+            logger.info("[+] Recovery complete: %d adapter(s) restored.", recovered)
+        else:
+            logger.info("[-] No adapters recovered.")
