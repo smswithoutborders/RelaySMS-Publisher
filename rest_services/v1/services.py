@@ -41,12 +41,13 @@ def _get_adapter_params(
 
     match cat_id:
         case rrs.V1ContentCategories.EMAIL:
+            to = content.get_to().decode()
             return {
                 "from_email": token_data["account_id"],
-                "to_email": content.get_to().decode(),
+                "to_email": to,
+                "recipient": to,
                 "subject": content.get_subject().decode(),
                 "message": content.get_body().decode(),
-                "recipient": content.get_to().decode(),
                 **extra_params,
             }
         case rrs.V1ContentCategories.MESSAGE:
@@ -78,7 +79,7 @@ def _consume_used_keys(token_hash: TokenHash, key_index: int, session: Session) 
     mark_ss_kid_used(key_index, session)
 
 
-def publish_content(
+def publish_platform_content(
     token_id: int,
     key_id: int,
     len_att: int,
@@ -146,8 +147,8 @@ def publish_content(
                 },
             )
         case _:
-            logger.error("unsupported protocol: %r", token.protocol)
-            raise ValueError(f"unsupported protocol: {token.protocol!r}")
+            logger.error("unsupported protocol: %r", proto_id)
+            raise ValueError(f"unsupported protocol: {proto_id!r}")
 
     pipe = AdapterIPCHandler.invoke(
         adapter_path=adapter.path,

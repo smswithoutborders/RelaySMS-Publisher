@@ -20,20 +20,22 @@ from rest_services.v1.schemas import (
     PublishContentResponse,
     ServerStaticPublicKey,
 )
-from rest_services.v1.services import publish_content, store_segment_and_try_join
+from rest_services.v1.services import (
+    publish_platform_content,
+    store_segment_and_try_join,
+)
 
 logger = get_logger(__name__)
 
 router = APIRouter()
 
 ALLOWED_PLATFORM_MANIFEST_KEYS = [
+    "display_name",
     "name",
-    "shortcode",
     "proto_id",
     "cat_id",
     "icon_svg",
     "icon_png",
-    "support_url_scheme",
 ]
 ALLOWED_PLATFORMS_WITH_CLIENT_METADATA = ["bluesky"]
 
@@ -195,7 +197,7 @@ def create_publications(
                 )
 
             with get_session() as db:
-                publish_content(
+                publish_platform_content(
                     token_id=t_id,
                     key_id=payload.get_kid(),
                     len_att=payload.get_len_att(),
@@ -228,7 +230,7 @@ def create_publications(
                         status_code=400, detail="Payload is missing token ID"
                     )
 
-                publish_content(
+                publish_platform_content(
                     token_id=t_id,
                     key_id=joined.get_kid(),
                     len_att=joined.get_len_att(),
