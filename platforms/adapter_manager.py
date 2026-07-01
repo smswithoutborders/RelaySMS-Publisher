@@ -37,13 +37,13 @@ logger = get_logger(__name__)
 
 class PlatformManifest(msgspec.Struct, forbid_unknown_fields=False):
     id: str
+    display_name: str
     name: str
     path: str
     venv_path: str
     assets_path: str
     cat_id: int
     proto_id: int
-    display_name: str = ""
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None
 
@@ -279,7 +279,7 @@ class AdapterManager:
 
         ini_data = self._load_ini_file(dest_path / "manifest.ini", "platform")
         if not ini_data or not all(
-            ini_data.get(f) for f in ("name", "cat_id", "proto_id")
+            ini_data.get(f) for f in ("name", "display_name", "cat_id", "proto_id")
         ):
             self._rollback_directory(dest_path)
             raise ValueError(
@@ -426,7 +426,7 @@ class AdapterManager:
 
             ini_data = self._load_ini_file(adapter_path / "manifest.ini", "platform")
             if not ini_data or not all(
-                ini_data.get(f) for f in ("name", "cat_id", "proto_id")
+                ini_data.get(f) for f in ("name", "display_name", "cat_id", "proto_id")
             ):
                 logger.warning("[!] Skipping incomplete manifest in: %s", adapter_path)
                 continue
