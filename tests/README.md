@@ -82,12 +82,20 @@ Requests a passcode/OTP for Phone Number-Based Authentication (PNBA).
 python -m tests.client get-pnba-code --platform telegram --phone-number +123456789
 ```
 
+```sh
+python -m tests.client get-pnba-code --platform telegram --phone-number +123456789 --auth-channel signal
+```
+
 ### 6. Exchange PNBA Code
 
 Exchanges the PNBA OTP code for a token, decrypts it, and stores the session data.
 
 ```sh
 python -m tests.client exchange-pnba-code --platform telegram --phone-number +123456789 --code <OTP_CODE>
+```
+
+```sh
+python -m tests.client exchange-pnba-code --platform telegram --phone-number +123456789 --code <OTP_CODE> --auth-channel signal
 ```
 
 If the account has two-step verification enabled, re-run with `--password`:

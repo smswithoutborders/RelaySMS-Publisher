@@ -371,8 +371,17 @@ def cmd_revoke_oauth2_token(host, port, tls, rest_api, token, **_):
 
 @cli.command("get-pnba-code")
 @shared_options
+@click.option("--auth-channel", help="The medium used to receive the code.")
 def cmd_get_pnba_code(
-    host, port, tls, rest_api, platform, phone_number, request_identifier, **_
+    host,
+    port,
+    tls,
+    rest_api,
+    platform,
+    phone_number,
+    request_identifier,
+    auth_channel,
+    **_,
 ):
     """Request a PNBA code."""
     logger.info("platform=%s | phone_number=%s", platform, phone_number)
@@ -393,7 +402,8 @@ def cmd_get_pnba_code(
             publisher_pb2.GetPNBACodeRequest(
                 platform=platform,
                 phone_number=phone_number,
-                request_identifier=request_identifier or "",
+                request_identifier=request_identifier,
+                channel=auth_channel,
             ),
             metadata=metadata,
         )
@@ -409,6 +419,7 @@ def cmd_get_pnba_code(
 @shared_options
 @click.option("--code", required=True, help="Authorization code.")
 @click.option("--password", help="Two-step verification password.")
+@click.option("--auth-channel", help="The medium used to receive the code.")
 def cmd_exchange_pnba_code(
     host,
     port,
@@ -419,6 +430,7 @@ def cmd_exchange_pnba_code(
     request_identifier,
     code,
     password,
+    auth_channel,
     **_,
 ):
     """Exchange a PNBA code, decrypt the token, and store session data."""
@@ -451,6 +463,7 @@ def cmd_exchange_pnba_code(
                     )
                     for i, kp in enumerate(client_keypairs)
                 ],
+                channel=auth_channel,
             ),
             metadata=metadata,
         )
@@ -929,7 +942,7 @@ def cmd_send(
         sys.exit(1)
 
     len_att = len(attachment_bytes) if attachment_bytes else 0
-    sess_id = secrets.randbelow(256) if has_attachment else None
+    sess_id = secrets.randbelow(128) if has_attachment else None
 
     try:
         payload = rrs.V1Payloads(
@@ -941,10 +954,7 @@ def cmd_send(
         )
         if has_attachment:
             segments = payload.split(rrs.Transports.SMS)
-            segments_b64 = [
-                seg.decode() if isinstance(seg, (bytes, bytearray)) else seg
-                for seg in segments
-            ]
+            segments_b64 = [seg.decode() for seg in segments]
         else:
             raw = payload.serialize_without_attachment()
             segments_b64 = [b64(raw, urlsafe=False)]

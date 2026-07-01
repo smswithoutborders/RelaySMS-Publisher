@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """v1 Services for the REST API."""
 
+import base64
+
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
@@ -33,6 +35,9 @@ def _get_adapter_params(
 ) -> dict:
     cat_id = content.get_cat_id()
     extra_params = extras or {}
+    attachment = content.get_attachment()
+    if attachment:
+        extra_params["attachments"] = [{"data": base64.b64encode(attachment).decode()}]
 
     match cat_id:
         case rrs.V1ContentCategories.EMAIL:
@@ -41,6 +46,7 @@ def _get_adapter_params(
                 "to_email": content.get_to().decode(),
                 "subject": content.get_subject().decode(),
                 "message": content.get_body().decode(),
+                "recipient": content.get_to().decode(),
                 **extra_params,
             }
         case rrs.V1ContentCategories.MESSAGE:
@@ -135,7 +141,7 @@ def publish_content(
                 token_data=token.token_data,
                 content=content,
                 extras={
-                    "phone_number": token.token_data["token"],
+                    "phone_number": token.token_data["account_id"],
                     "base_path": adapter.assets_path,
                 },
             )

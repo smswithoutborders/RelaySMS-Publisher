@@ -60,6 +60,7 @@ def ExchangePNBACodeAndStore(self, request, context):
             "base_path": adapter.assets_path,
             "password": request.password or None,
             "request_identifier": request.request_identifier or None,
+            "channel": request.channel or None,
         }
 
         if params.get("password"):
@@ -103,7 +104,7 @@ def ExchangePNBACodeAndStore(self, request, context):
                 proto_id=adapter.proto_id,
                 token_data={
                     "account_id": result["userinfo"]["account_identifier"],
-                    "token": result["userinfo"]["account_identifier"],
+                    "token": {"name": result["userinfo"].get("name")},
                 },
                 session=s,
             )
