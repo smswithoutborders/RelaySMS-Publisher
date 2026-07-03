@@ -39,6 +39,7 @@ class PlatformManifest(BaseModel):
     name: str
     proto_id: int
     cat_id: int
+    auth_provider: Optional[str] = None
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None
 

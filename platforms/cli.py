@@ -91,7 +91,14 @@ def list_command(name, proto_id, cat_id):
             click.echo("No matching adapters found.")
             return
 
-        headers = ["ID", "Name", "Display Name", "Protocol ID", "Category ID"]
+        headers = [
+            "ID",
+            "Name",
+            "Display Name",
+            "Protocol ID",
+            "Category ID",
+            "Auth Provider",
+        ]
         rows = [
             [
                 str(a.id),
@@ -99,6 +106,7 @@ def list_command(name, proto_id, cat_id):
                 str(a.display_name),
                 str(a.proto_id),
                 str(a.cat_id),
+                str(a.auth_provider) if a.auth_provider else "-",
             ]
             for a in adapters
         ]

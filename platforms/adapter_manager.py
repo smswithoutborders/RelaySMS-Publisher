@@ -44,6 +44,7 @@ class PlatformManifest(msgspec.Struct, forbid_unknown_fields=False):
     assets_path: str
     cat_id: int
     proto_id: int
+    auth_provider: Optional[str] = None
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None
 
@@ -196,6 +197,7 @@ class AdapterManager:
                 assets_path=existing.assets_path,
                 cat_id=int(ini_data["cat_id"]),
                 proto_id=int(ini_data["proto_id"]),
+                auth_provider=ini_data.get("auth_provider"),
                 icon_svg=ini_data.get("icon_svg"),
                 icon_png=ini_data.get("icon_png"),
             )
