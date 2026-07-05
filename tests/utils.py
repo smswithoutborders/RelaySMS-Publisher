@@ -240,9 +240,8 @@ def prepare_platform_send(
         sys.exit(1)
 
     logger.info(
-        "platform=%s | shortcode=%s | cat_id=%s | key_id=%d",
+        "platform=%s | cat_id=%s | key_id=%d",
         platform_info["name"],
-        platform_info["shortcode"],
         platform_info["cat_id"],
         kid_index,
     )
