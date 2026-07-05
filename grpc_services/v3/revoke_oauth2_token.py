@@ -7,7 +7,7 @@ import secrets
 import grpc
 
 from db import get_session
-from grpc_services.v3.utils import get_keys_for_decryption, get_oauth2_adapter
+from keys import get_keys_for_decryption
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
 from models.server_identity_key import mark_key_used as mark_ss_key_used
@@ -74,7 +74,7 @@ def RevokeOAuth2Token(self, request, context):
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
-            adapter = get_oauth2_adapter(self.adapter_manager, token.platform)
+            adapter = self.adapter_manager.get_oauth2_adapter(token.platform)
 
             pipe = AdapterIPCHandler.invoke(
                 adapter_path=adapter.path,

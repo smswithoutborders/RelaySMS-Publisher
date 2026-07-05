@@ -250,6 +250,26 @@ class AdapterManager:
             and not (c_term and str(manifest.cat_id).strip().lower() != c_term)
         ]
 
+    def get_oauth2_adapter(self, platform: str) -> PlatformManifest:
+        """Resolve the OAuth2 adapter for a platform or raise NotImplementedError."""
+        adapter = self.list_adapters(name=platform.lower(), proto_id=0)
+        if not adapter:
+            raise NotImplementedError(
+                f"Platform '{platform.lower()}' with protocol 'oauth2' is not supported. "
+                "Contact the developers for implementation status."
+            )
+        return adapter[0]
+
+    def get_pnba_adapter(self, platform: str) -> PlatformManifest:
+        """Resolve the PNBA adapter for a platform or raise NotImplementedError."""
+        adapter = self.list_adapters(name=platform.lower(), proto_id=1)
+        if not adapter:
+            raise NotImplementedError(
+                f"Platform '{platform.lower()}' with protocol 'pnba' is not supported. "
+                "Contact the developers for implementation status."
+            )
+        return adapter[0]
+
     def add_adapter_from_github(self, url: str):
         """Clone a repository and register its manifest."""
         self._adapters_dir.mkdir(parents=True, exist_ok=True)

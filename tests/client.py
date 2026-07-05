@@ -14,16 +14,18 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from protos.v3 import publisher_pb2, publisher_pb2_grpc
-from tests.helpers import (
+from tests.utils import (
     b64,
     b64d,
     build_v1_request_metadata,
     db_get,
     db_set,
-    fetch_platform_info,
     fetch_server_identity_public_key,
     grpc_call,
     grpc_channel,
+    prepare_bridge_send,
+    prepare_platform_send,
+    read_attachment,
     select_token_interactively,
 )
 from utils import get_logger
@@ -72,6 +74,7 @@ Examples:\n
   python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf\n
   python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf --interval 2.5 --shuffle\n
   python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --body "Dry run" --attachment ./file.pdf --dry-run --shuffle\n
+  python -m tests.client send --bridge --address +237123456789 --to friend@example.com --subject "Hello" --body "No token needed"\n
 """
 )
 def cli():
@@ -802,6 +805,16 @@ def cmd_sync_keys(host, port, tls, rest_api, token, **_):
 @click.option(
     "--dry-run", is_flag=True, help="Print all segments instead of sending them."
 )
+@click.option(
+    "--bridge",
+    is_flag=True,
+    help=(
+        "Use the offline-first bridge encryption scheme instead of the "
+        "token-based flow. Takes the same message params as an email "
+        "platform send (--to, --subject, --body, --attachment) and does "
+        "not require a prior OAuth2/PNBA token."
+    ),
+)
 def cmd_send(
     rest_api,
     platform,
@@ -814,132 +827,28 @@ def cmd_send(
     interval,
     shuffle,
     dry_run,
+    bridge,
     **_,
 ):
-    """Publish an encrypted message to any platform via the REST API."""
+    """Publish an encrypted message to any platform (or the bridge) via the REST API."""
 
-    if not platform:
-        logger.error("--platform is required for this command.")
-        sys.exit(1)
+    attachment_bytes = read_attachment(attachment)
+    has_attachment = attachment_bytes is not None
 
-    p_lower = platform.lower()
-    tokens = db_get("tokens") or {}
-    if not tokens:
-        logger.error("no tokens found")
-        sys.exit(1)
-
-    platform_tokens = {
-        ident: d
-        for ident, d in tokens.items()
-        if d.get("platform", "").lower() == p_lower
-    }
-    if not platform_tokens:
-        logger.error("no tokens found for platform %r.", platform)
-        sys.exit(1)
-
-    if token:
-        account_id = next(
-            (ident for ident, d in platform_tokens.items() if d.get("token") == token),
-            None,
+    if bridge:
+        if not to:
+            logger.error("--to is required when using --bridge.")
+            sys.exit(1)
+        encrypted_content, k_id, t_id, label, cleanup = prepare_bridge_send(
+            rest_api, to, subject, body, attachment_bytes
         )
-        if not account_id:
-            logger.error("token not found for platform %r", platform)
-            sys.exit(1)
     else:
-        account_id = select_token_interactively(platform_tokens)
-
-    if not account_id:
-        sys.exit(1)
-
-    token_data = tokens[account_id]
-    remaining_keypairs = token_data.get("client_ephemeral_keypairs", [])
-    if not remaining_keypairs:
-        logger.error("no client keypairs remaining for %s.", account_id)
-        sys.exit(1)
-
-    has_attachment = bool(attachment)
-
-    if has_attachment:
-        eligible_keypairs = [k for k in remaining_keypairs if k["key_id"] <= 15]
-        if not eligible_keypairs:
-            logger.error(
-                "no eligible keypairs (key_id <= 15) remaining for %s.", account_id
-            )
+        if not platform:
+            logger.error("--platform is required for this command.")
             sys.exit(1)
-    else:
-        eligible_keypairs = remaining_keypairs
-
-    kp = secrets.choice(eligible_keypairs)
-    kid_index = kp["key_id"]
-
-    es_entry = next(
-        (
-            k
-            for k in token_data["server_ephemeral_public_keys"]
-            if k["key_id"] == kid_index
-        ),
-        None,
-    )
-    if not es_entry:
-        logger.error("es_kid_pk not found for kid_index=%d", kid_index)
-        sys.exit(1)
-
-    try:
-        ss_kid_pk = fetch_server_identity_public_key(rest_api, kid_index)
-    except Exception as e:
-        logger.error("failed to fetch ss_kid_pk for kid_index=%d: %s", kid_index, e)
-        sys.exit(1)
-
-    try:
-        platform_info = fetch_platform_info(rest_api, p_lower)
-    except Exception as e:
-        logger.error("failed to fetch platform info for %r: %s", platform, e)
-        sys.exit(1)
-
-    logger.info(
-        "platform=%s | shortcode=%s | cat_id=%s | key_id=%d",
-        platform_info["name"],
-        platform_info["shortcode"],
-        platform_info["cat_id"],
-        kid_index,
-    )
-
-    attachment_bytes = None
-    if attachment:
-        try:
-            with open(attachment, "rb") as f:
-                attachment_bytes = f.read()
-            logger.info(
-                "attachment loaded: %d bytes from %s", len(attachment_bytes), attachment
-            )
-        except Exception as e:
-            logger.error("failed to read attachment: %s", e)
-            sys.exit(1)
-
-    try:
-        cat_id = rrs.v1_content_category_from_u8(platform_info["cat_id"])
-        content_bytes = rrs.V1ContentsContainer(
-            cat_id=cat_id,
-            body=body.encode(),
-            to=to.encode() if to else None,
-            subject=subject.encode() if subject else None,
-            attachment=attachment_bytes,
-        ).serialize()
-    except Exception as e:
-        logger.exception("V1ContentsContainer.serialize failed: %s", e)
-        sys.exit(1)
-
-    try:
-        encrypted_content = rrs.v1_platform_publisher_encrypt(
-            ec_kid=b64d(kp["private_key"]),
-            ss_kid_pk=ss_kid_pk,
-            es_kid_pk=b64d(es_entry["public_key"]),
-            key_id=kid_index,
-            plaintext=content_bytes,
+        encrypted_content, k_id, t_id, label, cleanup = prepare_platform_send(
+            rest_api, platform, to, subject, body, attachment_bytes, token
         )
-    except Exception as e:
-        logger.exception("v1_platform_publisher_encrypt failed: %s", e)
-        sys.exit(1)
 
     len_att = len(attachment_bytes) if attachment_bytes else 0
     sess_id = secrets.randbelow(128) if has_attachment else None
@@ -947,9 +856,9 @@ def cmd_send(
     try:
         payload = rrs.V1Payloads(
             contents=encrypted_content,
-            k_id=kid_index,
+            k_id=k_id,
             len_att=len_att,
-            t_id=token_data["token_id"],
+            t_id=t_id,
             sess_id=sess_id,
         )
         if has_attachment:
@@ -966,6 +875,7 @@ def cmd_send(
 
     if dry_run:
         click.echo(f"--- dry run: would POST {len(segments_b64)} segment(s) to {url}")
+        click.echo(f"    {label}")
         click.echo(f"    attachment : {attachment or 'none'} ({len_att} bytes)")
         click.echo(f"    sess_id    : {sess_id}")
         click.echo(f"    interval   : {interval}s")
@@ -982,10 +892,9 @@ def cmd_send(
         return
 
     logger.info(
-        "publishing platform=%s | account=%s | kid_index=%d | segments=%d | shuffle=%s",
-        p_lower,
-        account_id,
-        kid_index,
+        "publishing %s | key_id=%d | segments=%d | shuffle=%s",
+        label,
+        k_id,
         len(segments_b64),
         shuffle,
     )
@@ -1017,15 +926,7 @@ def cmd_send(
         if pos < len(order) - 1:
             time.sleep(interval)
 
-    token_data["client_ephemeral_keypairs"] = [
-        k for k in token_data["client_ephemeral_keypairs"] if k["key_id"] != kid_index
-    ]
-    token_data["server_ephemeral_public_keys"] = [
-        k
-        for k in token_data["server_ephemeral_public_keys"]
-        if k["key_id"] != kid_index
-    ]
-    db_set("tokens", tokens)
+    cleanup()
 
     click.echo(f"\nDone. {len(order)} segment(s) sent.")
 

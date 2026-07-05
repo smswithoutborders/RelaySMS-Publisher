@@ -6,9 +6,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from db import dispose_engine
+from keys import initialize_server_identity_keys
 from platforms.adapter_manager import AdapterManager
 from rest_services.v1.routes import router as v1_router
-from server_identity_keys import initialize_server_identity_keys
 from utils import get_logger
 
 logger = get_logger(__name__)

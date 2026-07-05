@@ -86,7 +86,11 @@ fastapi-server-start:
 
 run:
 	$(call log,INFO,Starting gRPC and FastAPI servers ...)
-	@trap 'echo "Shutting down ..."; kill -- -$$$$; wait' INT TERM EXIT; \
+	@( \
 		$(python) -u grpc_server.py & \
+		GRPC_PID=$$!; \
 		$(python) -m uvicorn app:app --workers 1 --host $(grpc_host) --port $(fastapi_port) & \
-		wait
+		FASTAPI_PID=$$!; \
+		trap 'echo "Shutting down ..."; kill $$GRPC_PID $$FASTAPI_PID 2>/dev/null; wait' INT TERM; \
+		wait \
+	)

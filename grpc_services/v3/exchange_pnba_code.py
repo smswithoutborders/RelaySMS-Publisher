@@ -6,7 +6,6 @@ import grpc
 from db import get_session
 from grpc_services.v3.utils import (
     create_token_pools_and_encrypt,
-    get_pnba_adapter,
     validate_client_ephemeral_public_keys,
 )
 from logutils import get_logger
@@ -52,7 +51,7 @@ def ExchangePNBACodeAndStore(self, request, context):
                 grpc.StatusCode.INVALID_ARGUMENT,
             )
 
-        adapter = get_pnba_adapter(self.adapter_manager, request.platform)
+        adapter = self.adapter_manager.get_pnba_adapter(request.platform)
 
         params = {
             "code": request.authorization_code,

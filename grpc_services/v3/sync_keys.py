@@ -8,10 +8,10 @@ import grpc
 
 from db import get_session
 from grpc_services.v3.utils import (
-    get_keys_for_decryption,
     sync_token_pools,
     validate_client_ephemeral_public_keys,
 )
+from keys import get_keys_for_decryption
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
 from models.server_identity_key import mark_key_used as mark_ss_key_used

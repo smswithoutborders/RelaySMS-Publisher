@@ -6,7 +6,6 @@ import grpc
 from db import get_session
 from grpc_services.v3.utils import (
     create_token_pools_and_encrypt,
-    get_oauth2_adapter,
     validate_client_ephemeral_public_keys,
 )
 from logutils import get_logger
@@ -47,7 +46,7 @@ def ExchangeOAuth2CodeAndStore(self, request, context):
                 grpc.StatusCode.INVALID_ARGUMENT,
             )
 
-        adapter = get_oauth2_adapter(self.adapter_manager, request.platform)
+        adapter = self.adapter_manager.get_oauth2_adapter(request.platform)
 
         pipe = AdapterIPCHandler.invoke(
             adapter_path=adapter.path,

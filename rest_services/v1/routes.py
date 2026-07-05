@@ -13,16 +13,13 @@ from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
 from models.server_identity_key import get_public_key, get_public_keys
 from platforms.adapter_manager import AdapterManager
+from publications import publish_platform_content, store_segment_and_try_join
 from rest_services.v1.schemas import (
     OAuthClientMetadata,
     PlatformManifest,
     PublishContentRequest,
     PublishContentResponse,
     ServerStaticPublicKey,
-)
-from rest_services.v1.services import (
-    publish_platform_content,
-    store_segment_and_try_join,
 )
 
 logger = get_logger(__name__)

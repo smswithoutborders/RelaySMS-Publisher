@@ -3,7 +3,6 @@
 
 import grpc
 
-from grpc_services.v3.utils import get_pnba_adapter
 from logutils import get_logger
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from protos.v3 import publisher_pb2
@@ -27,7 +26,7 @@ def GetPNBACode(self, request, context):
         return invalid
 
     try:
-        adapter = get_pnba_adapter(self.adapter_manager, request.platform)
+        adapter = self.adapter_manager.get_pnba_adapter(request.platform)
 
         pipe = AdapterIPCHandler.invoke(
             adapter_path=adapter.path,

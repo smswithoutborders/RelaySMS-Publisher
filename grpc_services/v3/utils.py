@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey,
     X25519PublicKey,
 )
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert
 from sqlalchemy.orm import Session
 
 from db import get_session
@@ -20,82 +20,11 @@ from logutils import get_logger
 from models.client_ephemeral_key import ClientEphemeralKey
 from models.server_ephemeral_key import ServerEphemeralKey
 from models.server_identity_key import get_private_key, mark_key_used
-from models.token import Token
 from models.token_hash import TokenHash
 from models.token_hash import create as create_token_hash
-from platforms.adapter_manager import AdapterManager, PlatformManifest
 from protos.v3 import publisher_pb2
 
 logger = get_logger(__name__)
-
-
-def get_keys_for_decryption(
-    token_id: int, key_id: int, session: Session
-) -> tuple[Token, TokenHash, bytes, bytes, bytes, bytes]:
-    """
-    Fetch token and all necessary keys for decryption.
-    Returns (Token, TokenHash, ss_kid, es_kid, es_kid_pk, ec_kid_pk).
-    """
-    token = session.scalar(select(Token).where(Token.token_id == token_id))
-    if not token:
-        raise ValueError("token not found")
-
-    token_hash_obj = session.scalar(
-        select(TokenHash).where(TokenHash.token_id == token.id)
-    )
-    if not token_hash_obj:
-        raise ValueError("token hash not found")
-
-    se_key = session.scalar(
-        select(ServerEphemeralKey).where(
-            ServerEphemeralKey.token_hash_id == token_hash_obj.id,
-            ServerEphemeralKey.key_index == key_id,
-        )
-    )
-    if not se_key:
-        raise ValueError(f"server ephemeral key not found: kid={key_id}")
-
-    ce_key = session.scalar(
-        select(ClientEphemeralKey).where(
-            ClientEphemeralKey.token_hash_id == token_hash_obj.id,
-            ClientEphemeralKey.key_index == key_id,
-        )
-    )
-    if not ce_key:
-        raise ValueError(f"client ephemeral key not found: kid={key_id}")
-
-    ss_kid = get_private_key(key_id, session).private_bytes_raw()
-
-    return (
-        token,
-        token_hash_obj,
-        ss_kid,
-        se_key.private_key,
-        se_key.public_key,
-        ce_key.public_key,
-    )
-
-
-def get_oauth2_adapter(manager: AdapterManager, platform: str) -> PlatformManifest:
-    """Resolve the OAuth2 adapter for a platform or raise NotImplementedError."""
-    adapter = manager.list_adapters(name=platform.lower(), proto_id=0)
-    if not adapter:
-        raise NotImplementedError(
-            f"Platform '{platform.lower()}' with protocol 'oauth2' is not supported. "
-            "Contact the developers for implementation status."
-        )
-    return adapter[0]
-
-
-def get_pnba_adapter(manager: AdapterManager, platform: str) -> PlatformManifest:
-    """Resolve the PNBA adapter for a platform or raise NotImplementedError."""
-    adapter = manager.list_adapters(name=platform.lower(), proto_id=1)
-    if not adapter:
-        raise NotImplementedError(
-            f"Platform '{platform.lower()}' with protocol 'pnba' is not supported. "
-            "Contact the developers for implementation status."
-        )
-    return adapter[0]
 
 
 def verify_v1_request(
