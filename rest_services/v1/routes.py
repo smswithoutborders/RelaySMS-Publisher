@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import base64
 import json
 from pathlib import Path as PathLib
 from typing import List, Optional
@@ -9,11 +8,15 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse
 
 from db import get_session
-from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
 from models.server_identity_key import get_public_key, get_public_keys
 from platforms.adapter_manager import AdapterManager
-from publications import publish_platform_content, store_segment_and_try_join
+from publications import (
+    AdapterIntegrationError,
+    PayloadMalformedError,
+    PayloadNotSupportedError,
+    PublicationService,
+)
 from rest_services.v1.schemas import (
     OAuthClientMetadata,
     PlatformManifest,
@@ -162,87 +165,36 @@ async def oauth_callback(
     )
 
 
-@router.post("/publications")
+@router.post("/publications", response_model=PublishContentResponse)
 def create_publications(
     body: PublishContentRequest, request: Request
 ) -> PublishContentResponse:
-    """Handle message publication requests."""
+    """Handle message publication requests over HTTP."""
     try:
-        payload_raw = base64.b64decode(body.text)
-    except Exception as exc:
-        logger.error("failed to decode base64 payload: %s", exc)
-        raise HTTPException(
-            status_code=400, detail="Invalid base64-encoded text field"
-        ) from exc
+        payload_raw, raw_segment, payload_type = PublicationService.validate(body.text)
 
-    payload_type = rrs.v1_get_payload_type(payload_raw)
-
-    match payload_type:
-        case rrs.V1PayloadsTypes.WITHOUT_ATTACHMENT:
-            try:
-                payload = rrs.V1Payloads.deserialize_without_attachment(payload_raw)
-            except Exception as exc:
-                logger.exception("failed to deserialize payload: %s", exc)
-                raise HTTPException(
-                    status_code=400, detail="Failed to deserialize payload"
-                ) from exc
-
-            t_id = payload.get_t_id()
-            if t_id is None:
-                logger.error("payload is missing token ID")
-                raise HTTPException(
-                    status_code=400, detail="Payload is missing token ID"
-                )
-
-            with get_session() as db:
-                publish_platform_content(
-                    token_id=t_id,
-                    key_id=payload.get_kid(),
-                    len_att=payload.get_len_att(),
-                    content_ciphertext=payload.get_content(),
-                    session=db,
-                    adapter_manager=request.app.state.adapter_manager,
-                )
-
-        case (
-            rrs.V1PayloadsTypes.WITH_ATTACHMENT_HEADER
-            | rrs.V1PayloadsTypes.WITH_ATTACHMENT_NO_HEADER
-        ):
-            with get_session() as db:
-                joined = store_segment_and_try_join(
-                    sender_id=body.address,
-                    payload_raw=payload_raw,
-                    raw_segment=body.text.encode(),
-                    db=db,
-                )
-                if joined is None:
-                    logger.info("Segment stored. Waiting for remaining segments.")
-                    return PublishContentResponse(
-                        message="Segment stored. Waiting for remaining segments."
-                    )
-
-                t_id = joined.get_t_id()
-                if t_id is None:
-                    logger.error("joined payload is missing token ID")
-                    raise HTTPException(
-                        status_code=400, detail="Payload is missing token ID"
-                    )
-
-                publish_platform_content(
-                    token_id=t_id,
-                    key_id=joined.get_kid(),
-                    len_att=joined.get_len_att(),
-                    content_ciphertext=joined.get_content(),
-                    session=db,
-                    adapter_manager=request.app.state.adapter_manager,
-                )
-
-        case _:
-            logger.error("unsupported payload type: %r", payload_type)
-            raise HTTPException(
-                status_code=422,
-                detail=f"Payload type {payload_type!r} is not supported.",
+        with get_session() as db:
+            service = PublicationService(
+                session=db,
+                adapter_manager=request.app.state.adapter_manager,
             )
+            result_message = service.publish(
+                payload_raw=payload_raw,
+                sender_address=body.address,
+                raw_segment=raw_segment,
+                payload_type=payload_type,
+            )
+    except PayloadMalformedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PayloadNotSupportedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AdapterIntegrationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    logger.info("Content published successfully.")
-    return PublishContentResponse(message="Content published successfully")
+    if result_message is None:
+        return PublishContentResponse(
+            message="Segment stored. Waiting for remaining segments."
+        )
+
+    logger.info("Publication request completed")
+    return PublishContentResponse(message=result_message)

@@ -81,7 +81,7 @@ def RevokePNBAToken(self, request, context):
                 venv_path=adapter.venv_path,
                 method="invalidate_session",
                 params={
-                    "phone_number": token.token_data["token"],
+                    "phone_number": token.token_data["account_id"],
                     "base_path": adapter.assets_path,
                 },
             )
