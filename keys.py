@@ -1,36 +1,51 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Key management functions."""
+"""Key management module."""
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy import func, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from db import get_session
 from logutils import get_logger
 from models.client_ephemeral_key import ClientEphemeralKey
 from models.server_ephemeral_key import ServerEphemeralKey
 from models.server_identity_key import ServerIdentityKey, get_private_key
+from models.server_identity_key import mark_key_used as mark_ss_kid_used
 from models.token import Token
 from models.token_hash import TokenHash
 
 logger = get_logger(__name__)
 
 
-def initialize_server_identity_keys(count: int = 256) -> None:
-    """Generate and store server identity keys on first startup."""
-    with get_session() as s:
-        existing = s.scalar(select(func.count(ServerIdentityKey.id)))
+class KeyManagerError(Exception):
+    pass
+
+
+class KeyNotFoundError(KeyManagerError):
+    pass
+
+
+class KeyUnavailableError(KeyManagerError):
+    pass
+
+
+class KeyManager:
+    """Manages decryption keys."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def initialize_server_identity_keys(self, count: int = 256) -> None:
+        """Create database identity keys if they don't exist yet."""
+        existing = self.session.scalar(select(func.count(ServerIdentityKey.id)))
         if existing > 0:
-            logger.info(
-                "Server identity keys already exist (%d keys), skipping", existing
-            )
+            logger.info("Server identity keys exist (%d found), skipping", existing)
             return
 
-        logger.info("Generating %d server identity keys ...", count)
+        logger.info("Generating %d server identity keys", count)
         try:
             keypairs = [X25519PrivateKey.generate() for _ in range(count)]
-            s.execute(
+            self.session.execute(
                 insert(ServerIdentityKey),
                 [
                     {
@@ -41,60 +56,77 @@ def initialize_server_identity_keys(count: int = 256) -> None:
                     for i, kp in enumerate(keypairs)
                 ],
             )
-            logger.info(
-                "Successfully generated and stored %d server identity keys", count
-            )
+            logger.info("Saved %d server identity keys", count)
         except IntegrityError:
-            logger.info(
-                "Server identity keys already created by another process, skipping"
+            logger.info("Server identity keys were created by another worker, skipping")
+        except Exception as exc:
+            logger.exception("Failed to generate server identity keys")
+            raise KeyManagerError("Server identity key setup failed") from exc
+
+    def get_keys_for_decryption(
+        self, token_hash_id: int, key_id: int
+    ) -> tuple[bytes, bytes, bytes, bytes]:
+        """Pop and return the keys needed to decrypt a message."""
+        se_row = self.session.execute(
+            delete(ServerEphemeralKey)
+            .where(
+                ServerEphemeralKey.token_hash_id == token_hash_id,
+                ServerEphemeralKey.key_index == key_id,
             )
-        except Exception as e:
-            logger.error("Failed to generate server identity keys: %s", e)
-            raise
+            .returning(ServerEphemeralKey.private_key, ServerEphemeralKey.public_key)
+        ).first()
+        if not se_row:
+            logger.error(
+                "Server ephemeral key unavailable: token_hash_id=%s, kid=%s",
+                token_hash_id,
+                key_id,
+            )
+            raise KeyUnavailableError("Server ephemeral key already used or missing")
 
+        ce_row = self.session.execute(
+            delete(ClientEphemeralKey)
+            .where(
+                ClientEphemeralKey.token_hash_id == token_hash_id,
+                ClientEphemeralKey.key_index == key_id,
+            )
+            .returning(ClientEphemeralKey.public_key)
+        ).first()
+        if not ce_row:
+            logger.error(
+                "Client ephemeral key unavailable: token_hash_id=%s, kid=%s",
+                token_hash_id,
+                key_id,
+            )
+            raise KeyUnavailableError("Client ephemeral key already used or missing")
 
-def get_keys_for_decryption(
-    token_id: int, key_id: int, session: Session
-) -> tuple[Token, TokenHash, bytes, bytes, bytes, bytes]:
-    """
-    Fetch token and all necessary keys for decryption.
-    Returns (Token, TokenHash, ss_kid, es_kid, es_kid_pk, ec_kid_pk).
-    """
-    token = session.scalar(select(Token).where(Token.token_id == token_id))
-    if not token:
-        raise ValueError("token not found")
-
-    token_hash_obj = session.scalar(
-        select(TokenHash).where(TokenHash.token_id == token.id)
-    )
-    if not token_hash_obj:
-        raise ValueError("token hash not found")
-
-    se_key = session.scalar(
-        select(ServerEphemeralKey).where(
-            ServerEphemeralKey.token_hash_id == token_hash_obj.id,
-            ServerEphemeralKey.key_index == key_id,
+        ss_kid = get_private_key(key_id, self.session).private_bytes_raw()
+        logger.debug(
+            "Keys consumed for decryption: token_hash_id=%s, kid=%s",
+            token_hash_id,
+            key_id,
         )
-    )
-    if not se_key:
-        raise ValueError(f"server ephemeral key not found: kid={key_id}")
+        return ss_kid, se_row.private_key, se_row.public_key, ce_row.public_key
 
-    ce_key = session.scalar(
-        select(ClientEphemeralKey).where(
-            ClientEphemeralKey.token_hash_id == token_hash_obj.id,
-            ClientEphemeralKey.key_index == key_id,
+    def get_token_and_keys_for_decryption(
+        self, token_id: int, key_id: int
+    ) -> tuple[Token, TokenHash, bytes, bytes, bytes, bytes]:
+        """Resolve a token by id, then pop the keys needed to decrypt its payload."""
+        token = self.session.scalar(select(Token).where(Token.token_id == token_id))
+        if token is None:
+            logger.error("Token not found: token_id=%s", token_id)
+            raise KeyNotFoundError("Token not found")
+
+        token_hash_obj = token.token_hash
+        if token_hash_obj is None:
+            logger.error("Token hash missing for token_id=%s", token_id)
+            raise KeyNotFoundError("Token hash not found")
+
+        ss_kid, se_private, se_public, ce_public = self.get_keys_for_decryption(
+            token_hash_id=token_hash_obj.id, key_id=key_id
         )
-    )
-    if not ce_key:
-        raise ValueError(f"client ephemeral key not found: kid={key_id}")
+        return token, token_hash_obj, ss_kid, se_private, se_public, ce_public
 
-    ss_kid = get_private_key(key_id, session).private_bytes_raw()
-
-    return (
-        token,
-        token_hash_obj,
-        ss_kid,
-        se_key.private_key,
-        se_key.public_key,
-        ce_key.public_key,
-    )
+    def mark_identity_key_used(self, key_id: int) -> None:
+        """Mark a server identity key as used."""
+        mark_ss_kid_used(key_id, self.session)
+        logger.debug("Marked identity key used: kid=%s", key_id)

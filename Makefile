@@ -13,17 +13,13 @@ endef
 	grpc-compile \
 	grpc-server-start \
 	fastapi-server-start \
+	celery-worker-start \
 	run \
 	payload-specs-fetch \
 	payload-specs-build \
 	payload-specs-compile \
 	build-setup \
 	migrate-up
-
-
-# ---------------------------------------------------------------------------
-# Build
-# ---------------------------------------------------------------------------
 
 grpc-compile:
 	$(call log,INFO,Compiling gRPC protos ...)
@@ -61,20 +57,10 @@ payload-specs-compile: payload-specs-fetch payload-specs-build
 
 build-setup: grpc-compile payload-specs-compile
 
-
-# ---------------------------------------------------------------------------
-# Database
-# ---------------------------------------------------------------------------
-
 migrate-up:
 	$(call log,INFO,Running database migrations ...)
 	@$(python) -m alembic upgrade head
 	$(call log,INFO,Migrations complete)
-
-
-# ---------------------------------------------------------------------------
-# Servers
-# ---------------------------------------------------------------------------
 
 grpc-server-start:
 	$(call log,INFO,Starting gRPC server ...)
@@ -84,13 +70,17 @@ fastapi-server-start:
 	$(call log,INFO,Starting FastAPI server ...)
 	@$(python) -m uvicorn app:app --workers 1 --host $(grpc_host) --port $(fastapi_port)
 
+celery-worker-start:
+	$(call log,INFO,Starting Celery worker ...)
+	@$(python) -m celery -A tasks.celery_app:celery_app worker \
+		--loglevel=info \
+		--without-gossip \
+		--without-mingle \
+		--without-heartbeat
+
+celery-beat-start:
+	$(call log,INFO,Starting Celery beat scheduler ...)
+	@$(python) -m celery -A tasks.celery_app:celery_app beat --loglevel=info
+
 run:
-	$(call log,INFO,Starting gRPC and FastAPI servers ...)
-	@( \
-		$(python) -u grpc_server.py & \
-		GRPC_PID=$$!; \
-		$(python) -m uvicorn app:app --workers 1 --host $(grpc_host) --port $(fastapi_port) & \
-		FASTAPI_PID=$$!; \
-		trap 'echo "Shutting down ..."; kill $$GRPC_PID $$FASTAPI_PID 2>/dev/null; wait' INT TERM; \
-		wait \
-	)
+	@PYTHON=$(python) HOST=$(grpc_host) PORT=$(fastapi_port) ./scripts/run.sh

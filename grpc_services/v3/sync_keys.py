@@ -11,10 +11,9 @@ from grpc_services.v3.utils import (
     sync_token_pools,
     validate_client_ephemeral_public_keys,
 )
-from keys import get_keys_for_decryption
+from keys import KeyManager, KeyManagerError
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
-from models.server_identity_key import mark_key_used as mark_ss_key_used
 from protos.v3 import publisher_pb2
 
 logger = get_logger(__name__)
@@ -29,7 +28,7 @@ def SyncKeys(self, request, context):
         return auth_error
 
     if not payload_bin:
-        logger.error("missing token ciphertext in request payload")
+        logger.error("Missing token ciphertext in sync request")
         return self.handle_create_grpc_error_response(
             context,
             response,
@@ -46,21 +45,24 @@ def SyncKeys(self, request, context):
     if invalid:
         return invalid
 
-    try:
-        validation_error = validate_client_ephemeral_public_keys(
-            request.client_ephemeral_public_keys
+    validation_error = validate_client_ephemeral_public_keys(
+        request.client_ephemeral_public_keys
+    )
+    if validation_error:
+        return self.handle_create_grpc_error_response(
+            context,
+            response,
+            validation_error,
+            grpc.StatusCode.INVALID_ARGUMENT,
         )
-        if validation_error:
-            return self.handle_create_grpc_error_response(
-                context,
-                response,
-                validation_error,
-                grpc.StatusCode.INVALID_ARGUMENT,
-            )
 
+    try:
         with get_session() as s:
-            _, token_hash_obj, ss_kid, es_kid, _, ec_kid_pk = get_keys_for_decryption(
-                token_id=request.token_id, key_id=request.key_id, session=s
+            key_manager = KeyManager(s)
+            _, token_hash_obj, ss_kid, es_kid, _, ec_kid_pk = (
+                key_manager.get_token_and_keys_for_decryption(
+                    token_id=request.token_id, key_id=request.key_id
+                )
             )
 
             try:
@@ -71,31 +73,33 @@ def SyncKeys(self, request, context):
                     key_id=request.key_id,
                     ciphertext=payload_bin,
                 )
-            except rrs.V1CryptographicError.FailedToDecrypt as e:
+            except rrs.V1CryptographicError.FailedToDecrypt as exc:
+                logger.exception("Token decryption failed: kid=%s", request.key_id)
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
-                    f"token decryption failed: {e}",
+                    "sync failed",
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
             if not secrets.compare_digest(
                 hashlib.sha256(decrypted_token).digest(), token_hash_obj.token_hash
             ):
+                logger.error("Token hash mismatch: kid=%s", request.key_id)
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
-                    "token hash mismatch",
+                    "sync failed",
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
-            mark_ss_key_used(request.key_id, s)
-
+            key_manager.mark_identity_key_used(request.key_id)
             server_public_keys = sync_token_pools(
                 token_hash_obj=token_hash_obj,
                 client_ephemeral_public_keys=request.client_ephemeral_public_keys,
                 session=s,
             )
+            logger.info("Successfully synced keys for token_id=%s", request.token_id)
 
         return response(
             success=True,
@@ -103,14 +107,14 @@ def SyncKeys(self, request, context):
             server_ephemeral_public_keys=server_public_keys,
         )
 
-    except ValueError as exc:
-        return self.handle_create_grpc_error_response(
-            context, response, exc, grpc.StatusCode.NOT_FOUND
-        )
-
     except NotImplementedError as exc:
         return self.handle_create_grpc_error_response(
             context, response, exc, grpc.StatusCode.UNIMPLEMENTED
+        )
+
+    except KeyManagerError:
+        return self.handle_create_grpc_error_response(
+            context, response, "sync failed", grpc.StatusCode.UNAUTHENTICATED
         )
 
     except Exception as exc:

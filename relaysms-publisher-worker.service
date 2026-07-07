@@ -1,0 +1,27 @@
+[Unit]
+Description=RelaySMS Publisher Celery Worker
+PartOf=relaysms-publisher.target
+After=network.target
+
+[Service]
+User=relaysms
+WorkingDirectory=/opt/relaysms/relaysms-publisher
+EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
+ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/celery \
+    -A tasks.celery_app:celery_app worker \
+    --loglevel=info \
+    --without-gossip \
+    --without-mingle \
+    --without-heartbeat
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+SyslogIdentifier=relaysms-publisher-worker
+
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=/opt/relaysms/relaysms-publisher/data /opt/relaysms/relaysms-publisher/platforms
+
+[Install]
+WantedBy=relaysms-publisher.target

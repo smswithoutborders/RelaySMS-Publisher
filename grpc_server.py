@@ -10,9 +10,9 @@ from pathlib import Path
 import grpc
 from grpc_interceptor import ServerInterceptor
 
-from db import dispose_engine
+from db import dispose_engine, get_session
 from grpc_services.v3.service import PublisherServiceV3
-from keys import initialize_server_identity_keys
+from keys import KeyManager
 from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2_grpc as v3_grpc
@@ -65,7 +65,10 @@ def _build_server(max_workers: int) -> grpc.Server:
         interceptors=[LoggingInterceptor()],
     )
 
-    initialize_server_identity_keys()
+    with get_session() as db:
+        key_manager = KeyManager(session=db)
+        key_manager.initialize_server_identity_keys()
+
     PublisherServiceV3.adapter_manager = AdapterManager()
     v3_grpc.add_PublisherServicer_to_server(PublisherServiceV3(), grpc_server)
 

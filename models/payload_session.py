@@ -60,3 +60,14 @@ def delete(payload_session: PayloadSession, session: Session) -> None:
     """Delete a payload session and its segments via cascade."""
     session.delete(payload_session)
     session.flush()
+
+
+def delete_stale(older_than: datetime.datetime, session: Session) -> int:
+    """Delete payload sessions created before the cutoff."""
+    stale_sessions = session.scalars(
+        select(PayloadSession).where(PayloadSession.created_at < older_than)
+    ).all()
+    for payload_session in stale_sessions:
+        session.delete(payload_session)
+    session.flush()
+    return len(stale_sessions)

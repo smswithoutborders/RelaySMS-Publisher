@@ -7,10 +7,9 @@ import secrets
 import grpc
 
 from db import get_session
-from keys import get_keys_for_decryption
+from keys import KeyManager, KeyManagerError
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
-from models.server_identity_key import mark_key_used as mark_ss_key_used
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from protos.v3 import publisher_pb2
 
@@ -26,7 +25,7 @@ def RevokePNBAToken(self, request, context):
         return auth_error
 
     if not payload_bin:
-        logger.error("missing token ciphertext in request payload")
+        logger.error("Missing token ciphertext in revoke request")
         return self.handle_create_grpc_error_response(
             context,
             response,
@@ -42,9 +41,10 @@ def RevokePNBAToken(self, request, context):
 
     try:
         with get_session() as s:
+            key_manager = KeyManager(s)
             token, token_hash_obj, ss_kid, es_kid, _, ec_kid_pk = (
-                get_keys_for_decryption(
-                    token_id=request.token_id, key_id=request.key_id, session=s
+                key_manager.get_token_and_keys_for_decryption(
+                    token_id=request.token_id, key_id=request.key_id
                 )
             )
 
@@ -56,21 +56,23 @@ def RevokePNBAToken(self, request, context):
                     key_id=request.key_id,
                     ciphertext=payload_bin,
                 )
-            except rrs.V1CryptographicError.FailedToDecrypt as e:
+            except rrs.V1CryptographicError.FailedToDecrypt:
+                logger.exception("Token decryption failed: kid=%s", request.key_id)
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
-                    f"token decryption failed: {e}",
+                    "revocation failed",
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
             if not secrets.compare_digest(
                 hashlib.sha256(decrypted_token).digest(), token_hash_obj.token_hash
             ):
+                logger.error("Token hash mismatch: kid=%s", request.key_id)
                 return self.handle_create_grpc_error_response(
                     context,
                     response,
-                    "token hash mismatch",
+                    "revocation failed",
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
@@ -87,21 +89,26 @@ def RevokePNBAToken(self, request, context):
             )
 
             if pipe.get("error"):
-                logger.error("adapter revocation failed: %s", pipe["error"])
+                logger.error(
+                    "Adapter revocation failed for platform %r: %s",
+                    token.platform,
+                    pipe["error"],
+                )
 
             s.delete(token)
-            mark_ss_key_used(request.key_id, s)
+            key_manager.mark_identity_key_used(request.key_id)
+            logger.info("Token revoked: platform=%r", token.platform)
 
         return response(success=True, message="Successfully revoked and deleted token")
-
-    except ValueError as exc:
-        return self.handle_create_grpc_error_response(
-            context, response, exc, grpc.StatusCode.NOT_FOUND
-        )
 
     except NotImplementedError as exc:
         return self.handle_create_grpc_error_response(
             context, response, exc, grpc.StatusCode.UNIMPLEMENTED
+        )
+
+    except KeyManagerError:
+        return self.handle_create_grpc_error_response(
+            context, response, "revocation failed", grpc.StatusCode.UNAUTHENTICATED
         )
 
     except Exception as exc:

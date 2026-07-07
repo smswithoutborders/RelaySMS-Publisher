@@ -5,8 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from db import dispose_engine
-from keys import initialize_server_identity_keys
+from db import dispose_engine, get_session
+from keys import KeyManager
 from platforms.adapter_manager import AdapterManager
 from rest_services.v1.routes import router as v1_router
 from utils import get_logger
@@ -17,7 +17,10 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown."""
-    initialize_server_identity_keys()
+    with get_session() as db:
+        key_manager = KeyManager(session=db)
+        key_manager.initialize_server_identity_keys()
+
     app.state.adapter_manager = AdapterManager()
     yield
     dispose_engine()

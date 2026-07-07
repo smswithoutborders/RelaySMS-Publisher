@@ -7,12 +7,10 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse
 
-from db import get_session
 from logutils import get_logger
 from models.server_identity_key import get_public_key, get_public_keys
 from platforms.adapter_manager import AdapterManager
 from publications import (
-    AdapterIntegrationError,
     PayloadMalformedError,
     PayloadNotSupportedError,
     PublicationService,
@@ -24,6 +22,7 @@ from rest_services.v1.schemas import (
     PublishContentResponse,
     ServerStaticPublicKey,
 )
+from tasks.publication_task import publish_message
 
 logger = get_logger(__name__)
 
@@ -166,35 +165,14 @@ async def oauth_callback(
 
 
 @router.post("/publications", response_model=PublishContentResponse)
-def create_publications(
-    body: PublishContentRequest, request: Request
-) -> PublishContentResponse:
-    """Handle message publication requests over HTTP."""
+def create_publications(body: PublishContentRequest) -> PublishContentResponse:
     try:
-        payload_raw, raw_segment, payload_type = PublicationService.validate(body.text)
-
-        with get_session() as db:
-            service = PublicationService(
-                session=db,
-                adapter_manager=request.app.state.adapter_manager,
-            )
-            result_message = service.publish(
-                payload_raw=payload_raw,
-                sender_address=body.address,
-                raw_segment=raw_segment,
-                payload_type=payload_type,
-            )
+        PublicationService.validate(body.text)
     except PayloadMalformedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PayloadNotSupportedError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except AdapterIntegrationError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    if result_message is None:
-        return PublishContentResponse(
-            message="Segment stored. Waiting for remaining segments."
-        )
-
-    logger.info("Publication request completed")
-    return PublishContentResponse(message=result_message)
+    publish_message.delay(body.text, body.address)
+    logger.info("Successfully queued publication request.")
+    return PublishContentResponse(message="Publication request queued successfully.")

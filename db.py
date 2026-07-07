@@ -136,6 +136,10 @@ def _has_mysql_config() -> bool:
     return all(get_configs(key) for key in required)
 
 
+def _sql_echo_enabled() -> bool:
+    return get_configs("LOG_LEVEL", default_value="info").lower() == "debug"
+
+
 def _create_engine() -> Engine:
     """Create and configure database engine."""
     mode = get_configs("MODE", default_value="development")
@@ -169,7 +173,7 @@ def _create_engine() -> Engine:
             engine = create_engine(
                 "sqlite://",
                 creator=_make_sqlcipher3_creator(db_path, key),
-                echo=False,
+                echo=_sql_echo_enabled(),
                 poolclass=QueuePool,
                 pool_size=5,
                 pool_pre_ping=True,
@@ -178,7 +182,7 @@ def _create_engine() -> Engine:
             url = _build_sqlite_url()
             engine = create_engine(
                 url,
-                echo=False,
+                echo=_sql_echo_enabled(),
                 connect_args={"check_same_thread": False, "timeout": 30},
                 poolclass=QueuePool,
                 pool_size=5,

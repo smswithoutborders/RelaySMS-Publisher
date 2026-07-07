@@ -1,0 +1,22 @@
+[Unit]
+Description=RelaySMS Publisher Celery Beat
+PartOf=relaysms-publisher.target
+After=network.target
+
+[Service]
+User=relaysms
+WorkingDirectory=/opt/relaysms/relaysms-publisher
+EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
+ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/celery \
+    -A tasks.celery_app:celery_app beat \
+    --loglevel=info
+Restart=on-failure
+SyslogIdentifier=relaysms-publisher-beat
+
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=/opt/relaysms/relaysms-publisher/data
+
+[Install]
+WantedBy=relaysms-publisher.target
