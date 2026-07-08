@@ -18,6 +18,7 @@ TimeoutStopSec=30
 Restart=on-failure
 SyslogIdentifier=relaysms-publisher-worker
 
+PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 NoNewPrivileges=true

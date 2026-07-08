@@ -11,6 +11,7 @@ ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/python3 -m uvicorn app:app -
 Restart=on-failure
 SyslogIdentifier=relaysms-publisher-rest
 
+PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 NoNewPrivileges=true

@@ -11,6 +11,7 @@ ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/python3 -u grpc_server.py
 Restart=on-failure
 SyslogIdentifier=relaysms-publisher-grpc
 
+PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 NoNewPrivileges=true

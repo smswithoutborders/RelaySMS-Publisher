@@ -13,6 +13,7 @@ ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/celery \
 Restart=on-failure
 SyslogIdentifier=relaysms-publisher-beat
 
+PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 NoNewPrivileges=true
