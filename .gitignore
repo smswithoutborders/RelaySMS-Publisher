@@ -7,7 +7,9 @@ platforms/available/*
 *.sh
 !install.sh
 !manage.sh
+!platforms.sh
 !docker-entrypoint.sh
+!scripts/*.sh
 credentials.json
 logs/
 logos/*.svg

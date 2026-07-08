@@ -89,7 +89,7 @@ def make_celery() -> Celery:
         beat_schedule={
             "cleanup-stale-payload-sessions": {
                 "task": "tasks.cleanup_task.cleanup_stale_payload_sessions",
-                "schedule": crontab(minute="*"),  # 00:00, 06:00, 12:00, 18:00
+                "schedule": crontab(minute=0, hour="*/6"),  # 00:00, 06:00, 12:00, 18:00
             },
         },
     )

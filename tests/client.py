@@ -23,7 +23,7 @@ from tests.utils import (
     fetch_server_identity_public_key,
     grpc_call,
     grpc_channel,
-    prepare_bridge_send,
+    prepare_offline_send,
     prepare_platform_send,
     read_attachment,
     select_token_interactively,
@@ -74,7 +74,7 @@ Examples:\n
   python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf\n
   python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf --interval 2.5 --shuffle\n
   python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --body "Dry run" --attachment ./file.pdf --dry-run --shuffle\n
-  python -m tests.client send --bridge --address +237123456789 --to friend@example.com --subject "Hello" --body "No token needed"\n
+  python -m tests.client send --offline --platform rmail --address +237123456789 --to friend@example.com --subject "Hello" --body "No token needed"\n
 """
 )
 def cli():
@@ -806,14 +806,9 @@ def cmd_sync_keys(host, port, tls, rest_api, token, **_):
     "--dry-run", is_flag=True, help="Print all segments instead of sending them."
 )
 @click.option(
-    "--bridge",
+    "--offline",
     is_flag=True,
-    help=(
-        "Use the offline-first bridge encryption scheme instead of the "
-        "token-based flow. Takes the same message params as an email "
-        "platform send (--to, --subject, --body, --attachment) and does "
-        "not require a prior OAuth2/PNBA token."
-    ),
+    help="Use the offline-first encryption scheme instead of the token-based flow.",
 )
 def cmd_send(
     rest_api,
@@ -827,19 +822,22 @@ def cmd_send(
     interval,
     shuffle,
     dry_run,
-    bridge,
+    offline,
     **_,
 ):
-    """Publish an encrypted message to any platform (or the bridge) via the REST API."""
+    """Publish an encrypted message to any platform (online or offline) via the REST API."""
 
     attachment_bytes = read_attachment(attachment)
     has_attachment = attachment_bytes is not None
 
-    if bridge:
-        if not to:
-            logger.error("--to is required when using --bridge.")
+    if offline:
+        if not platform or platform.lower() != "rmail":
+            logger.error("--offline is currently only supported for --platform rmail.")
             sys.exit(1)
-        encrypted_content, k_id, t_id, label, cleanup = prepare_bridge_send(
+        if not to:
+            logger.error("--to is required when using --offline.")
+            sys.exit(1)
+        encrypted_content, k_id, t_id, label, cleanup = prepare_offline_send(
             rest_api, to, subject, body, attachment_bytes
         )
     else:
@@ -867,8 +865,8 @@ def cmd_send(
         else:
             raw = payload.serialize_without_attachment()
             segments_b64 = [b64(raw, urlsafe=False)]
-    except Exception as e:
-        logger.exception("payload build/split failed: %s", e)
+    except Exception:
+        logger.exception("payload build/split failed:")
         sys.exit(1)
 
     url = f"{rest_api}/v1/publications"

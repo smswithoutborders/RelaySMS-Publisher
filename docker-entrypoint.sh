@@ -2,10 +2,11 @@
 
 set -e
 
-python3 -u grpc_server.py &
-exec python3 -m uvicorn app:app \
-    --host "${HOST:-0.0.0.0}" \
-    --port "${PORT:-80}" \
-    --workers "${WORKERS:-4}" \
-    --proxy-headers \
-    --forwarded-allow-ips "*"
+export HOST="${HOST:-0.0.0.0}"
+export PORT="${PORT:-80}"
+export WORKERS="${WORKERS:-4}"
+export GRPC_HOST="${GRPC_HOST:-0.0.0.0}"
+
+python3 -m alembic upgrade head
+
+exec ./scripts/run.sh

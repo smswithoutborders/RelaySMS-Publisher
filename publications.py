@@ -171,7 +171,7 @@ class PublicationService:
 
         try:
             content = rrs.V1ContentsContainer.deserialize(
-                content_bytes, cat_id, len_att
+                data=content_bytes, cat_id=cat_id, len_att=len_att
             )
         except Exception:
             logger.exception("Failed to deserialize content for token %d.", token_id)
@@ -250,24 +250,20 @@ class PublicationService:
         ss_kid = get_private_key(key_id, self.session).private_bytes_raw()
 
         try:
-            offline_response = rrs.v1_bridge_offline_first_publisher_decrypt(
-                ss=ss_kid,
-                ec_pk=None,
-                sc_pk_enc=None,
-                rx_payload=content_ciphertext,
+            offline_first = rrs.OfflineFirst.deserialize(content_ciphertext)
+            content_obj = rrs.OfflineFirst.decrypt(
+                ss=ss_kid, offline_first=offline_first
             )
         except Exception:
-            logger.exception(
-                "Decryption failed for offline payload with key %d.", key_id
-            )
+            logger.exception("Failed to decrypt offline payload with key %d.", key_id)
             raise PayloadMalformedError("Decryption failed.")
 
         self.key_manager.mark_identity_key_used(key_id)
 
-        cat_id = rrs.V1ContentCategories.BRIDGE
         try:
+            cat_id = rrs.V1ContentCategories.BRIDGE
             content = rrs.V1ContentsContainer.deserialize(
-                offline_response.get_payload(), cat_id, len_att
+                data=content_obj.get_payload(), cat_id=cat_id, len_att=len_att
             )
         except Exception:
             logger.exception("Failed to deserialize offline content")

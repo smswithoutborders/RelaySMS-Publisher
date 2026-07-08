@@ -122,6 +122,8 @@ Encrypts a message and publishes it to a platform via the REST `POST /v1/publica
 
 For messages without attachments the payload is sent as a single request. For messages with attachments the payload is split into SMS-sized segments and sent sequentially with a configurable interval between each, simulating real-world multi-segment SMS delivery.
 
+By default `send` uses the online, token-based flow (requires a prior OAuth2/PNBA token for the target platform). Pass `--offline` to use the offline-first encryption scheme instead, which does not require a prior token.
+
 ```sh
 python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "Test message"
 ```
@@ -148,6 +150,12 @@ python -m tests.client send --platform gmail --address +237123456789 --to friend
 python -m tests.client send --platform gmail --address +237123456789 --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf --dry-run --shuffle
 ```
 
+**Offline-first (no token required, rmail only):**
+
+```sh
+python -m tests.client send --offline --platform rmail --address +237123456789 --to friend@example.com --subject "Hello" --body "No token needed"
+```
+
 **Arguments:**
 
 | Argument | Required | Description |
@@ -161,9 +169,10 @@ python -m tests.client send --platform gmail --address +237123456789 --to friend
 | `--shuffle` | No | Send segments in random order to simulate out-of-order delivery. |
 | `--token` | No | Raw token (base64) to use. Omit for interactive prompt. |
 | `--dry-run` | No | Print all segments and their send order instead of transmitting. |
+| `--offline` | No | Use the offline-first encryption scheme instead of the token-based flow. |
 
 > [!NOTE]
-> Each send consumes one ephemeral keypair. The used keypair is removed from local state after a successful publish. Run `sync-keys` to replenish the pool when it runs low.
+> Each online send consumes one ephemeral keypair. The used keypair is removed from local state after a successful publish. Run `sync-keys` to replenish the pool when it runs low. `--offline` sends do not consume ephemeral keypairs since they don't use a stored token.
 
 > [!TIP]
 > Use `--shuffle` together with `--dry-run` to inspect the randomised segment order before committing to a live send. This is useful for verifying that the server correctly reassembles out-of-order segments.

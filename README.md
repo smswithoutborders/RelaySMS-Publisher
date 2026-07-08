@@ -60,9 +60,8 @@ make build-setup
 # Run database migrations
 make migrate-up
 
-# Start services
-python3 grpc_server.py        # Terminal 1
-fastapi dev app.py             # Terminal 2
+# Start gRPC, REST API, Celery worker, and Celery beat together
+./scripts/run.sh
 ```
 
 ### Docker
@@ -79,14 +78,17 @@ cp template.env .env
 docker run -d \
   --name relaysms-publisher \
   --env-file .env \
-  -p 9000:9000 \
+  -p 16000:16000 \
   -p 6000:6000 \
   -v $(pwd)/data:/publisher/data \
+  -v $(pwd)/platforms:/publisher/platforms \
   relaysms-publisher:latest
 ```
 
+The container entrypoint runs pending database migrations, then starts the gRPC server, REST API, Celery worker, and Celery beat scheduler together (via `scripts/run.sh`).
+
 > [!TIP]
-> Update `GRPC_HOST=0.0.0.0` and `HOST=0.0.0.0` in `.env` for external container access.
+> `HOST` and `GRPC_HOST` default to `0.0.0.0` inside the container so it's reachable from outside. If your `.env` file explicitly sets `HOST=127.0.0.1` or `GRPC_HOST=127.0.0.1` (e.g. copied unedited from `template.env`), it will override the container default and the services won't be reachable - remove or update those lines in `.env` for Docker deployments.
 
 ## Configuration
 

@@ -129,7 +129,7 @@ Displays the OAuth2 callback parameters returned by a platform. Intended as a re
 
 **Query Parameters:** All query parameters forwarded by the OAuth provider (e.g., `code`, `state`) are captured and displayed in an HTML table.
 
-**Response:** `200 OK` — HTML page listing all callback parameters.
+**Response:** `200 OK`, HTML page listing all callback parameters.
 
 **Error Responses:**
 

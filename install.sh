@@ -132,34 +132,60 @@ setup_env() {
   log "Edit $INSTALL_DIR/.env before starting services"
 }
 
-create_app_directories() {
-  log "Creating application directories"
+# Resolves app data directories from .env (absolute or relative to
+# INSTALL_DIR) into the global RW_DIRS array. Shared by create_app_directories
+# and install_services so systemd ReadWritePaths always matches reality.
+resolve_app_directories() {
   local envfile="$INSTALL_DIR/.env"
   [ -f "$envfile" ] || error ".env not found"
 
-  local sqlite_path adapters_dir adapters_venv adapters_assets
+  local sqlite_path celery_broker_path celery_result_path celery_beat_path
+  local adapters_dir adapters_venv adapters_assets registry_file
   sqlite_path=$(read_env_var "SQLITE_DATABASE_PATH" "$envfile")
+  celery_broker_path=$(read_env_var "CELERY_BROKER_DB_PATH" "$envfile")
+  celery_result_path=$(read_env_var "CELERY_RESULT_DB_PATH" "$envfile")
+  celery_beat_path=$(read_env_var "CELERY_BEAT_SCHEDULE_PATH" "$envfile")
   adapters_dir=$(read_env_var "PLATFORMS_ADAPTERS_DIR" "$envfile")
   adapters_venv=$(read_env_var "PLATFORMS_ADAPTERS_VENV_DIR" "$envfile")
   adapters_assets=$(read_env_var "PLATFORMS_ADAPTERS_ASSETS_DIR" "$envfile")
+  registry_file=$(read_env_var "PLATFORMS_REGISTRY_FILE" "$envfile")
 
-  _make_dir() {
-    local dir="$1" label="${2:-}"
+  RW_DIRS=()
+  _resolve_dir() {
+    local dir="$1"
     [ -z "$dir" ] && return
     [[ "$dir" = /* ]] || dir="$INSTALL_DIR/$dir"
-    mkdir -p "$dir"
-    chown "$SERVICE_USER:" "$dir"
-    chmod 750 "$dir"
-    log "  $dir${label:+ ($label)}"
+    # Skip duplicates (e.g. celery paths sharing the same directory as sqlite).
+    local existing
+    for existing in "${RW_DIRS[@]}"; do
+      [ "$existing" = "$dir" ] && return
+    done
+    RW_DIRS+=("$dir")
   }
 
   if [ -n "$sqlite_path" ] && [ "$sqlite_path" != ":memory:" ]; then
-    _make_dir "$(dirname "$sqlite_path")" "sqlite"
+    _resolve_dir "$(dirname "$sqlite_path")"
   fi
+  [ -n "$celery_broker_path" ] && _resolve_dir "$(dirname "$celery_broker_path")"
+  [ -n "$celery_result_path" ] && _resolve_dir "$(dirname "$celery_result_path")"
+  [ -n "$celery_beat_path" ] && _resolve_dir "$(dirname "$celery_beat_path")"
+  _resolve_dir "$adapters_dir"
+  _resolve_dir "$adapters_venv"
+  _resolve_dir "$adapters_assets"
+  [ -n "$registry_file" ] && _resolve_dir "$(dirname "$registry_file")"
+}
 
-  _make_dir "$adapters_dir" "adapters"
-  _make_dir "$adapters_venv" "adapters venv"
-  _make_dir "$adapters_assets" "adapters assets"
+create_app_directories() {
+  log "Creating application directories"
+  resolve_app_directories
+
+  local dir
+  for dir in "${RW_DIRS[@]}"; do
+    mkdir -p "$dir"
+    chown "$SERVICE_USER:" "$dir"
+    chmod 750 "$dir"
+    log "  $dir"
+  done
 }
 
 run_migrations() {
@@ -177,9 +203,21 @@ run_migrations() {
 install_services() {
   log "Installing systemd services"
   cd "$INSTALL_DIR"
-  for svc in relaysms-publisher.target relaysms-publisher-rest.service relaysms-publisher-grpc.service; do
+
+  resolve_app_directories
+  local rw_paths
+  rw_paths=$(
+    IFS=' '
+    echo "${RW_DIRS[*]}"
+  )
+  [ -n "$rw_paths" ] || error "No application directories resolved for ReadWritePaths"
+
+  for svc in relaysms-publisher.target relaysms-publisher-rest.service relaysms-publisher-grpc.service relaysms-publisher-worker.service relaysms-publisher-beat.service; do
     [ -f "$svc" ] || error "Service file not found: $svc"
-    sed "s/User=relaysms/User=$SERVICE_USER/" "$svc" >"/etc/systemd/system/$svc" ||
+    sed \
+      -e "s/User=relaysms/User=$SERVICE_USER/" \
+      -e "s|__RW_PATHS__|$rw_paths|" \
+      "$svc" >"/etc/systemd/system/$svc" ||
       error "Failed to install $svc"
   done
   systemctl daemon-reload || error "Failed to reload systemd"
@@ -205,6 +243,7 @@ main() {
   log "Installation complete"
   log "  Config : $INSTALL_DIR/.env"
   log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|update}"
+  log "  Platforms : $INSTALL_DIR/platforms.sh {add|remove|update|list|recover|env|shell}"
 }
 
 main "$@"

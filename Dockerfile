@@ -42,7 +42,7 @@ RUN --mount=type=cache,sharing=locked,target=/var/cache/apt \
 COPY --from=builder /venv /venv
 COPY --from=builder /publisher /publisher
 
-RUN chmod +x /publisher/docker-entrypoint.sh
+RUN chmod +x /publisher/docker-entrypoint.sh /publisher/scripts/run.sh
 
 ENV PATH="/venv/bin:${PATH}"
 ENV MODE=production

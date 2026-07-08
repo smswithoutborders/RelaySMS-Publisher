@@ -4,24 +4,36 @@
 
 This module handles the discovery, management, and installation of platform adapters.
 
+Adapter files and the registry are stored under paths configurable in `.env`:
+
+```bash
+PLATFORMS_ADAPTERS_DIR=platforms/adapters
+PLATFORMS_ADAPTERS_VENV_DIR=platforms/adapters_venv
+PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets
+PLATFORMS_REGISTRY_FILE=platforms/registry.json
+```
+
+> [!IMPORTANT]
+> Use `./platforms.sh` (from the install directory) instead of calling `python3 -m platforms.cli` directly. It automatically resolves the install directory, loads `.env`, and runs as the correct **service user** (the account systemd runs `relaysms-publisher-*` as), whether invoked directly as that user or via `sudo`. Calling the CLI module directly as the wrong user can leave the registry file or adapter directories owned incorrectly, causing the running services to fail to read/write them.
+
 ## Adding Adapters from GitHub
 
 You can add adapters directly from a GitHub repository using the CLI.
 
-### Steps:
+### Steps
 
 1. Run the following command from the project root:
 
 ```bash
-python3 -m platforms.cli add <GITHUB_URL>
+./platforms.sh add <GITHUB_URL>
 ```
 
 Replace `<GITHUB_URL>` with the URL of the GitHub repository containing the adapter.
 
-### Example:
+### Example
 
 ```bash
-python3 -m platforms.cli add https://github.com/example/adapter-repo.git
+./platforms.sh add https://github.com/example/adapter-repo.git
 ```
 
 This will clone the repository, register the adapter, and make it available for use.
@@ -30,20 +42,20 @@ This will clone the repository, register the adapter, and make it available for 
 
 You can remove an adapter by its name using the CLI.
 
-### Steps:
+### Steps
 
 1. Run the following command from the project root:
 
 ```bash
-python3 -m platforms.cli remove <ADAPTER_NAME>
+./platforms.sh remove <ADAPTER_NAME>
 ```
 
 Replace `<ADAPTER_NAME>` with the name of the adapter you want to remove.
 
-### Example:
+### Example
 
 ```bash
-python3 -m platforms.cli remove example-adapter
+./platforms.sh remove example-adapter
 ```
 
 This will unregister the adapter and remove it from the system.
@@ -52,29 +64,29 @@ This will unregister the adapter and remove it from the system.
 
 You can update adapters by pulling the latest changes from their Git repositories using the CLI.
 
-### Steps:
+### Steps
 
 1. Run the following command from the project root:
 
 ```bash
-python3 -m platforms.cli update [ADAPTER_NAME] [--install]
+./platforms.sh update [ADAPTER_NAME] [--install]
 ```
 
 - Replace `[ADAPTER_NAME]` with the name of the adapter you want to update. If omitted, all adapters will be updated.
 - Use the `--install` flag to reinstall dependencies after updating.
 
-### Examples:
+### Examples
 
 Update a specific adapter:
 
 ```bash
-python3 -m platforms.cli update example-adapter
+./platforms.sh update example-adapter
 ```
 
 Update all adapters and reinstall dependencies:
 
 ```bash
-python3 -m platforms.cli update --install
+./platforms.sh update --install
 ```
 
 This will pull the latest changes for the specified adapter(s) and optionally reinstall dependencies.
@@ -83,7 +95,7 @@ This will pull the latest changes for the specified adapter(s) and optionally re
 
 You can develop new adapters by cloning the [template repository](https://github.com/smswithoutborders/platform-adapter-template) and following its instructions.
 
-### Steps:
+### Steps
 
 1. Clone the template repository:
 

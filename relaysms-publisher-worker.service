@@ -21,7 +21,7 @@ SyslogIdentifier=relaysms-publisher-worker
 ProtectSystem=strict
 ProtectHome=true
 NoNewPrivileges=true
-ReadWritePaths=/opt/relaysms/relaysms-publisher/data /opt/relaysms/relaysms-publisher/platforms
+ReadWritePaths=__RW_PATHS__
 
 [Install]
 WantedBy=relaysms-publisher.target

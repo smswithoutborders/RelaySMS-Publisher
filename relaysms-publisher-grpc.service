@@ -10,7 +10,11 @@ EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
 ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/python3 -u grpc_server.py
 Restart=on-failure
 SyslogIdentifier=relaysms-publisher-grpc
-ReadWritePaths=/opt/relaysms/relaysms-publisher/data /opt/relaysms/relaysms-publisher/platforms
+
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=__RW_PATHS__
 
 [Install]
 WantedBy=relaysms-publisher.target

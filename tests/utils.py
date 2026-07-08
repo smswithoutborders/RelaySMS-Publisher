@@ -288,8 +288,9 @@ def prepare_platform_send(
     return encrypted_content, kid_index, token_data["token_id"], label, cleanup
 
 
-def prepare_bridge_send(rest_api, to, subject, body, attachment_bytes):
-    ss_kid = secrets.randbelow(256)
+def prepare_offline_send(rest_api, to, subject, body, attachment_bytes):
+    has_attachment = attachment_bytes is not None
+    ss_kid = secrets.randbelow(16 if has_attachment else 256)
     try:
         ss_pk = fetch_server_identity_public_key(rest_api, ss_kid)
     except Exception as e:
@@ -313,20 +314,19 @@ def prepare_bridge_send(rest_api, to, subject, body, attachment_bytes):
         sys.exit(1)
 
     try:
-        bridge_response = rrs.v1_bridge_offline_first_publisher_encrypt(
+        offline_first = rrs.OfflineFirst.encrypt(
             ss_pk=ss_pk,
             ec=ec_keypair.private_bytes_raw(),
             sc=sc_keypair.private_bytes_raw(),
             payload=content_bytes,
         )
-    except Exception as e:
-        logger.exception("v1_bridge_offline_first_publisher_encrypt failed: %s", e)
+        encrypted_content = offline_first.serialize()
+    except Exception:
+        logger.exception("OfflineFirst.encrypt failed:")
         sys.exit(1)
-
-    encrypted_content = bridge_response.get_tx_payload()
 
     def cleanup():
         pass
 
-    label = "bridge"
+    label = "offline"
     return encrypted_content, ss_kid, None, label, cleanup

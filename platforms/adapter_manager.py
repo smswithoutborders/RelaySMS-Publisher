@@ -31,7 +31,11 @@ adapters_assets_dir = Path(
     )
 )
 
-REGISTRY_FILE = BASE_DIR / "registry.json"
+REGISTRY_FILE = Path(
+    get_configs(
+        "PLATFORMS_REGISTRY_FILE", default_value=str(BASE_DIR / "registry.json")
+    )
+)
 logger = get_logger(__name__)
 
 
@@ -106,6 +110,7 @@ class AdapterManager:
 
     def _save_registry(self, data: Dict[str, PlatformManifest]):
         try:
+            self.registry_file.parent.mkdir(parents=True, exist_ok=True)
             self.registry_file.write_bytes(msgspec.json.encode(data))
             self._last_modified = os.stat(self.registry_file).st_mtime
             self._app_registry = data
