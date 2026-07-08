@@ -166,13 +166,21 @@ resolve_app_directories() {
   if [ -n "$sqlite_path" ] && [ "$sqlite_path" != ":memory:" ]; then
     _resolve_dir "$(dirname "$sqlite_path")"
   fi
-  [ -n "$celery_broker_path" ] && _resolve_dir "$(dirname "$celery_broker_path")"
-  [ -n "$celery_result_path" ] && _resolve_dir "$(dirname "$celery_result_path")"
-  [ -n "$celery_beat_path" ] && _resolve_dir "$(dirname "$celery_beat_path")"
+  if [ -n "$celery_broker_path" ]; then
+    _resolve_dir "$(dirname "$celery_broker_path")"
+  fi
+  if [ -n "$celery_result_path" ]; then
+    _resolve_dir "$(dirname "$celery_result_path")"
+  fi
+  if [ -n "$celery_beat_path" ]; then
+    _resolve_dir "$(dirname "$celery_beat_path")"
+  fi
   _resolve_dir "$adapters_dir"
   _resolve_dir "$adapters_venv"
   _resolve_dir "$adapters_assets"
-  [ -n "$registry_file" ] && _resolve_dir "$(dirname "$registry_file")"
+  if [ -n "$registry_file" ]; then
+    _resolve_dir "$(dirname "$registry_file")"
+  fi
 }
 
 create_app_directories() {
