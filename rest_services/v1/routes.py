@@ -34,6 +34,7 @@ ALLOWED_PLATFORM_MANIFEST_KEYS = [
     "proto_id",
     "cat_id",
     "auth_provider",
+    "supports_offline_first",
     "icon_svg",
     "icon_png",
 ]

@@ -35,7 +35,7 @@ Retrieve a list of supported platform adapter manifests. Supports optional query
 | cat_id | integer | Category identifier |
 | icon_svg | string | (Optional) Inline SVG icon data |
 | icon_png | string | (Optional) PNG icon URL or data |
-| support_url_scheme | boolean | (Optional) Whether a custom URL scheme is supported |
+| supports_offline_first | boolean | (Optional) Whether the platform adapter supports offline-first payloads |
 
 ---
 

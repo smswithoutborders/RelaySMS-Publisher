@@ -98,6 +98,7 @@ def list_command(name, proto_id, cat_id):
             "Protocol ID",
             "Category ID",
             "Auth Provider",
+            "Offline",
         ]
         rows = [
             [
@@ -107,6 +108,7 @@ def list_command(name, proto_id, cat_id):
                 str(a.proto_id),
                 str(a.cat_id),
                 str(a.auth_provider) if a.auth_provider else "-",
+                "✓" if a.supports_offline_first else "-",
             ]
             for a in adapters
         ]

@@ -40,6 +40,7 @@ class PlatformManifest(BaseModel):
     proto_id: int
     cat_id: int
     auth_provider: Optional[str] = None
+    supports_offline_first: Optional[bool] = None
     icon_svg: Optional[str] = None
     icon_png: Optional[str] = None
 
