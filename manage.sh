@@ -27,10 +27,10 @@ restart)
   echo "Services restarted"
   ;;
 status)
-  systemctl status relaysms-publisher-rest relaysms-publisher-grpc
+  systemctl status relaysms-publisher-rest relaysms-publisher-grpc relaysms-publisher-worker relaysms-publisher-beat
   ;;
 logs)
-  journalctl -u relaysms-publisher-rest -u relaysms-publisher-grpc -f
+  journalctl -u relaysms-publisher-rest -u relaysms-publisher-grpc -u relaysms-publisher-worker -u relaysms-publisher-beat -f
   ;;
 enable)
   check_sudo

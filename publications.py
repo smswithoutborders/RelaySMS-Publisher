@@ -53,6 +53,7 @@ class PublicationService:
         try:
             payload_bytes = base64.b64decode(text_payload)
         except Exception as exc:
+            logger.error("Failed to decode base64 payload: %s", exc)
             raise PayloadMalformedError("Payload is not valid base64.") from exc
 
         try:
