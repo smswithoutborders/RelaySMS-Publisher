@@ -307,6 +307,7 @@ class PublicationService:
         try:
             joined = rrs.V1Payloads.join(segment_data)
         except Exception:
+            logger.exception("Failed to join segments for session %s.", sess_id)
             logger.warning(
                 "Session %s incomplete: %d segments saved.", sess_id, len(segment_data)
             )
