@@ -71,6 +71,8 @@ def make_celery() -> Celery:
     )
     _ensure_db_dir(schedule_path)
 
+    cleanup_cron = get_configs("CELERY_CLEANUP_CRON", default_value="0 */3 * * *")
+
     app = Celery(
         "relaysms_publisher", include=["tasks.publication_task", "tasks.cleanup_task"]
     )
@@ -89,7 +91,7 @@ def make_celery() -> Celery:
         beat_schedule={
             "cleanup-stale-payload-sessions": {
                 "task": "tasks.cleanup_task.cleanup_stale_payload_sessions",
-                "schedule": crontab(minute=0, hour="*/6"),  # 00:00, 06:00, 12:00, 18:00
+                "schedule": crontab.from_string(cleanup_cron),
             },
         },
     )
