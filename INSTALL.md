@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publishe
 ```bash
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip python3-venv python3-dev \
-    build-essential pkg-config libsqlcipher-dev git make curl
+    build-essential pkg-config libsqlcipher-dev libmagic1 git make curl
 ```
 
 ### Rust

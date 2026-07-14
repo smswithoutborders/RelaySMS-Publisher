@@ -20,7 +20,7 @@ Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS w
 **Ubuntu Dependencies:**
 
 ```bash
-sudo apt install python3-dev build-essential libsqlcipher-dev pkg-config make git
+sudo apt install python3-dev build-essential libsqlcipher-dev libmagic1 pkg-config make git
 ```
 
 ## Installation

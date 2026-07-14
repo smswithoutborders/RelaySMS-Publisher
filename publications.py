@@ -2,6 +2,8 @@
 """Publication processing pipeline service."""
 
 import base64
+import magic
+import uuid
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -329,7 +331,25 @@ class PublicationService:
 
         attachment = content.get_attachment()
         if attachment:
-            params["attachments"] = [{"data": base64.b64encode(attachment).decode()}]
+            try:
+                mimetype = magic.from_buffer(attachment[:2048], mime=True)
+            except magic.MagicException:
+                mimetype = None
+
+            if not mimetype:
+                logger.warning("Could not determine MIME type of attachment.")
+                mimetype = "application/octet-stream"
+
+            extension = mimetype.split("/")[-1] or "bin"
+            filename = f"{uuid.uuid4().hex}.{extension}"
+
+            params["attachments"] = [
+                {
+                    "data": base64.b64encode(attachment).decode(),
+                    "filename": filename,
+                    "mimetype": mimetype,
+                }
+            ]
 
         message = content.get_body().decode()
 

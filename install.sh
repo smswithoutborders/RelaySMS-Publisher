@@ -39,6 +39,7 @@ install_system_deps() {
     python3 python3-pip python3-venv python3-dev \
     build-essential pkg-config \
     libsqlcipher-dev \
+    libmagic1 \
     openssl git make curl ||
     error "Failed to install system dependencies"
 }
