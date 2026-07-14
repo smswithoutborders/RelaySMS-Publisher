@@ -85,6 +85,7 @@ def make_celery() -> Celery:
         worker_enable_remote_control=False,
         worker_concurrency=concurrency,
         task_acks_late=True,
+        task_reject_on_worker_lost=True,
         worker_prefetch_multiplier=1,
         task_ignore_result=True,
         beat_schedule_filename=schedule_path,

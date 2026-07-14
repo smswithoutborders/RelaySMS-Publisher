@@ -95,7 +95,11 @@ clone_repository() {
 setup_virtualenv() {
   log "Setting up virtual environment"
   cd "$INSTALL_DIR"
-  [ -d "venv" ] || python3 -m venv venv || error "Failed to create venv"
+  if [ -d "venv" ]; then
+    log "Removing existing venv for a clean rebuild"
+    rm -rf venv
+  fi
+  python3 -m venv venv || error "Failed to create venv"
   venv/bin/pip install --quiet --upgrade pip || error "Failed to upgrade pip"
   venv/bin/pip install --quiet -r requirements.txt || error "Failed to install Python dependencies"
 }

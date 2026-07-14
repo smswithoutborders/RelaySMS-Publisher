@@ -13,9 +13,13 @@ numeric_level = getattr(logging, LOG_LEVEL, None)
 if not isinstance(numeric_level, int):
     raise ValueError(f"Invalid log level: {LOG_LEVEL}")
 
-logging.basicConfig(
-    level=numeric_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+_LOG_FORMAT = (
+    "%(name)s - %(levelname)s - %(message)s"
+    if os.getenv("JOURNAL_STREAM")
+    else "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+
+logging.basicConfig(level=numeric_level, format=_LOG_FORMAT)
 
 
 def get_logger(name: str = None) -> logging.Logger:

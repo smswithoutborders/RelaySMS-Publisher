@@ -308,18 +308,19 @@ class PublicationService:
 
         try:
             joined = rrs.V1Payloads.join(segment_data)
-        except Exception:
-            logger.exception("Failed to join segments for session %s.", sess_id)
+        except Exception as exc:
             logger.warning(
-                "Session %s incomplete: %d segments saved.", sess_id, len(segment_data)
+                "Session %s not ready yet (%d segment(s) stored so far): %s: %s",
+                sess_id,
+                len(segment_data),
+                type(exc).__name__,
+                exc or "-",
             )
             return None
 
         delete_session(payload_session, self.session)
         logger.info(
-            "Session %s assembled successfully from %d segments.",
-            sess_id,
-            len(segment_data),
+            "Session %s assembled from %d segments.", sess_id, len(segment_data)
         )
         return joined
 
