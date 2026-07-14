@@ -1,16 +1,32 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"
 SERVICE_NAME="relaysms-publisher"
 REPO_URL="https://github.com/smswithoutborders/RelaySMS-Publisher.git"
 BRANCH="${BRANCH:-main}"
 CARGO_BIN="$HOME/.cargo/bin"
+DEPS_MARKER="/var/lib/relaysms-publisher-deps-installed"
 
-# Determine service user: prefer the invoking user (SUDO_USER) so no extra
-# system account is needed. Fall back to a dedicated 'relaysms' system user
-# when running directly as root.
+# Single source of truth for the unit set. Add/rename a service here and it
+# propagates to install, enable/start, and restart — no need to touch it
+# in more than one place.
+TARGET_UNIT="relaysms-publisher.target"
+SERVICE_UNITS=(
+  relaysms-publisher-rest.service
+  relaysms-publisher-grpc.service
+  relaysms-publisher-worker.service
+  relaysms-publisher-beat.service
+)
+ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
+
+# Prefer the invoking user (SUDO_USER) as the service owner so no extra
+# system account is needed; fall back to a dedicated 'relaysms' user when
+# run directly as root. Note this only affects ownership of the app's
+# runtime files/services — the build itself (Rust, venv, `make build-setup`)
+# always runs as root/root's $HOME, since the script isn't re-exec'd with
+# `sudo -E`.
 if [ -n "${SUDO_USER:-}" ] && id "$SUDO_USER" &>/dev/null; then
   SERVICE_USER="$SUDO_USER"
 else
@@ -22,17 +38,49 @@ error() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
   exit 1
 }
+# Safety net for failures not already wrapped in `|| error "..."` (e.g. a
+# bare apt-get/git call). Explicit exit calls from error() don't re-trigger
+# this trap, so messages are never duplicated.
+on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
+trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 check_root() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 
-# Read a single key from an env file without evaluating the file.
+# Reads a single KEY=value from an env file without sourcing/evaluating it
+# (avoids executing arbitrary shell in a file we don't fully control).
+# Tolerates an `export ` prefix and quoted values. The `|| true` on the
+# grep keeps a no-match result from tripping `pipefail`.
 read_env_var() {
-  local key="$1" file="$2"
-  grep -E "^${key}[[:space:]]*=" "$file" 2>/dev/null | tail -1 |
-    sed 's/^[^=]*=//;s/^[[:space:]]*//;s/[[:space:]]*$//'
+  local key="$1" file="$2" val
+  val=$( (grep -E "^(export[[:space:]]+)?${key}[[:space:]]*=" "$file" 2>/dev/null || true) |
+    tail -1 | sed -E 's/^(export[[:space:]]+)?[^=]*=//; s/^[[:space:]]*//; s/[[:space:]]*$//')
+  val="${val%\"}"
+  val="${val#\"}"
+  val="${val%\'}"
+  val="${val#\'}"
+  echo "$val"
+}
+
+# Appends a directory to the global RW_DIRS array (resolving it relative to
+# INSTALL_DIR if not absolute), de-duplicating as it goes. Defined once at
+# top level — resolve_app_directories is called twice per run (directory
+# creation, then systemd ReadWritePaths), and both must see the same set.
+_resolve_dir() {
+  local dir="$1"
+  [ -z "$dir" ] && return
+  [[ "$dir" = /* ]] || dir="$INSTALL_DIR/$dir"
+  local existing
+  for existing in "${RW_DIRS[@]}"; do
+    [ "$existing" = "$dir" ] && return
+  done
+  RW_DIRS+=("$dir")
 }
 
 install_system_deps() {
+  if [ -f "$DEPS_MARKER" ] && [ "${FORCE_DEPS:-0}" != "1" ]; then
+    log "System dependencies already installed, skipping (FORCE_DEPS=1 to force)"
+    return
+  fi
   log "Installing system dependencies"
   apt-get update -qq
   apt-get install -y --no-install-recommends \
@@ -40,8 +88,9 @@ install_system_deps() {
     build-essential pkg-config \
     libsqlcipher-dev \
     libmagic1 \
-    openssl git make curl ||
-    error "Failed to install system dependencies"
+    openssl git make curl
+  mkdir -p "$(dirname "$DEPS_MARKER")"
+  touch "$DEPS_MARKER"
 }
 
 install_rust() {
@@ -51,9 +100,7 @@ install_rust() {
     return
   fi
   log "Installing Rust"
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
-    sh -s -- -y --no-modify-path ||
-    error "Rust installation failed"
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
   export PATH="$CARGO_BIN:$PATH"
   cargo --version || error "cargo not found after install"
 }
@@ -67,28 +114,28 @@ setup_service_user() {
     log "Service user: relaysms (already exists)"
   else
     log "Creating service user: relaysms"
-    useradd --system --no-create-home --shell /usr/sbin/nologin relaysms ||
-      error "Failed to create service user"
+    useradd --system --no-create-home --shell /usr/sbin/nologin relaysms
   fi
 }
 
 clone_repository() {
   log "Cloning repository"
+  # `-c url....insteadOf` is scoped to this git invocation only, so we
+  # don't permanently rewrite the invoking user's global git config just
+  # to fetch this one repo over HTTPS instead of SSH.
   if [ -d "$INSTALL_DIR/.git" ]; then
     log "Repository exists, updating"
     cd "$INSTALL_DIR"
-    git fetch origin
+    git -c url."https://github.com/".insteadOf="git@github.com:" fetch origin
     git checkout "$BRANCH"
-    git pull origin "$BRANCH" || error "Failed to update repository"
+    git -c url."https://github.com/".insteadOf="git@github.com:" pull origin "$BRANCH"
     log "Updating submodules"
-    git submodule update --init --recursive || error "Failed to update submodules"
+    git submodule update --init --recursive
   else
     mkdir -p "$(dirname "$INSTALL_DIR")"
-    # Rewrite SSH submodule URLs to HTTPS so build works without SSH credentials
-    git config --global url."https://github.com/".insteadOf "git@github.com:"
     log "Cloning with submodules"
-    git clone --recurse-submodules -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR" ||
-      error "Failed to clone repository"
+    git -c url."https://github.com/".insteadOf="git@github.com:" \
+      clone --recurse-submodules -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
   fi
 }
 
@@ -99,16 +146,16 @@ setup_virtualenv() {
     log "Removing existing venv for a clean rebuild"
     rm -rf venv
   fi
-  python3 -m venv venv || error "Failed to create venv"
-  venv/bin/pip install --quiet --upgrade pip || error "Failed to upgrade pip"
-  venv/bin/pip install --quiet -r requirements.txt || error "Failed to install Python dependencies"
+  python3 -m venv venv
+  venv/bin/pip install --quiet --upgrade pip
+  venv/bin/pip install --quiet -r requirements.txt
 }
 
 build_application() {
   log "Building application"
   cd "$INSTALL_DIR"
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
-  make build-setup || error "Failed to build application"
+  make build-setup
 }
 
 setup_env() {
@@ -121,10 +168,10 @@ setup_env() {
   [ -f "template.env" ] || error "template.env not found"
   cp template.env .env
 
-  local db_key
-  db_key=$(openssl rand -hex 32) || error "Failed to generate database encryption key"
-  field_key=$(openssl rand -hex 32) || error "Failed to generate database field encryption key"
-  data_key=$(openssl rand -hex 32) || error "Failed to generate data encryption key"
+  local db_key field_key data_key
+  db_key=$(openssl rand -hex 32)
+  field_key=$(openssl rand -hex 32)
+  data_key=$(openssl rand -hex 32)
   sed -i "s|^DATABASE_ENCRYPTION_ENABLED=.*|DATABASE_ENCRYPTION_ENABLED=true|" .env
   sed -i "s|^DATABASE_FIELD_ENCRYPTION_ENABLED=.*|DATABASE_FIELD_ENCRYPTION_ENABLED=true|" .env
   sed -i "s|^DATABASE_ENCRYPTION_KEY=.*|DATABASE_ENCRYPTION_KEY=$db_key|" .env
@@ -137,9 +184,9 @@ setup_env() {
   log "Edit $INSTALL_DIR/.env before starting services"
 }
 
-# Resolves app data directories from .env (absolute or relative to
-# INSTALL_DIR) into the global RW_DIRS array. Shared by create_app_directories
-# and install_services so systemd ReadWritePaths always matches reality.
+# Shared by create_app_directories and install_services so the directories
+# that get created and the paths granted to systemd's ReadWritePaths can
+# never drift apart from what .env actually configures.
 resolve_app_directories() {
   local envfile="$INSTALL_DIR/.env"
   [ -f "$envfile" ] || error ".env not found"
@@ -156,36 +203,17 @@ resolve_app_directories() {
   registry_file=$(read_env_var "PLATFORMS_REGISTRY_FILE" "$envfile")
 
   RW_DIRS=()
-  _resolve_dir() {
-    local dir="$1"
-    [ -z "$dir" ] && return
-    [[ "$dir" = /* ]] || dir="$INSTALL_DIR/$dir"
-    # Skip duplicates (e.g. celery paths sharing the same directory as sqlite).
-    local existing
-    for existing in "${RW_DIRS[@]}"; do
-      [ "$existing" = "$dir" ] && return
-    done
-    RW_DIRS+=("$dir")
-  }
 
   if [ -n "$sqlite_path" ] && [ "$sqlite_path" != ":memory:" ]; then
     _resolve_dir "$(dirname "$sqlite_path")"
   fi
-  if [ -n "$celery_broker_path" ]; then
-    _resolve_dir "$(dirname "$celery_broker_path")"
-  fi
-  if [ -n "$celery_result_path" ]; then
-    _resolve_dir "$(dirname "$celery_result_path")"
-  fi
-  if [ -n "$celery_beat_path" ]; then
-    _resolve_dir "$(dirname "$celery_beat_path")"
-  fi
+  [ -n "$celery_broker_path" ] && _resolve_dir "$(dirname "$celery_broker_path")"
+  [ -n "$celery_result_path" ] && _resolve_dir "$(dirname "$celery_result_path")"
+  [ -n "$celery_beat_path" ] && _resolve_dir "$(dirname "$celery_beat_path")"
   _resolve_dir "$adapters_dir"
   _resolve_dir "$adapters_venv"
   _resolve_dir "$adapters_assets"
-  if [ -n "$registry_file" ]; then
-    _resolve_dir "$(dirname "$registry_file")"
-  fi
+  [ -n "$registry_file" ] && _resolve_dir "$(dirname "$registry_file")"
 }
 
 create_app_directories() {
@@ -210,7 +238,7 @@ run_migrations() {
     set +a
     cd '$INSTALL_DIR'
     PATH='$INSTALL_DIR/venv/bin:$PATH' make migrate-up
-  " || error "Database migrations failed"
+  "
 }
 
 install_services() {
@@ -225,17 +253,22 @@ install_services() {
   )
   [ -n "$rw_paths" ] || error "No application directories resolved for ReadWritePaths"
 
-  for svc in relaysms-publisher.target relaysms-publisher-rest.service relaysms-publisher-grpc.service relaysms-publisher-worker.service relaysms-publisher-beat.service; do
+  local svc
+  for svc in "${ALL_UNITS[@]}"; do
     [ -f "$svc" ] || error "Service file not found: $svc"
+    # '#' delimiter (not '|') since a resolved path could contain a pipe.
     sed \
       -e "s/User=relaysms/User=$SERVICE_USER/" \
-      -e "s|__RW_PATHS__|$rw_paths|" \
-      "$svc" >"/etc/systemd/system/$svc" ||
-      error "Failed to install $svc"
+      -e "s#__RW_PATHS__#$rw_paths#" \
+      "$svc" >"/etc/systemd/system/$svc"
   done
-  systemctl daemon-reload || error "Failed to reload systemd"
-  systemctl enable "$SERVICE_NAME.target" || error "Failed to enable service"
-  systemctl start "$SERVICE_NAME.target" || error "Failed to start service"
+
+  systemctl daemon-reload
+  systemctl enable "$TARGET_UNIT"
+  for svc in "${SERVICE_UNITS[@]}"; do
+    systemctl restart "$svc"
+  done
+  systemctl start "$TARGET_UNIT"
 }
 
 main() {
