@@ -1,7 +1,14 @@
 [Unit]
-Description=RelaySMS Publisher Services
-Wants=relaysms-publisher-rest.service relaysms-publisher-grpc.service relaysms-publisher-worker.service relaysms-publisher-beat.service
-After=relaysms-publisher-rest.service relaysms-publisher-grpc.service relaysms-publisher-worker.service relaysms-publisher-beat.service
+Description=RelaySMS Publisher
+Documentation=https://github.com/smswithoutborders/RelaySMS-Publisher
+Wants=relaysms-publisher-rest.service \
+      relaysms-publisher-grpc.service \
+      relaysms-publisher-worker.service \
+      relaysms-publisher-beat.service
+After=relaysms-publisher-rest.service \
+      relaysms-publisher-grpc.service \
+      relaysms-publisher-worker.service \
+      relaysms-publisher-beat.service
 
 [Install]
 WantedBy=multi-user.target

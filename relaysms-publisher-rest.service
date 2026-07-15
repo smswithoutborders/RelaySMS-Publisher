@@ -1,19 +1,28 @@
 [Unit]
 Description=RelaySMS Publisher REST API
 PartOf=relaysms-publisher.target
-After=network.target
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
+Type=simple
 User=relaysms
 WorkingDirectory=/opt/relaysms/relaysms-publisher
 EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
 ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/python3 -m uvicorn app:app --host "${HOST}" --port "${PORT}" --workers 4 --proxy-headers --forwarded-allow-ips "*"
 Restart=on-failure
+RestartSec=5
 SyslogIdentifier=relaysms-publisher-rest
-
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
 NoNewPrivileges=true
 ReadWritePaths=__RW_PATHS__
 

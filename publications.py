@@ -231,11 +231,25 @@ class PublicationService:
             )
             raise AdapterIntegrationError("Failed to send message via adapter.")
 
+        result = pipe.get("result") or {}
+
+        # Refresh may have happened even if the send itself failed downstream
+        # (e.g. token refreshed, then the HTTP call or attachment step failed).
+        # Persist it regardless of outcome so the next attempt isn't stale.
+        if proto_id == rrs.V1PayloadsSupportedProtocols.O_AUTH20:
+            self._maybe_refresh_token(token, result)
+
+        if not result.get("success", True):
+            logger.error(
+                "Adapter %r failed for token %d: %s",
+                token.platform,
+                token_id,
+                result.get("message"),
+            )
+            raise AdapterIntegrationError("Failed to send message via adapter.")
+
         mark_token_hash_used(token_hash_obj, self.session)
         logger.info("Published message for token %d via %r.", token_id, token.platform)
-
-        if proto_id == rrs.V1PayloadsSupportedProtocols.O_AUTH20:
-            self._maybe_refresh_token(token, pipe.get("result", {}))
 
     def _maybe_refresh_token(self, token, result: dict) -> None:
         refreshed_token = result.get("refreshed_token") or {}

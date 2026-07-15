@@ -3,15 +3,11 @@
 set -euo pipefail
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"
-SERVICE_NAME="relaysms-publisher"
 REPO_URL="https://github.com/smswithoutborders/RelaySMS-Publisher.git"
 BRANCH="${BRANCH:-main}"
 CARGO_BIN="$HOME/.cargo/bin"
 DEPS_MARKER="/var/lib/relaysms-publisher-deps-installed"
 
-# Single source of truth for the unit set. Add/rename a service here and it
-# propagates to install, enable/start, and restart — no need to touch it
-# in more than one place.
 TARGET_UNIT="relaysms-publisher.target"
 SERVICE_UNITS=(
   relaysms-publisher-rest.service
@@ -21,12 +17,8 @@ SERVICE_UNITS=(
 )
 ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
 
-# Prefer the invoking user (SUDO_USER) as the service owner so no extra
-# system account is needed; fall back to a dedicated 'relaysms' user when
-# run directly as root. Note this only affects ownership of the app's
-# runtime files/services — the build itself (Rust, venv, `make build-setup`)
-# always runs as root/root's $HOME, since the script isn't re-exec'd with
-# `sudo -E`.
+# Runtime files are owned by the invoking user if run via sudo, otherwise
+# a dedicated 'relaysms' user. The build itself still runs as root.
 if [ -n "${SUDO_USER:-}" ] && id "$SUDO_USER" &>/dev/null; then
   SERVICE_USER="$SUDO_USER"
 else
@@ -38,18 +30,14 @@ error() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
   exit 1
 }
-# Safety net for failures not already wrapped in `|| error "..."` (e.g. a
-# bare apt-get/git call). Explicit exit calls from error() don't re-trigger
-# this trap, so messages are never duplicated.
+# Catches failures not already wrapped in error(), with line context.
 on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 check_root() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 
-# Reads a single KEY=value from an env file without sourcing/evaluating it
-# (avoids executing arbitrary shell in a file we don't fully control).
-# Tolerates an `export ` prefix and quoted values. The `|| true` on the
-# grep keeps a no-match result from tripping `pipefail`.
+# Reads KEY=value from a file without sourcing it. `|| true` on the grep
+# stops a no-match from tripping pipefail.
 read_env_var() {
   local key="$1" file="$2" val
   val=$( (grep -E "^(export[[:space:]]+)?${key}[[:space:]]*=" "$file" 2>/dev/null || true) |
@@ -61,10 +49,7 @@ read_env_var() {
   echo "$val"
 }
 
-# Appends a directory to the global RW_DIRS array (resolving it relative to
-# INSTALL_DIR if not absolute), de-duplicating as it goes. Defined once at
-# top level — resolve_app_directories is called twice per run (directory
-# creation, then systemd ReadWritePaths), and both must see the same set.
+# Adds a dir to the global RW_DIRS array, de-duped, relative to INSTALL_DIR.
 _resolve_dir() {
   local dir="$1"
   [ -z "$dir" ] && return
@@ -120,9 +105,7 @@ setup_service_user() {
 
 clone_repository() {
   log "Cloning repository"
-  # `-c url....insteadOf` is scoped to this git invocation only, so we
-  # don't permanently rewrite the invoking user's global git config just
-  # to fetch this one repo over HTTPS instead of SSH.
+  # -c scopes the SSH-to-HTTPS rewrite to this command, not global git config.
   if [ -d "$INSTALL_DIR/.git" ]; then
     log "Repository exists, updating"
     cd "$INSTALL_DIR"
@@ -184,9 +167,8 @@ setup_env() {
   log "Edit $INSTALL_DIR/.env before starting services"
 }
 
-# Shared by create_app_directories and install_services so the directories
-# that get created and the paths granted to systemd's ReadWritePaths can
-# never drift apart from what .env actually configures.
+# Shared by create_app_directories and install_services so both stay in
+# sync with .env.
 resolve_app_directories() {
   local envfile="$INSTALL_DIR/.env"
   [ -f "$envfile" ] || error ".env not found"
@@ -256,7 +238,7 @@ install_services() {
   local svc
   for svc in "${ALL_UNITS[@]}"; do
     [ -f "$svc" ] || error "Service file not found: $svc"
-    # '#' delimiter (not '|') since a resolved path could contain a pipe.
+    # # as delimiter, a resolved path could contain a pipe.
     sed \
       -e "s/User=relaysms/User=$SERVICE_USER/" \
       -e "s#__RW_PATHS__#$rw_paths#" \
