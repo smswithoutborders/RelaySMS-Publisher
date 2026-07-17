@@ -2,10 +2,10 @@
 """Publication processing pipeline service."""
 
 import base64
-import magic
 import uuid
 from typing import Optional
 
+import magic
 from sqlalchemy.orm import Session
 
 from keys import KeyManager
@@ -231,7 +231,11 @@ class PublicationService:
             )
             raise AdapterIntegrationError("Failed to send message via adapter.")
 
-        result = pipe.get("result") or {}
+        result = pipe.get("result")
+        if isinstance(result, bool):
+            result = {"success": result}
+        elif not isinstance(result, dict):
+            result = {}
 
         # Refresh may have happened even if the send itself failed downstream
         # (e.g. token refreshed, then the HTTP call or attachment step failed).
