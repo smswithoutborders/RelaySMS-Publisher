@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import subprocess
+import sys
+from pathlib import Path
+
 import click
 
 from platforms.adapter_manager import AdapterManager
@@ -46,6 +50,48 @@ def remove(name, proto_id, cat_id):
         click.echo(f"Adapter '{name}' removed successfully.")
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
+
+
+@cli.command(
+    name="exec",
+    help=(
+        "Run an adapter's own admin CLI (its cli.py) inside its own "
+        "virtualenv.\n\n"
+        "Put a '--' before the adapter's own arguments so they aren't "
+        "confused with --proto-id/--cat-id.\n\n"
+        "Example: platforms.sh exec mastodon -- register -i"
+    ),
+)
+@click.argument("name", type=str)
+@click.option("--proto-id", type=int, help="Filter target adapter by protocol ID.")
+@click.option("--cat-id", type=int, help="Filter target adapter by category ID.")
+@click.argument("cli_args", nargs=-1, type=click.UNPROCESSED)
+def exec_(name, proto_id, cat_id, cli_args):
+    matched = manager.list_adapters(name=name, proto_id=proto_id, cat_id=cat_id)
+
+    if not matched:
+        raise click.BadParameter("No registered adapter found matching criteria.")
+    if len(matched) > 1:
+        raise click.UsageError(
+            "Multiple matches found. Add filters using --proto-id or --cat-id."
+        )
+
+    manifest = matched[0]
+    adapter_path = Path(manifest.path)
+    adapter_cli = adapter_path / "cli.py"
+    python_exec = Path(manifest.venv_path) / "bin" / "python3"
+
+    if not adapter_cli.is_file():
+        raise click.ClickException(f"Adapter '{name}' has no cli.py — nothing to run.")
+    if not python_exec.is_file():
+        raise click.ClickException(
+            f"Adapter '{name}' virtualenv not found at {python_exec.parent.parent}."
+        )
+
+    result = subprocess.run(
+        [str(python_exec), str(adapter_cli), *cli_args], cwd=adapter_path
+    )
+    sys.exit(result.returncode)
 
 
 @cli.command()

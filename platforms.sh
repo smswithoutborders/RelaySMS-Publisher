@@ -72,6 +72,10 @@ Commands (forwarded to platforms.cli):
   list [--name NAME] [--proto-id ID] [--cat-id ID]
                                      List registered adapters
   recover                            Rebuild the registry from disk
+  exec <NAME> [--proto-id ID] [--cat-id ID] -- <ARGS...>
+                                     Run an adapter's own admin cli.py (if it
+                                     has one) inside its own venv. Put '--'
+                                     before the adapter's own arguments.
 
 Extra commands:
   env                                Print resolved install dir, service
@@ -85,6 +89,7 @@ Examples:
   $0 remove gmail
   $0 update --install
   $0 list
+  $0 exec mastodon -- register -i
 EOF
 }
 

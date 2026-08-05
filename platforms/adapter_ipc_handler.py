@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import json
+import logging
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -8,6 +10,27 @@ from typing import Any, Dict, Optional
 from logutils import get_logger
 
 logger = get_logger(__name__)
+
+# Adapter subprocesses format their own stderr lines as
+# "<asctime> - <logger name> - <LEVEL> - <message>" (see each adapter's
+# logutils.py). Parsing that back out lets us re-emit the line at its
+# real severity.
+_SUBPROCESS_LOG_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} - \S+ - (?P<level>[A-Z]+) - (?P<message>.*)$"
+)
+
+
+def _relay_subprocess_line(adapter_name: str, line: str) -> None:
+    """Re-emit a captured adapter stderr line at its original severity."""
+    match = _SUBPROCESS_LOG_RE.match(line)
+    if not match:
+        logger.debug("[%s] %s", adapter_name, line)
+        return
+
+    level = logging.getLevelName(match.group("level"))
+    if not isinstance(level, int):
+        level = logging.DEBUG
+    logger.log(level, "[%s] %s", adapter_name, match.group("message"))
 
 
 class AdapterIPCHandler:
@@ -26,18 +49,16 @@ class AdapterIPCHandler:
         adapter_main = a_base / "main.py"
 
         if not python_exec.is_file():
-            raise FileNotFoundError(f"[!] Python executable missing at: {python_exec}")
+            raise FileNotFoundError(f"Python executable missing at: {python_exec}")
         if not adapter_main.is_file():
             raise FileNotFoundError(
-                f"[!] Adapter script entry point missing at: {adapter_main}"
+                f"Adapter script entry point missing at: {adapter_main}"
             )
 
         command = [str(python_exec), str(adapter_main)]
         payload = json.dumps({"method": method, "params": params or {}})
 
-        logger.info(
-            "[+] Starting subprocess for method '%s' on %s", method, a_base.name
-        )
+        logger.info("Starting subprocess for method '%s' on %s", method, a_base.name)
         process = None
 
         try:
@@ -55,31 +76,31 @@ class AdapterIPCHandler:
             if stderr.strip():
                 for line in stderr.strip().splitlines():
                     if line.strip():
-                        logger.debug("[--> SUBPROCESS] %s", line.strip())
+                        _relay_subprocess_line(a_base.name, line.strip())
 
             if process.returncode != 0:
-                logger.error("[!] Subprocess failed with code %s", process.returncode)
+                logger.error("Subprocess failed with code %s", process.returncode)
                 raise RuntimeError(stderr.strip())
 
             clean_stdout = stdout.strip()
             if not clean_stdout:
-                logger.error("[!] Empty output response from adapter.")
+                logger.error("Empty response from adapter.")
                 return {"result": None, "error": "Empty response from adapter."}
 
             try:
                 response = json.loads(clean_stdout)
             except json.JSONDecodeError:
-                logger.error("[!] Malformed JSON response received: %s", clean_stdout)
+                logger.error("Malformed JSON response received: %s", clean_stdout)
                 return {"result": None, "error": "Invalid JSON response payload."}
 
-            logger.info("[+] Completed method '%s' execution successfully", method)
+            logger.info("Completed method '%s' successfully", method)
             return {"result": response.get("result"), "error": response.get("error")}
 
         except subprocess.TimeoutExpired as exc:
             if process:
                 process.kill()
                 process.communicate()
-            logger.error("[!] Subprocess execution timed out.")
+            logger.error("Subprocess execution timed out.")
             raise RuntimeError("Adapter invocation timed out.") from exc
 
         except Exception as e:
@@ -88,5 +109,5 @@ class AdapterIPCHandler:
                     process.kill()
                 except OSError:
                     pass
-            logger.error("[!] Unexpected failure during IPC invocation loop: %s", e)
+            logger.error("Unexpected failure during IPC invocation: %s", e)
             raise

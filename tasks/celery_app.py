@@ -1,11 +1,25 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import os
 from pathlib import Path
 
 from celery import Celery
 from celery.schedules import crontab
 
 from utils import get_configs
+
+_UNDER_JOURNALD = bool(os.getenv("JOURNAL_STREAM"))
+_WORKER_LOG_FORMAT = (
+    "%(levelname)s - %(processName)s - %(message)s"
+    if _UNDER_JOURNALD
+    else "%(asctime)s - %(levelname)s - %(processName)s - %(message)s"
+)
+_WORKER_TASK_LOG_FORMAT = (
+    "%(levelname)s - %(processName)s - %(task_name)s[%(task_id)s] - %(message)s"
+    if _UNDER_JOURNALD
+    else "%(asctime)s - %(levelname)s - %(processName)s - "
+    "%(task_name)s[%(task_id)s] - %(message)s"
+)
 
 
 def _ensure_db_dir(path: str) -> None:
@@ -88,6 +102,8 @@ def make_celery() -> Celery:
         task_reject_on_worker_lost=True,
         worker_prefetch_multiplier=1,
         task_ignore_result=True,
+        worker_log_format=_WORKER_LOG_FORMAT,
+        worker_task_log_format=_WORKER_TASK_LOG_FORMAT,
         beat_schedule_filename=schedule_path,
         beat_schedule={
             "cleanup-stale-payload-sessions": {
