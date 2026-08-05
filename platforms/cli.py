@@ -77,9 +77,9 @@ def exec_(name, proto_id, cat_id, cli_args):
         )
 
     manifest = matched[0]
-    adapter_path = Path(manifest.path)
+    adapter_path = Path(manifest.path).resolve()
     adapter_cli = adapter_path / "cli.py"
-    python_exec = Path(manifest.venv_path) / "bin" / "python3"
+    python_exec = Path(manifest.venv_path).resolve() / "bin" / "python3"
 
     if not adapter_cli.is_file():
         raise click.ClickException(f"Adapter '{name}' has no cli.py — nothing to run.")
