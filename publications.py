@@ -21,8 +21,11 @@ from models.token import update_token_data
 from models.token_hash import update_last_used as mark_token_hash_used
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from platforms.adapter_manager import AdapterManager
+from utils import get_config_list
 
 logger = get_logger(__name__)
+
+OFFLINE_PUBLISH_ALLOWED_PROTOCOLS = get_config_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
 
 
 class PublicationError(Exception):
@@ -38,6 +41,10 @@ class PayloadNotSupportedError(PublicationError):
 
 
 class AdapterIntegrationError(PublicationError):
+    pass
+
+
+class ProtocolNotAllowedError(PublicationError):
     pass
 
 
@@ -72,6 +79,7 @@ class PublicationService:
         sender_address: str,
         raw_segment: bytes,
         payload_type: rrs.V1PayloadsTypes,
+        protocol: Optional[str] = None,
     ) -> bool:
         """Processes incoming payload and publishes to target platform."""
         payload = self._assemble(
@@ -84,7 +92,7 @@ class PublicationService:
         if payload is None:
             return False
 
-        self._dispatch(payload)
+        self._dispatch(payload, protocol=protocol)
         return True
 
     def _assemble(
@@ -116,10 +124,26 @@ class PublicationService:
                 logger.error("Payload type not supported: %r", payload_type)
                 raise PayloadNotSupportedError(f"Unsupported type: {payload_type!r}")
 
-    def _dispatch(self, payload: rrs.V1Payloads) -> None:
+    def _dispatch(
+        self, payload: rrs.V1Payloads, protocol: Optional[str] = None
+    ) -> None:
         token_id = payload.get_t_id()
 
         if token_id is None:
+            if (
+                OFFLINE_PUBLISH_ALLOWED_PROTOCOLS
+                and protocol not in OFFLINE_PUBLISH_ALLOWED_PROTOCOLS
+            ):
+                logger.warning(
+                    "Discarding offline payload from disallowed protocol %r "
+                    "(allowed: %s).",
+                    protocol,
+                    OFFLINE_PUBLISH_ALLOWED_PROTOCOLS,
+                )
+                raise ProtocolNotAllowedError(
+                    f"Protocol {protocol!r} is not allowed to publish offline content."
+                )
+
             self._publish_offline_content(
                 key_id=payload.get_kid(),
                 len_att=payload.get_len_att(),
@@ -282,7 +306,7 @@ class PublicationService:
         self.key_manager.mark_identity_key_used(key_id)
 
         try:
-            cat_id = rrs.V1ContentCategories.BRIDGE
+            cat_id = rrs.V1ContentCategories.EMAIL
             content = rrs.V1ContentsContainer.deserialize(
                 data=content_obj.get_payload(), cat_id=cat_id, len_att=len_att
             )
@@ -380,7 +404,7 @@ class PublicationService:
                 params["recipient"] = content.get_to().decode()
                 params["message"] = message
 
-            case rrs.V1ContentCategories.EMAIL | rrs.V1ContentCategories.BRIDGE:
+            case rrs.V1ContentCategories.EMAIL:
                 params["to_email"] = content.get_to().decode()
                 params["subject"] = content.get_subject().decode()
                 params["message"] = message

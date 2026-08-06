@@ -96,7 +96,7 @@ def test_queues_on_success():
     msg = build_email(json.dumps({"address": "+12025550123", "text": "dGVzdA=="}))
     assert smtp_listener.process_incoming_email(msg) is True
     smtp_listener.publish_message.delay.assert_called_once_with(
-        "dGVzdA==", "+12025550123"
+        "dGVzdA==", "+12025550123", "smtp"
     )
 
 

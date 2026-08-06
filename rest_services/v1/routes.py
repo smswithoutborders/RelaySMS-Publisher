@@ -205,6 +205,6 @@ def create_publications(body: PublishContentRequest) -> PublishContentResponse:
     except PayloadNotSupportedError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    publish_message.delay(body.text, body.address)
-    logger.info("Successfully queued publication request.")
+    publish_message.delay(body.text, body.address, "https")
+    logger.info("Successfully queued publication request via protocol %r.", "https")
     return PublishContentResponse(message="Publication request queued successfully.")

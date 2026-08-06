@@ -301,7 +301,7 @@ def prepare_offline_send(rest_api, to, subject, body, attachment_bytes):
     sc_keypair = X25519PrivateKey.generate()
 
     try:
-        cat_id = rrs.V1ContentCategories.BRIDGE
+        cat_id = rrs.V1ContentCategories.EMAIL
         content_bytes = rrs.V1ContentsContainer(
             cat_id=cat_id,
             body=body.encode(),

@@ -52,6 +52,7 @@ Set `SMTP_VERIFY_DKIM_INDEPENDENTLY=true` to additionally re-verify the DKIM sig
 | `SMTP_REQUIRE_DKIM` | `true` | Require `dkim=pass`. |
 | `SMTP_REQUIRE_SPF` | `true` | Require `spf=pass`. |
 | `SMTP_VERIFY_DKIM_INDEPENDENTLY` | `false` | Also re-verify the DKIM signature via DNS. |
+| `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` | - | Comma-separated allowlist of protocols allowed to publish offline payloads. Messages queued by this listener are tagged `smtp`; if set and `smtp` isn't listed, offline payloads from email are discarded. |
 
 ## Running
 

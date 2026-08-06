@@ -106,8 +106,12 @@ def process_incoming_email(msg: MailMessage) -> bool:
             )
             return True
 
-        publish_message.delay(request.text, request.address)
-        logger.info("Successfully queued publication request from email %s.", email_uid)
+        publish_message.delay(request.text, request.address, "smtp")
+        logger.info(
+            "Successfully queued publication request from email %s via protocol %r.",
+            email_uid,
+            "smtp",
+        )
         return True
 
     except Exception:

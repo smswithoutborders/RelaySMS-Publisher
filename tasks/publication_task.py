@@ -10,6 +10,7 @@ from publications import (
     AdapterIntegrationError,
     PayloadMalformedError,
     PayloadNotSupportedError,
+    ProtocolNotAllowedError,
     PublicationService,
 )
 from tasks.celery_app import celery_app
@@ -37,7 +38,9 @@ def _get_adapter_manager() -> AdapterManager:
 
 
 @celery_app.task(name="tasks.publication_task.publish_message")
-def publish_message(text_payload: str, sender_address: str) -> None:
+def publish_message(
+    text_payload: str, sender_address: str, protocol: str | None = None
+) -> None:
     """Validate, assemble, and run message publication pipeline."""
     try:
         payload_raw, raw_segment, payload_type = PublicationService.validate(
@@ -53,9 +56,15 @@ def publish_message(text_payload: str, sender_address: str) -> None:
                 sender_address=sender_address,
                 raw_segment=raw_segment,
                 payload_type=payload_type,
+                protocol=protocol,
             )
 
-    except (PayloadMalformedError, PayloadNotSupportedError, KeyManagerError) as exc:
+    except (
+        PayloadMalformedError,
+        PayloadNotSupportedError,
+        ProtocolNotAllowedError,
+        KeyManagerError,
+    ) as exc:
         logger.error("Failed to process payload: %s", exc)
 
     except AdapterIntegrationError as exc:

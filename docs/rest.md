@@ -181,6 +181,8 @@ Submit an encrypted SMS payload for decryption and publication to its target pla
 | `WITHOUT_ATTACHMENT` | Deserialized and published immediately |
 | `WITH_ATTACHMENT_HEADER` / `WITH_ATTACHMENT_NO_HEADER` | Segment stored; once all segments are assembled the full payload is published |
 
+Payloads queued here are tagged with protocol `https`. If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set without `https`, offline payloads are discarded instead of published. See [Offline Publishing](../README.md#offline-publishing).
+
 **Error Responses:**
 
 | Status | Condition |
