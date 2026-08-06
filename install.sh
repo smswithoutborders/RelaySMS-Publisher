@@ -146,26 +146,26 @@ setup_env() {
   log "Setting up configuration"
   cd "$INSTALL_DIR"
   if [ -f ".env" ]; then
-    log ".env already exists, skipping"
-    return
-  fi
-  [ -f "template.env" ] || error "template.env not found"
-  cp template.env .env
+    log ".env already exists, skipping generation"
+  else
+    [ -f "template.env" ] || error "template.env not found"
+    cp template.env .env
 
-  local db_key field_key data_key
-  db_key=$(openssl rand -hex 32)
-  field_key=$(openssl rand -hex 32)
-  data_key=$(openssl rand -hex 32)
-  sed -i "s|^DATABASE_ENCRYPTION_ENABLED=.*|DATABASE_ENCRYPTION_ENABLED=true|" .env
-  sed -i "s|^DATABASE_FIELD_ENCRYPTION_ENABLED=.*|DATABASE_FIELD_ENCRYPTION_ENABLED=true|" .env
-  sed -i "s|^DATABASE_ENCRYPTION_KEY=.*|DATABASE_ENCRYPTION_KEY=$db_key|" .env
-  sed -i "s|^DATABASE_FIELD_ENCRYPTION_KEY=.*|DATABASE_FIELD_ENCRYPTION_KEY=$field_key|" .env
-  sed -i "s|^DATA_ENCRYPTION_KEY=.*|DATA_ENCRYPTION_KEY=$data_key|" .env
+    local db_key field_key data_key
+    db_key=$(openssl rand -hex 32)
+    field_key=$(openssl rand -hex 32)
+    data_key=$(openssl rand -hex 32)
+    sed -i "s|^DATABASE_ENCRYPTION_ENABLED=.*|DATABASE_ENCRYPTION_ENABLED=true|" .env
+    sed -i "s|^DATABASE_FIELD_ENCRYPTION_ENABLED=.*|DATABASE_FIELD_ENCRYPTION_ENABLED=true|" .env
+    sed -i "s|^DATABASE_ENCRYPTION_KEY=.*|DATABASE_ENCRYPTION_KEY=$db_key|" .env
+    sed -i "s|^DATABASE_FIELD_ENCRYPTION_KEY=.*|DATABASE_FIELD_ENCRYPTION_KEY=$field_key|" .env
+    sed -i "s|^DATA_ENCRYPTION_KEY=.*|DATA_ENCRYPTION_KEY=$data_key|" .env
+    log ".env created with auto-generated encryption keys"
+    log "Edit $INSTALL_DIR/.env before starting services"
+  fi
 
   chown "root:$SERVICE_USER" .env
   chmod 640 .env
-  log ".env created with auto-generated encryption keys"
-  log "Edit $INSTALL_DIR/.env before starting services"
 }
 
 # Shared by create_app_directories and install_services so both stay in
