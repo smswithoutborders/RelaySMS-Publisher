@@ -1,11 +1,8 @@
-"""
-This program is free software: you can redistribute it under the terms
-of the GNU General Public License, v. 3.0. If a copy of the GNU General
-Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
-"""
+# SPDX-License-Identifier: GPL-3.0-only
 
-import os
 import logging
+import os
+import sys
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 numeric_level = getattr(logging, LOG_LEVEL, None)
@@ -13,9 +10,11 @@ numeric_level = getattr(logging, LOG_LEVEL, None)
 if not isinstance(numeric_level, int):
     raise ValueError(f"Invalid log level: {LOG_LEVEL}")
 
+_UNDER_JOURNALD = bool(os.getenv("JOURNAL_STREAM")) and not sys.stderr.isatty()
+
 _LOG_FORMAT = (
     "%(name)s - %(levelname)s - %(message)s"
-    if os.getenv("JOURNAL_STREAM")
+    if _UNDER_JOURNALD
     else "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 

@@ -31,6 +31,14 @@ CELERY_PID=$!
   --loglevel=info &
 BEAT_PID=$!
 
-trap 'log INFO "Shutting down ..."; kill "$GRPC_PID" "$FASTAPI_PID" "$CELERY_PID" "$BEAT_PID" 2>/dev/null; wait' INT TERM
+PIDS=("$GRPC_PID" "$FASTAPI_PID" "$CELERY_PID" "$BEAT_PID")
+
+if [ "${SMTP_TRANSPORT_ENABLED:-false}" = "true" ]; then
+  log INFO "Starting SMTP listener ..."
+  "$PYTHON" -u smtp_listener.py &
+  PIDS+=("$!")
+fi
+
+trap 'log INFO "Shutting down ..."; kill "${PIDS[@]}" 2>/dev/null; wait' INT TERM
 
 wait

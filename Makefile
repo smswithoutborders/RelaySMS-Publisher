@@ -14,6 +14,7 @@ endef
 	grpc-server-start \
 	fastapi-server-start \
 	celery-worker-start \
+	smtp-listener-start \
 	run \
 	payload-specs-fetch \
 	payload-specs-build \
@@ -81,6 +82,10 @@ celery-worker-start:
 celery-beat-start:
 	$(call log,INFO,Starting Celery beat scheduler ...)
 	@$(python) -m celery -A tasks.celery_app:celery_app beat --loglevel=info
+
+smtp-listener-start:
+	$(call log,INFO,Starting SMTP listener ...)
+	@$(python) -u smtp_listener.py
 
 run:
 	@PYTHON=$(python) HOST=$(grpc_host) PORT=$(fastapi_port) ./scripts/run.sh

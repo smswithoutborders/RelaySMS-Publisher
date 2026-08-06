@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import os
+import sys
 from pathlib import Path
 
 from celery import Celery
@@ -8,7 +9,7 @@ from celery.schedules import crontab
 
 from utils import get_configs
 
-_UNDER_JOURNALD = bool(os.getenv("JOURNAL_STREAM"))
+_UNDER_JOURNALD = bool(os.getenv("JOURNAL_STREAM")) and not sys.stderr.isatty()
 _WORKER_LOG_FORMAT = (
     "%(levelname)s - %(processName)s - %(message)s"
     if _UNDER_JOURNALD

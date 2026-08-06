@@ -14,6 +14,7 @@ SERVICE_UNITS=(
   relaysms-publisher-grpc.service
   relaysms-publisher-worker.service
   relaysms-publisher-beat.service
+  relaysms-publisher-smtp.service
 )
 ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
 

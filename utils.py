@@ -1,6 +1,7 @@
 """Utitlies Module."""
 
 import os
+from typing import List, Optional
 
 from logutils import get_logger
 
@@ -45,6 +46,23 @@ def get_configs(config_name, strict=False, default_value=None):
     except ValueError as error:
         logger.error("Configuration '%s' is empty: %s", config_name, error)
         raise
+
+
+def get_config_bool(config_name: str, default_value: bool = False) -> bool:
+    """Retrieves a configuration as a boolean ("true", case-insensitive)."""
+    return (
+        get_configs(config_name, default_value=str(default_value)).strip().lower()
+        == "true"
+    )
+
+
+def get_config_list(
+    config_name: str, default_value: Optional[List[str]] = None
+) -> List[str]:
+    """Retrieves a comma-separated configuration as a list of trimmed values."""
+    raw = get_configs(config_name, default_value="") or ""
+    values = [item.strip() for item in raw.split(",") if item.strip()]
+    return values or (default_value or [])
 
 
 def set_configs(config_name: str, config_value: str) -> None:

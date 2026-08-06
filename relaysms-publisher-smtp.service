@@ -1,0 +1,30 @@
+[Unit]
+Description=RelaySMS Publisher SMTP Listener
+PartOf=relaysms-publisher.target
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=relaysms
+WorkingDirectory=/opt/relaysms/relaysms-publisher
+EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
+ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/python3 -u smtp_listener.py
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=relaysms-publisher-smtp
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+NoNewPrivileges=true
+ReadWritePaths=__RW_PATHS__
+
+[Install]
+WantedBy=relaysms-publisher.target

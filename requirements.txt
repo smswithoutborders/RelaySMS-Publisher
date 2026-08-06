@@ -1,13 +1,16 @@
 alembic==1.18.5
+authres==1.2.0
 cachetools==7.1.4
 celery[sqlalchemy,redis]==5.6.3
 cryptography==49.0.0
+dkimpy==1.1.8
 fastapi[standard]==0.139.2
 GitPython==3.1.53
 grpc-interceptor==0.15.4
 grpcio==1.82.1
 grpcio-testing==1.82.1
 grpcio-tools==1.82.1
+imap-tools==1.15.0
 msgspec==0.21.1
 phonenumbers==9.0.34
 pymysql==1.2.0

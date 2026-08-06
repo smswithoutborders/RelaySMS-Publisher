@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool, StaticPool
 
 from logutils import get_logger
-from utils import get_configs
+from utils import get_config_bool, get_configs
 
 logger = get_logger(__name__)
 Base = declarative_base()
@@ -89,10 +89,7 @@ def _build_mysql_url() -> str:
     password = get_configs("MYSQL_PASSWORD")
     database = get_configs("MYSQL_DATABASE")
 
-    if (
-        get_configs("DATABASE_ENCRYPTION_ENABLED", default_value="false").lower()
-        == "true"
-    ):
+    if get_config_bool("DATABASE_ENCRYPTION_ENABLED"):
         logger.info(
             "Database encryption enabled - ensure TDE is configured on MySQL/MariaDB server"
         )
@@ -164,11 +161,7 @@ def _create_engine() -> Engine:
         engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
     else:
         _ensure_sqlite_parent_dir()
-        encrypt = (
-            get_configs("DATABASE_ENCRYPTION_ENABLED", default_value="false").lower()
-            == "true"
-        )
-        if encrypt:
+        if get_config_bool("DATABASE_ENCRYPTION_ENABLED"):
             db_path, key = _get_sqlcipher3_config()
             engine = create_engine(
                 "sqlite://",
