@@ -1,6 +1,6 @@
 # Publisher REST API Documentation
 
-The Publisher REST API provides metadata about supported platforms and server identity keys required for gRPC v3 communication, as well as an endpoint for publishing encrypted content.
+The Publisher REST API provides metadata about supported platforms, registered gateway clients, and server identity keys required for gRPC v3 communication, as well as an endpoint for publishing encrypted content.
 
 ## Base URL
 
@@ -37,9 +37,32 @@ Retrieve a list of supported platform adapter manifests. Supports optional query
 | icon_png | string | (Optional) PNG icon URL or data |
 | supports_offline_first | boolean | (Optional) Whether the platform adapter supports offline-first payloads |
 
----
+### 2. List Gateway Clients
 
-### 2. List Server Static Keys
+Retrieve a list of registered gateway clients. Supports optional query filters.
+
+**URL:** `/gateway-clients`
+**Method:** `GET`
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| msisdn | string | No | Filter by MSISDN |
+| country | string | No | Filter by country |
+| operator | string | No | Filter by operator |
+
+**Response Body:** `List[GatewayClientManifest]`
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| msisdn | string | Gateway client's phone number in E.164 format |
+| country | string | Country the MSISDN belongs to |
+| operator | string | Mobile network operator |
+| operator_code | string | PLMN (MCC+MNC) code |
+| protocols | list[string] | Protocol(s) the client uses to reach this server |
+
+### 3. List Server Static Keys
 
 Retrieve all server static public keys used for gRPC v3 encryption.
 
@@ -53,9 +76,7 @@ Retrieve all server static public keys used for gRPC v3 encryption.
 | key_id | integer | Static key identifier (0–255) |
 | public_key | string | Base64url-encoded X25519 public key |
 
----
-
-### 3. Get Server Static Key
+### 4. Get Server Static Key
 
 Retrieve a specific server static public key by its ID.
 
@@ -76,9 +97,7 @@ Retrieve a specific server static public key by its ID.
 | :--- | :--- |
 | `404 Not Found` | No key exists for the given `key_id` |
 
----
-
-### 4. Get OAuth Client Metadata
+### 5. Get OAuth Client Metadata
 
 Retrieve OAuth2 client metadata for platforms that support dynamic registration (e.g., Bluesky). Only available for a fixed allow-list of platforms.
 
@@ -112,9 +131,7 @@ Retrieve OAuth2 client metadata for platforms that support dynamic registration 
 | :--- | :--- |
 | `404 Not Found` | Platform not found, not in the allow-list, or `credentials.json` is missing |
 
----
-
-### 5. OAuth Callback
+### 6. OAuth Callback
 
 Displays the OAuth2 callback parameters returned by a platform. Intended as a redirect target during the OAuth2 authorization flow.
 
@@ -137,9 +154,7 @@ Displays the OAuth2 callback parameters returned by a platform. Intended as a re
 | :--- | :--- |
 | `404 Not Found` | Platform not found or not in the allow-list |
 
----
-
-### 6. Publish Content
+### 7. Publish Content
 
 Submit an encrypted SMS payload for decryption and publication to its target platform. Handles both single-part payloads and multi-part segmented payloads (assembled before publishing).
 
@@ -173,8 +188,6 @@ Submit an encrypted SMS payload for decryption and publication to its target pla
 | `400 Bad Request` | Invalid base64 text or payload deserialization failure |
 | `422 Unprocessable Entity` | Unsupported payload type |
 | `500 Internal Server Error` | Decryption failure, unsupported platform/protocol, or adapter error |
-
----
 
 ## Error Handling
 

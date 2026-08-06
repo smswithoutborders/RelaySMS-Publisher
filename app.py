@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from db import dispose_engine, get_session
+from gateway_clients.gateway_client_manager import GatewayClientManager
 from keys import KeyManager
 from platforms.adapter_manager import AdapterManager
 from rest_services.v1.routes import router as v1_router
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
         key_manager.initialize_server_identity_keys()
 
     app.state.adapter_manager = AdapterManager()
+    app.state.gateway_client_manager = GatewayClientManager()
     yield
     dispose_engine()
 

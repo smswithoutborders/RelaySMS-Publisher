@@ -7,6 +7,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse
 
+from gateway_clients.gateway_client_manager import GatewayClientManager
 from logutils import get_logger
 from models.server_identity_key import get_public_key, get_public_keys
 from platforms.adapter_manager import AdapterManager
@@ -16,6 +17,7 @@ from publications import (
     PublicationService,
 )
 from rest_services.v1.schemas import (
+    GatewayClientManifest,
     OAuthClientMetadata,
     PlatformManifest,
     PublishContentRequest,
@@ -39,6 +41,13 @@ ALLOWED_PLATFORM_MANIFEST_KEYS = [
     "icon_png",
 ]
 ALLOWED_PLATFORMS_WITH_CLIENT_METADATA = ["bluesky"]
+ALLOWED_GATEWAY_CLIENT_MANIFEST_KEYS = [
+    "msisdn",
+    "country",
+    "operator",
+    "operator_code",
+    "protocols",
+]
 
 
 @router.get("/platforms")
@@ -63,6 +72,28 @@ def get_platforms(
                 key: getattr(manifest, key)
                 for key in ALLOWED_PLATFORM_MANIFEST_KEYS
                 if hasattr(manifest, key) and getattr(manifest, key) is not None
+            }
+        )
+        for manifest in manifests
+    ]
+
+
+@router.get("/gateway-clients")
+def get_gateway_clients(
+    request: Request,
+    msisdn: Optional[str] = Query(None, description="Filter by MSISDN"),
+    country: Optional[str] = Query(None, description="Filter by country"),
+    operator: Optional[str] = Query(None, description="Filter by operator"),
+) -> List[GatewayClientManifest]:
+    """Retrieve a list of gateway clients matching optional criteria."""
+    manager: GatewayClientManager = request.app.state.gateway_client_manager
+    manifests = manager.list_clients(msisdn=msisdn, country=country, operator=operator)
+
+    return [
+        GatewayClientManifest(
+            **{
+                key: getattr(manifest, key)
+                for key in ALLOWED_GATEWAY_CLIENT_MANIFEST_KEYS
             }
         )
         for manifest in manifests

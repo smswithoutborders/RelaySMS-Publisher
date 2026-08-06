@@ -45,6 +45,14 @@ class PlatformManifest(BaseModel):
     icon_png: Optional[str] = None
 
 
+class GatewayClientManifest(BaseModel):
+    msisdn: str
+    country: str
+    operator: str
+    operator_code: str
+    protocols: list[str]
+
+
 class OAuthClientMetadata(BaseModel):
     client_id: str
     dpop_bound_access_tokens: bool

@@ -22,6 +22,46 @@ error() {
 
 check_sudo() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 
+detect_service_user() {
+  local unit="/etc/systemd/system/relaysms-publisher-rest.service"
+  grep -E "^User=" "$unit" 2>/dev/null | head -1 | cut -d= -f2
+}
+
+read_env_var() {
+  local key="$1" file="$INSTALL_DIR/.env"
+  grep -E "^${key}[[:space:]]*=" "$file" 2>/dev/null | tail -1 |
+    sed 's/^[^=]*=//;s/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+# git pull doesn't fix ownership for directories .env references that were
+# added since the last install.sh run. Re-apply it here too.
+sync_app_directories() {
+  local service_user
+  service_user="$(detect_service_user)"
+  [ -n "$service_user" ] || return
+
+  local dirs=(
+    "$(dirname "$(read_env_var SQLITE_DATABASE_PATH)")"
+    "$(dirname "$(read_env_var CELERY_BROKER_DB_PATH)")"
+    "$(dirname "$(read_env_var CELERY_RESULT_DB_PATH)")"
+    "$(dirname "$(read_env_var CELERY_BEAT_SCHEDULE_PATH)")"
+    "$(read_env_var PLATFORMS_ADAPTERS_DIR)"
+    "$(read_env_var PLATFORMS_ADAPTERS_VENV_DIR)"
+    "$(read_env_var PLATFORMS_ADAPTERS_ASSETS_DIR)"
+    "$(dirname "$(read_env_var PLATFORMS_REGISTRY_FILE)")"
+    "$(dirname "$(read_env_var GATEWAY_CLIENTS_REGISTRY_FILE)")"
+  )
+
+  local dir
+  for dir in "${dirs[@]}"; do
+    [ -n "$dir" ] && [ "$dir" != "." ] || continue
+    [[ "$dir" = /* ]] || dir="$INSTALL_DIR/$dir"
+    mkdir -p "$dir"
+    chown "$service_user:" "$dir"
+    chmod 750 "$dir"
+  done
+}
+
 cmd_start() {
   check_sudo
   systemctl start "$TARGET_UNIT"
@@ -87,6 +127,8 @@ cmd_update() {
 
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
   make build-setup
+
+  sync_app_directories
 
   systemctl daemon-reload
   for svc in "${SERVICE_UNITS[@]}"; do

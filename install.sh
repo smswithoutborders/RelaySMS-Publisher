@@ -175,6 +175,7 @@ resolve_app_directories() {
 
   local sqlite_path celery_broker_path celery_result_path celery_beat_path
   local adapters_dir adapters_venv adapters_assets registry_file
+  local gateway_clients_registry_file
   sqlite_path=$(read_env_var "SQLITE_DATABASE_PATH" "$envfile")
   celery_broker_path=$(read_env_var "CELERY_BROKER_DB_PATH" "$envfile")
   celery_result_path=$(read_env_var "CELERY_RESULT_DB_PATH" "$envfile")
@@ -183,6 +184,7 @@ resolve_app_directories() {
   adapters_venv=$(read_env_var "PLATFORMS_ADAPTERS_VENV_DIR" "$envfile")
   adapters_assets=$(read_env_var "PLATFORMS_ADAPTERS_ASSETS_DIR" "$envfile")
   registry_file=$(read_env_var "PLATFORMS_REGISTRY_FILE" "$envfile")
+  gateway_clients_registry_file=$(read_env_var "GATEWAY_CLIENTS_REGISTRY_FILE" "$envfile")
 
   RW_DIRS=()
 
@@ -196,6 +198,7 @@ resolve_app_directories() {
   _resolve_dir "$adapters_venv"
   _resolve_dir "$adapters_assets"
   [ -n "$registry_file" ] && _resolve_dir "$(dirname "$registry_file")"
+  [ -n "$gateway_clients_registry_file" ] && _resolve_dir "$(dirname "$gateway_clients_registry_file")"
 }
 
 create_app_directories() {
@@ -272,6 +275,7 @@ main() {
   log "  Config : $INSTALL_DIR/.env"
   log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|update}"
   log "  Platforms : $INSTALL_DIR/platforms.sh {add|remove|update|list|recover|env|shell}"
+  log "  Gateway Clients : $INSTALL_DIR/gateway-clients.sh {create|list|update|delete|env|shell}"
 }
 
 main "$@"

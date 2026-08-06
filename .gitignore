@@ -8,6 +8,8 @@ platforms/available/*
 !install.sh
 !manage.sh
 !platforms.sh
+!gateway-clients.sh
+!sync-env.sh
 !docker-entrypoint.sh
 !scripts/*.sh
 credentials.json

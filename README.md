@@ -8,6 +8,7 @@ Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS w
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Platform Adapters](#platform-adapters)
+- [Gateway Clients](#gateway-clients)
 - [Documentation](#documentation)
 - [Testing](#testing)
 - [License](#license)
@@ -82,6 +83,7 @@ docker run -d \
   -p 6000:6000 \
   -v $(pwd)/data:/publisher/data \
   -v $(pwd)/platforms:/publisher/platforms \
+  -v $(pwd)/gateway_clients:/publisher/gateway_clients \
   relaysms-publisher:latest
 ```
 
@@ -155,7 +157,7 @@ SENTRY_PROFILES_SAMPLE_RATE=1.0
 
 ## Platform Adapters
 
-Supported platforms can be retrieved via the REST API: [/v1/platforms](https://publisher.smswithoutborders.com/v1/platforms). Server identity keys are available at [/v1/server-keys](https://publisher.smswithoutborders.com/v1/server-keys).
+Supported platforms can be retrieved via the REST API: `/v1/platforms`.
 
 > [!TIP]
 > Each adapter has its own configuration requirements. See:
@@ -172,12 +174,20 @@ Supported platforms can be retrieved via the REST API: [/v1/platforms](https://p
 - [Bluesky](https://github.com/smswithoutborders/bluesky-oauth2-adapter)
 - [Mastodon](https://github.com/smswithoutborders/mastodon-oauth2-adapter)
 
+## Gateway Clients
+
+Registered gateway clients can be retrieved via the REST API: `/v1/gateway-clients`.
+
+> [!TIP]
+> See [Gateway Clients Documentation](gateway_clients/README.md) for managing the registry.
+
 ## Documentation
 
 - [Installation Guide](INSTALL.md) - Detailed setup instructions
 - [gRPC API](docs/grpc.md) - gRPC interface documentation
 - [REST API](docs/rest.md) - REST API reference
 - [Platform Adapters](platforms/README.md) - Extending functionality
+- [Gateway Clients](gateway_clients/README.md) - Managing the gateway client registry
 
 ## Testing
 
