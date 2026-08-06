@@ -200,6 +200,8 @@ resolve_app_directories() {
   _resolve_dir "$adapters_assets"
   [ -n "$registry_file" ] && _resolve_dir "$(dirname "$registry_file")"
   [ -n "$gateway_clients_registry_file" ] && _resolve_dir "$(dirname "$gateway_clients_registry_file")"
+
+  return 0
 }
 
 create_app_directories() {
