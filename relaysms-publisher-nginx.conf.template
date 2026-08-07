@@ -1,0 +1,90 @@
+# RelaySMS Publisher - nginx reverse proxy site template
+#
+# Installed to /etc/nginx/sites-available/<domain>.conf by install.sh, with
+# __SERVER_NAME__, __REST_PORT__ and __GRPC_PORT__ substituted from .env.
+#
+# Defines only the plain-HTTP (port 80) block. Run `certbot --nginx -d
+# <domain>` afterwards (install.sh offers to do this) to add the HTTPS block
+# and redirect; certbot copies every directive here into it, so add
+# hardening here rather than to the generated 443 block.
+
+upstream publisher_rest {
+    server 127.0.0.1:__REST_PORT__;
+    keepalive 32;
+}
+
+upstream publisher_grpc {
+    server 127.0.0.1:__GRPC_PORT__;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SERVER_NAME__;
+
+    server_tokens off;
+
+    access_log /var/log/nginx/__SERVER_NAME__.access.log combined buffer=512k flush=1m;
+    error_log  /var/log/nginx/__SERVER_NAME__.error.log warn;
+
+    add_header Strict-Transport-Security    "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options       "nosniff" always;
+    add_header X-Frame-Options              "DENY" always;
+    add_header X-XSS-Protection             "0" always;
+    add_header Referrer-Policy              "no-referrer" always;
+    add_header Permissions-Policy           "geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+    add_header Cross-Origin-Opener-Policy   "same-origin" always;
+    add_header Content-Security-Policy      "default-src 'none'; frame-ancestors 'none';" always;
+
+    proxy_http_version 1.1;
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    proxy_set_header   Connection        "";
+    proxy_hide_header  X-Powered-By;
+    proxy_hide_header  Server;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    30s;
+    proxy_read_timeout    30s;
+    proxy_buffering    on;
+    proxy_buffer_size  8k;
+    proxy_buffers      8 8k;
+
+    gzip            on;
+    gzip_vary       on;
+    gzip_proxied    any;
+    gzip_comp_level 5;
+    gzip_types      application/json application/javascript text/plain text/css;
+    gzip_min_length 1024;
+
+    keepalive_timeout    65;
+    client_max_body_size 20m;
+
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+
+    location ~* ^/(\.env|\.git|wp-admin|wp-login|xmlrpc|phpmyadmin|shell|config|backup|\.DS_Store) {
+        return 444;
+    }
+
+    location / {
+        proxy_pass http://publisher_rest;
+    }
+
+    # proxy_set_header above doesn't apply to grpc_pass; repeated here via
+    # grpc_set_header so the gRPC backend also gets the real client IP, etc.
+    location /publisher.v3.Publisher {
+        grpc_pass            grpc://publisher_grpc;
+        grpc_set_header      Host              $host;
+        grpc_set_header      X-Real-IP         $remote_addr;
+        grpc_set_header      X-Forwarded-For   $proxy_add_x_forwarded_for;
+        grpc_set_header      X-Forwarded-Proto $scheme;
+        grpc_connect_timeout 10s;
+        grpc_send_timeout    30s;
+        grpc_read_timeout    30s;
+    }
+}

@@ -95,12 +95,88 @@ cmd_status() {
   systemctl status "${SERVICE_UNITS[@]}" || true
 }
 
-cmd_logs() {
-  local args=() svc
+# Appends to the caller's local `units` array via dynamic scoping. Must be
+# called directly, not through $(...), or error()'s exit would only kill
+# the subshell instead of stopping the script.
+add_unit() {
+  local name="$1" full="$1" svc
+  [[ "$name" == *.service ]] || full="relaysms-publisher-${name}.service"
   for svc in "${SERVICE_UNITS[@]}"; do
-    args+=(-u "$svc")
+    if [ "$svc" = "$full" ]; then
+      units+=("$full")
+      return
+    fi
   done
-  journalctl "${args[@]}" -f || true
+  error "Unknown service unit: $name (choose from: rest, grpc, worker, beat, smtp, or a full unit name)"
+}
+
+logs_usage() {
+  cat <<'EOF'
+Usage: manage.sh logs [OPTIONS]
+
+  -u, --unit NAME      Service to show (rest|grpc|worker|beat|smtp), repeatable (default: all)
+  -n, --lines N         Number of lines to show before following/exiting
+  -s, --since DATE      Only show entries at or after DATE (journalctl --since syntax)
+  --no-follow           Print the selected range and exit instead of tailing
+  -h, --help            Show this help and exit
+EOF
+}
+
+cmd_logs() {
+  local units=() since="" lines="" follow=1
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    -u | --unit)
+      add_unit "$2"
+      shift 2
+      ;;
+    --unit=*)
+      add_unit "${1#*=}"
+      shift
+      ;;
+    -n | --lines)
+      lines="$2"
+      shift 2
+      ;;
+    --lines=*)
+      lines="${1#*=}"
+      shift
+      ;;
+    -s | --since)
+      since="$2"
+      shift 2
+      ;;
+    --since=*)
+      since="${1#*=}"
+      shift
+      ;;
+    --no-follow)
+      follow=0
+      shift
+      ;;
+    -h | --help)
+      logs_usage
+      return
+      ;;
+    *)
+      logs_usage
+      error "Unknown logs option: $1"
+      ;;
+    esac
+  done
+
+  [ "${#units[@]}" -gt 0 ] || units=("${SERVICE_UNITS[@]}")
+
+  local args=() u
+  for u in "${units[@]}"; do
+    args+=(-u "$u")
+  done
+  [ -n "$lines" ] && args+=(-n "$lines")
+  [ -n "$since" ] && args+=(--since "$since")
+  [ "$follow" = "1" ] && args+=(-f)
+
+  journalctl "${args[@]}" || true
 }
 
 cmd_enable() {
@@ -178,7 +254,10 @@ main() {
   stop) cmd_stop ;;
   restart) cmd_restart ;;
   status) cmd_status ;;
-  logs) cmd_logs ;;
+  logs)
+    shift
+    cmd_logs "$@"
+    ;;
   enable) cmd_enable ;;
   disable) cmd_disable ;;
   update) cmd_update ;;

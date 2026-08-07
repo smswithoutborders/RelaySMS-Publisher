@@ -127,6 +127,44 @@ sudo systemctl start relaysms-publisher.target
 > [!WARNING]
 > All four services (`rest`, `grpc`, `worker`, `beat`) run with `ProtectSystem=strict` and `ProtectHome=true`, which make the entire filesystem read-only except for paths explicitly listed in `ReadWritePaths`. If you moved the SQLite database, Celery broker/result/beat files, or any adapter directory outside the installation root, add each resolved parent directory to `RW_PATHS` above - a path missing from `ReadWritePaths` will silently fail to write.
 
+### Nginx Reverse Proxy (optional)
+
+`install.sh` can put the REST API and gRPC server behind nginx with a Let's Encrypt certificate, using [`relaysms-publisher-nginx.conf.template`](relaysms-publisher-nginx.conf.template). It proxies `/` to `PORT` (REST) and `/publisher.v3.Publisher` to `GRPC_PORT` (gRPC), both read from `.env`, over keepalive upstream connections with the security headers and gzip settings shown in the template.
+
+When run interactively, `install.sh` prompts for whether to configure nginx and for the domain name. For unattended installs, pass flags instead:
+
+- `--site-name DOMAIN` - domain name (e.g. `publisher.example.com`); enables nginx setup non-interactively and skips the prompt
+- `--letsencrypt-email EMAIL` - email for Certbot renewal notices (optional; omit to register without one)
+- `--skip-nginx` - skip nginx setup entirely, even interactively
+
+Piping `install.sh` through curl still works with flags: put them after `bash -s --`, which tells `bash` to read the script from stdin and treat everything past `--` as its arguments rather than its own options.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | \
+    sudo bash -s -- --site-name publisher.example.com --letsencrypt-email you@example.com
+```
+
+Run `install.sh --help` for the full flag list.
+
+Re-running `install.sh` is idempotent: it leaves an existing `/etc/nginx/sites-available/<domain>.conf` untouched and skips Certbot if a certificate for the domain already exists.
+
+To configure it manually instead:
+
+```bash
+sudo apt-get install -y nginx certbot python3-certbot-nginx
+
+sudo sed \
+    -e "s/__SERVER_NAME__/publisher.example.com/g" \
+    -e "s/__REST_PORT__/16000/g" \
+    -e "s/__GRPC_PORT__/6000/g" \
+    relaysms-publisher-nginx.conf.template | sudo tee /etc/nginx/sites-available/publisher.example.com.conf >/dev/null
+
+sudo ln -s /etc/nginx/sites-available/publisher.example.com.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+sudo certbot --nginx -d publisher.example.com --redirect
+```
+
 ## Service Management
 
 ```bash
@@ -139,6 +177,12 @@ sudo systemctl start relaysms-publisher.target
 ./manage.sh disable     # Disable on boot
 ./manage.sh update      # Pull latest code and restart
 ./manage.sh uninstall   # Remove installation
+```
+
+`logs` takes options for filtering: `-u/--unit` (rest|grpc|worker|beat|smtp, repeatable), `-n/--lines`, `-s/--since` (journalctl `--since` syntax), and `--no-follow` to print the selected range and exit instead of tailing. Run `./manage.sh logs --help` for details.
+
+```bash
+./manage.sh logs --unit rest --unit grpc --since "1 hour ago" --lines 200
 ```
 
 ## Managing Platform Adapters

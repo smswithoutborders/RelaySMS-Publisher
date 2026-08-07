@@ -7,6 +7,10 @@ REPO_URL="https://github.com/smswithoutborders/RelaySMS-Publisher.git"
 BRANCH="${BRANCH:-main}"
 CARGO_BIN="$HOME/.cargo/bin"
 DEPS_MARKER="/var/lib/relaysms-publisher-deps-installed"
+NGINX_CONF_TEMPLATE="relaysms-publisher-nginx.conf.template"
+SITE_NAME="${SITE_NAME:-}"
+LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
+SKIP_NGINX="${SKIP_NGINX:-0}"
 
 TARGET_UNIT="relaysms-publisher.target"
 SERVICE_UNITS=(
@@ -35,6 +39,64 @@ error() {
 on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
+usage() {
+  cat <<'EOF'
+Usage: install.sh [OPTIONS]
+
+  --branch BRANCH             Git branch to install (default: main)
+  --site-name DOMAIN          Domain to front with nginx + Let's Encrypt
+  --letsencrypt-email EMAIL   Email for Let's Encrypt renewal notices
+  --skip-nginx                Skip the nginx/TLS setup entirely
+  -h, --help                  Show this help and exit
+
+Piped through curl, pass options after `-s --`:
+  curl -fsSL .../install.sh | sudo bash -s -- --site-name publisher.example.com
+EOF
+}
+
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    --branch)
+      BRANCH="$2"
+      shift 2
+      ;;
+    --branch=*)
+      BRANCH="${1#*=}"
+      shift
+      ;;
+    --site-name)
+      SITE_NAME="$2"
+      shift 2
+      ;;
+    --site-name=*)
+      SITE_NAME="${1#*=}"
+      shift
+      ;;
+    --letsencrypt-email)
+      LETSENCRYPT_EMAIL="$2"
+      shift 2
+      ;;
+    --letsencrypt-email=*)
+      LETSENCRYPT_EMAIL="${1#*=}"
+      shift
+      ;;
+    --skip-nginx)
+      SKIP_NGINX=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      error "Unknown option: $1"
+      ;;
+    esac
+  done
+}
+
 check_root() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 
 # Reads KEY=value from a file without sourcing it. `|| true` on the grep
@@ -48,6 +110,19 @@ read_env_var() {
   val="${val%\'}"
   val="${val#\'}"
   echo "$val"
+}
+
+# Prompts on the controlling terminal even when install.sh is piped via
+# `curl | sudo bash`, where stdin is the script itself, not a tty. Falls
+# back to $default with no prompt when no tty is reachable at all.
+prompt() {
+  local __resultvar="$1" question="$2" default="${3:-}" reply=""
+  if [ -t 0 ]; then
+    read -r -p "$question" reply
+  elif [ -r /dev/tty ]; then
+    read -r -p "$question" reply </dev/tty
+  fi
+  printf -v "$__resultvar" '%s' "${reply:-$default}"
 }
 
 # Adds a dir to the global RW_DIRS array, de-duped, relative to INSTALL_DIR.
@@ -259,7 +334,98 @@ install_services() {
   systemctl start "$TARGET_UNIT"
 }
 
+# Opt-in. Skipped outright with SKIP_NGINX=1. Non-interactive automation
+# sets SITE_NAME (and optionally LETSENCRYPT_EMAIL) up front; interactive
+# runs get prompted for both instead.
+configure_nginx() {
+  if [ "${SKIP_NGINX:-0}" = "1" ]; then
+    log "Skipping nginx setup (SKIP_NGINX=1)"
+    return
+  fi
+
+  local site="${SITE_NAME:-}" interactive=0
+  if [ -z "$site" ]; then
+    interactive=1
+    local enable=""
+    prompt enable "Configure nginx as a reverse proxy with a Let's Encrypt certificate? [y/N] " "n"
+    case "$enable" in
+    y | Y | yes | YES) ;;
+    *)
+      log "Skipping nginx setup"
+      return
+      ;;
+    esac
+    prompt site "Domain name for this server (e.g. publisher.example.com): " ""
+    [ -n "$site" ] || {
+      log "No domain given, skipping nginx setup"
+      return
+    }
+  fi
+
+  if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
+    log "Installing nginx and certbot"
+    apt-get install -y --no-install-recommends nginx certbot python3-certbot-nginx
+  fi
+  mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+
+  local envfile="$INSTALL_DIR/.env" rest_port grpc_port
+  rest_port=$(read_env_var "PORT" "$envfile")
+  grpc_port=$(read_env_var "GRPC_PORT" "$envfile")
+
+  local conf_dest="/etc/nginx/sites-available/${site}.conf"
+  if [ -f "$conf_dest" ]; then
+    log "nginx site $conf_dest already exists, leaving it untouched"
+  else
+    [ -f "$INSTALL_DIR/$NGINX_CONF_TEMPLATE" ] || error "$NGINX_CONF_TEMPLATE not found"
+    sed \
+      -e "s/__SERVER_NAME__/$site/g" \
+      -e "s/__REST_PORT__/${rest_port:-16000}/g" \
+      -e "s/__GRPC_PORT__/${grpc_port:-6000}/g" \
+      "$INSTALL_DIR/$NGINX_CONF_TEMPLATE" >"$conf_dest"
+    log "Wrote $conf_dest"
+  fi
+  ln -sf "$conf_dest" "/etc/nginx/sites-enabled/${site}.conf"
+
+  nginx -t || error "nginx config test failed"
+  # Boot persistence is a nicety, not required for this run to succeed.
+  systemctl enable nginx &>/dev/null || true
+  systemctl reload nginx 2>/dev/null || systemctl restart nginx
+
+  if [ -f "/etc/letsencrypt/live/${site}/fullchain.pem" ]; then
+    log "Certificate for $site already exists, skipping certbot"
+    return
+  fi
+
+  local do_cert="y"
+  if [ "$interactive" = "1" ]; then
+    prompt do_cert "No certificate found for $site. Obtain one with Certbot now? [Y/n] " "y"
+  fi
+  case "$do_cert" in
+  n | N | no | NO)
+    log "Skipping certificate issuance; run manually: certbot --nginx -d $site"
+    return
+    ;;
+  esac
+
+  local email="${LETSENCRYPT_EMAIL:-}"
+  if [ -z "$email" ] && [ "$interactive" = "1" ]; then
+    prompt email "Email for Let's Encrypt renewal notices (optional): " ""
+  fi
+
+  local certbot_args=(--nginx -d "$site" --redirect --agree-tos --non-interactive)
+  if [ -n "$email" ]; then
+    certbot_args+=(-m "$email")
+  else
+    certbot_args+=(--register-unsafely-without-email)
+  fi
+
+  log "Requesting certificate for $site"
+  certbot "${certbot_args[@]}" || error "certbot failed to obtain a certificate for $site"
+  log "Certificate installed for $site"
+}
+
 main() {
+  parse_args "$@"
   check_root
   log "Installing RelaySMS Publisher (service user: $SERVICE_USER)"
 
@@ -273,6 +439,7 @@ main() {
   create_app_directories
   run_migrations
   install_services
+  configure_nginx
 
   log "Installation complete"
   log "  Config : $INSTALL_DIR/.env"
