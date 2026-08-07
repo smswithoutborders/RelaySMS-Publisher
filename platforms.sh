@@ -6,7 +6,7 @@
 # directory, loads .env, runs as the correct service user (so file
 # ownership never drifts), and uses the project venv automatically.
 
-set -euo pipefail
+set -Eeuo pipefail
 
 DEFAULT_INSTALL_DIR="/opt/relaysms/relaysms-publisher"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,6 +16,9 @@ error() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
   exit 1
 }
+# Catches failures not already wrapped in error(), with line context.
+on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
+trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 # Resolve INSTALL_DIR: prefer the production install path if it exists and
 # looks like a real install, otherwise fall back to this script's own

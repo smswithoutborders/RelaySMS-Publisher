@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -Eeuo pipefail
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"
 REPO_URL="https://github.com/smswithoutborders/RelaySMS-Publisher.git"

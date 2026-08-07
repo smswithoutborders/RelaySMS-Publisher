@@ -11,7 +11,11 @@
 #
 # Usage: ./sync-env.sh [env-file] [template-file]
 
-set -euo pipefail
+set -Eeuo pipefail
+
+# Catches failures not already wrapped in error(), with line context.
+on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
+trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${1:-$SCRIPT_DIR/.env}"
@@ -21,7 +25,19 @@ TEMPLATE_FILE="${2:-$SCRIPT_DIR/template.env}"
   echo "Template not found: $TEMPLATE_FILE" >&2
   exit 1
 }
-[ -f "$ENV_FILE" ] || : >"$ENV_FILE"
+
+if [ -e "$ENV_FILE" ]; then
+  [ -w "$ENV_FILE" ] || {
+    echo "No write permission on $ENV_FILE. Try: sudo $0 $*" >&2
+    exit 1
+  }
+else
+  [ -w "$(dirname "$ENV_FILE")" ] || {
+    echo "No write permission in $(dirname "$ENV_FILE") to create $ENV_FILE. Try: sudo $0 $*" >&2
+    exit 1
+  }
+  : >"$ENV_FILE"
+fi
 
 mapfile -t env_lines <"$ENV_FILE"
 
@@ -70,6 +86,9 @@ done <"$TEMPLATE_FILE"
 if [ "$added" -eq 0 ]; then
   echo "Nothing to add; $ENV_FILE already has every variable from $TEMPLATE_FILE."
 else
+  BACKUP_FILE="$ENV_FILE.bak"
+  cp -p "$ENV_FILE" "$BACKUP_FILE"
   printf '%s\n' "${env_lines[@]}" >"$ENV_FILE"
   echo "Added $added variable(s) to $ENV_FILE"
+  echo "Previous file backed up to $BACKUP_FILE; delete it once you've confirmed the sync looks right."
 fi

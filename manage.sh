@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -Eeuo pipefail
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"
 CARGO_BIN="$HOME/.cargo/bin"
@@ -20,6 +20,9 @@ error() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
   exit 1
 }
+# Catches failures not already wrapped in error(), with line context.
+on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
+trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 check_sudo() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-set -euo pipefail
+set -Eeuo pipefail
 
 PYTHON="${PYTHON:-python3}"
 HOST="${HOST:-127.0.0.1}"
@@ -10,6 +10,10 @@ WORKERS="${WORKERS:-1}"
 log() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] [$1] $2"
 }
+
+# Catches failures not already wrapped in error(), with line context.
+on_err() { log ERROR "aborted at line $1 (last command: $2)"; }
+trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 log INFO "Starting gRPC, FastAPI, Celery worker, Celery beat scheduler ..."
 
