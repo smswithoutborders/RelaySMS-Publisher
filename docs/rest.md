@@ -187,9 +187,40 @@ Payloads queued here are tagged with protocol `https`. If `OFFLINE_PUBLISH_ALLOW
 
 | Status | Condition |
 | :--- | :--- |
-| `400 Bad Request` | Invalid base64 text or payload deserialization failure |
-| `422 Unprocessable Entity` | Unsupported payload type |
-| `500 Internal Server Error` | Decryption failure, unsupported platform/protocol, or adapter error |
+| `400 Bad Request` | Invalid base64 text or invalid payload structure |
+
+Decryption, unsupported payload type, unsupported protocol, and adapter errors are all detected later, inside the async publish pipeline, so they never surface as an HTTP error here. They're logged server-side only.
+
+### 8. Twilio Incoming SMS
+
+Ingests an inbound SMS relayed by Twilio's messaging webhook and queues it for publication. Disabled unless `TWILIO_SMS_TRANSPORT_ENABLED=true`.
+
+**URL:** `/twilio-sms`
+**Method:** `POST`
+**Content-Type:** `application/x-www-form-urlencoded` (Twilio's webhook format)
+
+**Request Parameters** (subset of Twilio's webhook payload that's used):
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| From | string | Yes | Sender phone number in E.164 format |
+| Body | string | Yes | Base64-encoded serialized payload |
+
+**Authentication:** requires a valid `X-Twilio-Signature` header, verified against `TWILIO_AUTH_TOKEN`. Requests failing this check are rejected before the payload is touched.
+
+**Response:** empty TwiML (`<Response/>`), `Content-Type: text/xml`.
+
+Payloads queued here are tagged with protocol `sms`. If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set without `sms`, offline payloads are discarded instead of published. See [Offline Publishing](../README.md#offline-publishing).
+
+**Error Responses:**
+
+| Status | Condition |
+| :--- | :--- |
+| `400 Bad Request` | Missing `From`/`Body`, invalid base64 text, or invalid payload structure |
+| `403 Forbidden` | Missing or invalid `X-Twilio-Signature` |
+| `404 Not Found` | `TWILIO_SMS_TRANSPORT_ENABLED` is not `true` |
+
+Decryption, unsupported payload type, unsupported protocol, and adapter errors are all detected later, inside the async publish pipeline, so they never surface as an HTTP error here. They're logged server-side only.
 
 ## Error Handling
 

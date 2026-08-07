@@ -4,18 +4,16 @@ import json
 from pathlib import Path as PathLib
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
 from fastapi.responses import HTMLResponse
+from twilio.request_validator import RequestValidator
+from twilio.twiml.messaging_response import MessagingResponse
 
 from gateway_clients.gateway_client_manager import GatewayClientManager
 from logutils import get_logger
 from models.server_identity_key import get_public_key, get_public_keys
 from platforms.adapter_manager import AdapterManager
-from publications import (
-    PayloadMalformedError,
-    PayloadNotSupportedError,
-    PublicationService,
-)
+from publications import PayloadMalformedError, PublicationService
 from rest_services.v1.schemas import (
     GatewayClientManifest,
     OAuthClientMetadata,
@@ -25,8 +23,14 @@ from rest_services.v1.schemas import (
     ServerStaticPublicKey,
 )
 from tasks.publication_task import publish_message
+from utils import get_config_bool, get_configs
 
 logger = get_logger(__name__)
+
+TWILIO_SMS_TRANSPORT_ENABLED = get_config_bool("TWILIO_SMS_TRANSPORT_ENABLED")
+TWILIO_AUTH_TOKEN = get_configs(
+    "TWILIO_AUTH_TOKEN", strict=TWILIO_SMS_TRANSPORT_ENABLED
+)
 
 router = APIRouter()
 
@@ -202,9 +206,41 @@ def create_publications(body: PublishContentRequest) -> PublishContentResponse:
         PublicationService.validate(body.text)
     except PayloadMalformedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except PayloadNotSupportedError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     publish_message.delay(body.text, body.address, "https")
     logger.info("Successfully queued publication request via protocol %r.", "https")
     return PublishContentResponse(message="Publication request queued successfully.")
+
+
+@router.post("/twilio-sms")
+async def twilio_incoming_sms(request: Request) -> Response:
+    """Ingest an inbound SMS relayed by Twilio's messaging webhook."""
+    if not TWILIO_SMS_TRANSPORT_ENABLED:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    form = await request.form()
+    params = dict(form)
+    signature = request.headers.get("X-Twilio-Signature", "")
+
+    validator = RequestValidator(TWILIO_AUTH_TOKEN)
+    if not validator.validate(str(request.url), params, signature):
+        logger.warning("Rejected Twilio webhook with invalid signature.")
+        raise HTTPException(status_code=403, detail="Invalid Twilio signature.")
+
+    sender_address = params.get("From")
+    text_payload = params.get("Body")
+
+    if not sender_address or not text_payload:
+        raise HTTPException(
+            status_code=400, detail="Missing required field 'From' or 'Body'."
+        )
+
+    try:
+        PublicationService.validate(text_payload)
+    except PayloadMalformedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    publish_message.delay(text_payload, sender_address, "sms")
+    logger.info("Successfully queued publication request via protocol %r.", "sms")
+
+    return Response(content=str(MessagingResponse()), media_type="text/xml")
