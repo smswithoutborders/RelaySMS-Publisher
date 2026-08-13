@@ -2,7 +2,6 @@
 
 set -Ee
 
-# Catches failures not already wrapped in error(), with line context.
 on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 

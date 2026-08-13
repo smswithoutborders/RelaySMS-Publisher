@@ -1,19 +1,13 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-only
-#
-# Adds variables from template.env that are missing from .env, without
-# touching any existing value. Safe to re-run any time template.env gains
-# new fields.
-#
-# Each missing variable is inserted right after its section's comment
-# header if that header already exists in .env; otherwise the variable
-# (with its header, if any) is appended as a new block at the end.
-#
 # Usage: ./sync-env.sh [env-file] [template-file]
+#
+# Adds template.env variables missing from .env, without touching existing
+# values. Each is inserted after its section header if that header already
+# exists in .env, otherwise appended as a new block.
 
 set -Eeuo pipefail
 
-# Catches failures not already wrapped in error(), with line context.
 on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 

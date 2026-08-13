@@ -12,7 +12,6 @@ log() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] [$1] $2"
 }
 
-# Catches failures not already wrapped in error(), with line context.
 on_err() { log ERROR "aborted at line $1 (last command: $2)"; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 

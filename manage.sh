@@ -2,58 +2,46 @@
 
 set -Eeuo pipefail
 
-INSTALL_DIR="/opt/relaysms/relaysms-publisher"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/scripts/lib.sh"
+
+INSTALL_DIR="$SCRIPT_DIR"
 CARGO_BIN="$HOME/.cargo/bin"
 
-TARGET_UNIT="relaysms-publisher.target"
-SERVICE_UNITS=(
-  relaysms-publisher-rest.service
-  relaysms-publisher-grpc.service
-  relaysms-publisher-worker.service
-  relaysms-publisher-beat.service
-  relaysms-publisher-smtp.service
-)
+INSTANCE_NAME="$(read_instance_name)"
+TARGET_UNIT="$(unit_name_for "$TARGET_UNIT_TEMPLATE")"
+SERVICE_UNITS=()
+for _template in "${SERVICE_UNIT_TEMPLATES[@]}"; do
+  SERVICE_UNITS+=("$(unit_name_for "$_template")")
+done
+unset _template
 ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
-
-log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
-error() {
-  echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
-  exit 1
-}
-# Catches failures not already wrapped in error(), with line context.
-on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
-trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 check_sudo() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 
+# Only targets an already-installed service, so no fallback beyond the unit file.
 detect_service_user() {
-  local unit="/etc/systemd/system/relaysms-publisher-rest.service"
+  local unit="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
   grep -E "^User=" "$unit" 2>/dev/null | head -1 | cut -d= -f2
 }
 
-read_env_var() {
-  local key="$1" file="$INSTALL_DIR/.env"
-  grep -E "^${key}[[:space:]]*=" "$file" 2>/dev/null | tail -1 |
-    sed 's/^[^=]*=//;s/^[[:space:]]*//;s/[[:space:]]*$//'
-}
-
-# git pull doesn't fix ownership for directories .env references that were
-# added since the last install.sh run. Re-apply it here too.
+# git pull doesn't fix ownership for directories .env added since the last run.
 sync_app_directories() {
   local service_user
   service_user="$(detect_service_user)"
   [ -n "$service_user" ] || return
 
+  local envfile="$INSTALL_DIR/.env"
   local dirs=(
-    "$(dirname "$(read_env_var SQLITE_DATABASE_PATH)")"
-    "$(dirname "$(read_env_var CELERY_BROKER_DB_PATH)")"
-    "$(dirname "$(read_env_var CELERY_RESULT_DB_PATH)")"
-    "$(dirname "$(read_env_var CELERY_BEAT_SCHEDULE_PATH)")"
-    "$(read_env_var PLATFORMS_ADAPTERS_DIR)"
-    "$(read_env_var PLATFORMS_ADAPTERS_VENV_DIR)"
-    "$(read_env_var PLATFORMS_ADAPTERS_ASSETS_DIR)"
-    "$(dirname "$(read_env_var PLATFORMS_REGISTRY_FILE)")"
-    "$(dirname "$(read_env_var GATEWAY_CLIENTS_REGISTRY_FILE)")"
+    "$(dirname "$(read_env_var SQLITE_DATABASE_PATH "$envfile")")"
+    "$(dirname "$(read_env_var CELERY_BROKER_DB_PATH "$envfile")")"
+    "$(dirname "$(read_env_var CELERY_RESULT_DB_PATH "$envfile")")"
+    "$(dirname "$(read_env_var CELERY_BEAT_SCHEDULE_PATH "$envfile")")"
+    "$(read_env_var PLATFORMS_ADAPTERS_DIR "$envfile")"
+    "$(read_env_var PLATFORMS_ADAPTERS_VENV_DIR "$envfile")"
+    "$(read_env_var PLATFORMS_ADAPTERS_ASSETS_DIR "$envfile")"
+    "$(dirname "$(read_env_var PLATFORMS_REGISTRY_FILE "$envfile")")"
+    "$(dirname "$(read_env_var GATEWAY_CLIENTS_REGISTRY_FILE "$envfile")")"
   )
 
   local dir
@@ -252,8 +240,7 @@ cmd_update() {
 
   venv/bin/pip install --quiet --upgrade pip
   venv/bin/pip install --quiet -r requirements.txt
-  # Keep observability deps current too, but only if they were opted into
-  # (see observability/README.md); don't install them for everyone.
+  # Only update observability deps if they were opted into in the first place.
   if venv/bin/pip show opentelemetry-sdk &>/dev/null; then
     venv/bin/pip install --quiet -r requirements-observability.txt
   fi
@@ -294,6 +281,9 @@ cmd_uninstall() {
   done
   systemctl daemon-reload
 
+  # Belt-and-suspenders against a top-level directory, even though
+  # INSTALL_DIR is always self-derived from this script's own location.
+  [[ "$INSTALL_DIR" =~ ^(/[^/]+){2,}/?$ ]] || error "Refusing to remove '$INSTALL_DIR': not a safe path"
   rm -rf "$INSTALL_DIR"
   log "Uninstall complete"
 }

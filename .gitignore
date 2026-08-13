@@ -125,6 +125,9 @@ celerybeat.pid
 .venv
 env/
 venv/
+
+# Written by install.sh into the install directory
+.instance-name
 ENV/
 env.bak/
 venv.bak/

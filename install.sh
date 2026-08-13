@@ -2,7 +2,19 @@
 
 set -Eeuo pipefail
 
-INSTALL_DIR="/opt/relaysms/relaysms-publisher"
+DEFAULT_INSTALL_DIR="/opt/relaysms/relaysms-publisher"
+if [ -n "${INSTALL_DIR:-}" ]; then
+  INSTALL_DIR_SET=1
+else
+  INSTALL_DIR_SET=0
+fi
+INSTALL_DIR="${INSTALL_DIR:-$DEFAULT_INSTALL_DIR}"
+if [ -n "${INSTANCE_NAME:-}" ]; then
+  INSTANCE_NAME_SET=1
+else
+  INSTANCE_NAME_SET=0
+fi
+INSTANCE_NAME="${INSTANCE_NAME:-}"
 REPO_URL="https://github.com/smswithoutborders/RelaySMS-Publisher.git"
 BRANCH="${BRANCH:-main}"
 CARGO_BIN="$HOME/.cargo/bin"
@@ -11,11 +23,29 @@ NGINX_CONF_TEMPLATE="relaysms-publisher-nginx.conf.template"
 SITE_NAME="${SITE_NAME:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 SKIP_NGINX="${SKIP_NGINX:-0}"
+FORCE_DEPS="${FORCE_DEPS:-0}"
 SETUP_DB="${SETUP_DB:-}"
+if [ -n "${DB_EXISTING:-}" ]; then
+  DB_EXISTING_SET=1
+else
+  DB_EXISTING_SET=0
+fi
+DB_EXISTING="${DB_EXISTING:-0}"
+DB_HOST="${DB_HOST:-}"
+DB_PORT="${DB_PORT:-}"
 DB_NAME="${DB_NAME:-}"
 DB_USER="${DB_USER:-}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 SETUP_BROKER="${SETUP_BROKER:-}"
+if [ -n "${BROKER_EXISTING:-}" ]; then
+  BROKER_EXISTING_SET=1
+else
+  BROKER_EXISTING_SET=0
+fi
+BROKER_EXISTING="${BROKER_EXISTING:-0}"
+BROKER_HOST="${BROKER_HOST:-}"
+BROKER_PORT="${BROKER_PORT:-}"
+BROKER_MGMT_PORT="${BROKER_MGMT_PORT:-}"
 BROKER_VHOST="${BROKER_VHOST:-}"
 BROKER_USER="${BROKER_USER:-}"
 BROKER_PASSWORD="${BROKER_PASSWORD:-}"
@@ -23,18 +53,25 @@ SETUP_OBSERVABILITY="${SETUP_OBSERVABILITY:-}"
 OBSERVABILITY_SITE_NAME="${OBSERVABILITY_SITE_NAME:-}"
 OBSERVABILITY_LETSENCRYPT_EMAIL="${OBSERVABILITY_LETSENCRYPT_EMAIL:-}"
 
-TARGET_UNIT="relaysms-publisher.target"
-SERVICE_UNITS=(
+TARGET_UNIT_TEMPLATE="relaysms-publisher.target"
+SERVICE_UNIT_TEMPLATES=(
   relaysms-publisher-rest.service
   relaysms-publisher-grpc.service
   relaysms-publisher-worker.service
   relaysms-publisher-beat.service
   relaysms-publisher-smtp.service
 )
-ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
+ALL_UNIT_TEMPLATES=("$TARGET_UNIT_TEMPLATE" "${SERVICE_UNIT_TEMPLATES[@]}")
 
-# Runtime files are owned by the invoking user if run via sudo, otherwise
-# a dedicated 'relaysms' user. The build itself still runs as root.
+unit_name_for() {
+  local template="$1"
+  if [ -z "$INSTANCE_NAME" ]; then
+    echo "$template"
+  else
+    echo "$template" | sed -E "s/^relaysms-publisher/relaysms-publisher-$INSTANCE_NAME/"
+  fi
+}
+
 if [ -n "${SUDO_USER:-}" ] && id "$SUDO_USER" &>/dev/null; then
   SERVICE_USER="$SUDO_USER"
 else
@@ -46,7 +83,6 @@ error() {
   echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
   exit 1
 }
-# Catches failures not already wrapped in error(), with line context.
 on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
@@ -54,18 +90,29 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [OPTIONS]
 
+  --install-dir PATH                       Installation directory (default: /opt/relaysms/relaysms-publisher)
+  --instance-name NAME                     Namespace this install's systemd units so a second instance
+                                            can coexist on the same host (default: unnamed/single instance)
   --branch BRANCH                          Git branch to install (default: main)
   --site-name DOMAIN                       Domain to front with nginx + Let's Encrypt
   --letsencrypt-email EMAIL                Email for Let's Encrypt renewal notices
   --skip-nginx                             Skip the nginx/TLS setup entirely
-  --setup-db {mysql|postgres}              Install and provision a database server
+  --force-deps                             Reinstall system dependencies even if already marked done
+  --setup-db {mysql|postgres}              Install and provision a database server, or connect to an existing one
+  --db-existing                            Use an already-running database server instead of installing one locally
+  --db-host HOST                           Database host (only valid with --db-existing)
+  --db-port PORT                           Database port (only valid with --db-existing)
   --db-name NAME                           Database name (default: relaysms)
   --db-user USER                           Database user (default: relaysms)
-  --db-password PASS                       Database password (default: randomly generated)
-  --setup-broker {rabbitmq}                Install and provision a message broker for Celery
+  --db-password PASS                       Database password (default: randomly generated; required with --db-existing)
+  --setup-broker {rabbitmq}                Install and provision a message broker for Celery, or connect to an existing one
+  --broker-existing                        Use an already-running broker instead of installing one locally
+  --broker-host HOST                       Broker host (only valid with --broker-existing)
+  --broker-port PORT                       Broker AMQP port (only valid with --broker-existing)
+  --broker-mgmt-port PORT                  Broker management API port, used to verify --broker-existing credentials (default: 15672)
   --broker-vhost NAME                      RabbitMQ vhost (default: relaysms)
   --broker-user USER                       RabbitMQ user (default: relaysms)
-  --broker-password PASS                   RabbitMQ password (default: randomly generated)
+  --broker-password PASS                   RabbitMQ password (default: randomly generated; required with --broker-existing)
   --setup-observability                    Install and start SigNoz + Uptime Kuma
   --observability-site-name DOMAIN         Domain for the observability reverse proxy
   --observability-letsencrypt-email EMAIL  Email for its Let's Encrypt renewal notices
@@ -79,6 +126,26 @@ EOF
 parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
+    --install-dir)
+      INSTALL_DIR="$2"
+      INSTALL_DIR_SET=1
+      shift 2
+      ;;
+    --install-dir=*)
+      INSTALL_DIR="${1#*=}"
+      INSTALL_DIR_SET=1
+      shift
+      ;;
+    --instance-name)
+      INSTANCE_NAME="$2"
+      INSTANCE_NAME_SET=1
+      shift 2
+      ;;
+    --instance-name=*)
+      INSTANCE_NAME="${1#*=}"
+      INSTANCE_NAME_SET=1
+      shift
+      ;;
     --branch)
       BRANCH="$2"
       shift 2
@@ -107,12 +174,37 @@ parse_args() {
       SKIP_NGINX=1
       shift
       ;;
+    --force-deps)
+      FORCE_DEPS=1
+      shift
+      ;;
     --setup-db)
       SETUP_DB="$2"
       shift 2
       ;;
     --setup-db=*)
       SETUP_DB="${1#*=}"
+      shift
+      ;;
+    --db-existing)
+      DB_EXISTING=1
+      DB_EXISTING_SET=1
+      shift
+      ;;
+    --db-host)
+      DB_HOST="$2"
+      shift 2
+      ;;
+    --db-host=*)
+      DB_HOST="${1#*=}"
+      shift
+      ;;
+    --db-port)
+      DB_PORT="$2"
+      shift 2
+      ;;
+    --db-port=*)
+      DB_PORT="${1#*=}"
       shift
       ;;
     --db-name)
@@ -145,6 +237,35 @@ parse_args() {
       ;;
     --setup-broker=*)
       SETUP_BROKER="${1#*=}"
+      shift
+      ;;
+    --broker-existing)
+      BROKER_EXISTING=1
+      BROKER_EXISTING_SET=1
+      shift
+      ;;
+    --broker-host)
+      BROKER_HOST="$2"
+      shift 2
+      ;;
+    --broker-host=*)
+      BROKER_HOST="${1#*=}"
+      shift
+      ;;
+    --broker-port)
+      BROKER_PORT="$2"
+      shift 2
+      ;;
+    --broker-port=*)
+      BROKER_PORT="${1#*=}"
+      shift
+      ;;
+    --broker-mgmt-port)
+      BROKER_MGMT_PORT="$2"
+      shift 2
+      ;;
+    --broker-mgmt-port=*)
+      BROKER_MGMT_PORT="${1#*=}"
       shift
       ;;
     --broker-vhost)
@@ -205,8 +326,66 @@ parse_args() {
 
 check_root() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 
-# Reads KEY=value from a file without sourcing it. `|| true` on the grep
-# stops a no-match from tripping pipefail.
+configure_install_dir() {
+  if [ "$INSTALL_DIR_SET" != "1" ]; then
+    prompt INSTALL_DIR "Installation directory [$INSTALL_DIR]: " "$INSTALL_DIR"
+  fi
+
+  if [ -n "$INSTANCE_NAME" ]; then
+    [[ "$INSTANCE_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$ ]] ||
+      error "--instance-name '$INSTANCE_NAME' must start with a letter/digit and contain only letters, digits, underscores, and hyphens (max 32 chars)"
+  fi
+
+  # Blocks top-level dirs (so a later `rm -rf "$INSTALL_DIR"` can't wipe a
+  # system directory) and sed-special characters (which would corrupt the
+  # unit-file templating in install_services()).
+  [[ "$INSTALL_DIR" =~ ^(/[A-Za-z0-9_.-]+){2,}/?$ ]] ||
+    error "$INSTALL_DIR is not a safe install location; use an absolute path with at least two segments, letters/digits/._- only (e.g. /opt/relaysms/relaysms-publisher)"
+
+  if [ -e "$INSTALL_DIR" ] && [ ! -d "$INSTALL_DIR" ]; then
+    error "$INSTALL_DIR exists and is not a directory"
+  fi
+
+  if [ -d "$INSTALL_DIR" ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+    if [ -d "$INSTALL_DIR/.git" ] &&
+      git -C "$INSTALL_DIR" remote get-url origin 2>/dev/null | grep -q "RelaySMS-Publisher"; then
+      if [ -f "$INSTALL_DIR/.env" ]; then
+        local existing_owner
+        existing_owner=$(stat -c '%G' "$INSTALL_DIR/.env")
+        if [ "$existing_owner" != "$SERVICE_USER" ]; then
+          error "$INSTALL_DIR is an existing install owned by service user '$existing_owner', but this run resolved to '$SERVICE_USER'. Re-run install.sh with sudo as '$existing_owner' (SERVICE_USER follows the invoking sudo user), or use --install-dir to target a different directory."
+        fi
+      fi
+      # manage.sh has no --instance-name flag, so persist it here for reuse.
+      local existing_instance=""
+      [ -f "$INSTALL_DIR/.instance-name" ] && existing_instance=$(<"$INSTALL_DIR/.instance-name")
+      if [ -n "$existing_instance" ]; then
+        if [ "$INSTANCE_NAME_SET" = "1" ] && [ "$INSTANCE_NAME" != "$existing_instance" ]; then
+          error "$INSTALL_DIR was previously configured as instance '$existing_instance'. Pass --instance-name $existing_instance (or omit the flag) to reuse it, or use --install-dir to target a different directory for a new instance."
+        fi
+        INSTANCE_NAME="$existing_instance"
+      fi
+      log "Installation directory: $INSTALL_DIR (existing install for service user '$SERVICE_USER', will update)"
+    else
+      error "$INSTALL_DIR already exists and is not empty; choose an empty or non-existent directory with --install-dir, or point it at an existing RelaySMS Publisher checkout"
+    fi
+  else
+    log "Installation directory: $INSTALL_DIR"
+  fi
+
+  TARGET_UNIT=$(unit_name_for "$TARGET_UNIT_TEMPLATE")
+  SERVICE_UNITS=()
+  local template
+  for template in "${SERVICE_UNIT_TEMPLATES[@]}"; do
+    SERVICE_UNITS+=("$(unit_name_for "$template")")
+  done
+  ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
+  if [ -n "$INSTANCE_NAME" ]; then
+    log "Instance: $INSTANCE_NAME (target unit: $TARGET_UNIT)"
+  fi
+}
+
+# `|| true` on the grep stops a no-match from tripping pipefail.
 read_env_var() {
   local key="$1" file="$2" val
   val=$( (grep -E "^(export[[:space:]]+)?${key}[[:space:]]*=" "$file" 2>/dev/null || true) |
@@ -218,20 +397,34 @@ read_env_var() {
   echo "$val"
 }
 
-# Prompts on the controlling terminal even when install.sh is piped via
-# `curl | sudo bash`, where stdin is the script itself, not a tty. Falls
-# back to $default with no prompt when no tty is reachable at all.
+# Reads from the controlling terminal even when piped via `curl | sudo
+# bash` (stdin is the script itself there). Falls back to $default if no
+# tty is reachable.
 prompt() {
-  local __resultvar="$1" question="$2" default="${3:-}" reply=""
+  local __resultvar="$1" question="> $2" default="${3:-}" reply=""
   if [ -t 0 ]; then
     read -r -p "$question" reply
   elif [ -r /dev/tty ]; then
-    read -r -p "$question" reply </dev/tty
+    # -r only means the device node exists, not that a terminal is
+    # attached; || true stops a failed open from aborting the install.
+    read -r -p "$question" reply </dev/tty || true
   fi
   printf -v "$__resultvar" '%s' "${reply:-$default}"
 }
 
-# Adds a dir to the global RW_DIRS array, de-duped, relative to INSTALL_DIR.
+# Same as prompt(), but the value isn't echoed to the terminal as it's typed.
+prompt_secret() {
+  local __resultvar="$1" question="> $2" reply=""
+  if [ -t 0 ]; then
+    read -rs -p "$question" reply
+    echo
+  elif [ -r /dev/tty ]; then
+    read -rs -p "$question" reply </dev/tty || true
+    echo
+  fi
+  printf -v "$__resultvar" '%s' "$reply"
+}
+
 _resolve_dir() {
   local dir="$1"
   [ -z "$dir" ] && return
@@ -244,8 +437,8 @@ _resolve_dir() {
 }
 
 install_system_deps() {
-  if [ -f "$DEPS_MARKER" ] && [ "${FORCE_DEPS:-0}" != "1" ]; then
-    log "System dependencies already installed, skipping (FORCE_DEPS=1 to force)"
+  if [ -f "$DEPS_MARKER" ] && [ "$FORCE_DEPS" != "1" ]; then
+    log "System dependencies already installed, skipping (--force-deps to override)"
     return
   fi
   log "Installing system dependencies"
@@ -302,6 +495,9 @@ clone_repository() {
     git -c url."https://github.com/".insteadOf="git@github.com:" \
       clone --recurse-submodules -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
   fi
+  # Git refuses to clone into a pre-existing non-empty dir, so this can't
+  # move earlier -- $INSTALL_DIR is only guaranteed to exist past this point.
+  echo "$INSTANCE_NAME" >"$INSTALL_DIR/.instance-name"
 }
 
 setup_virtualenv() {
@@ -349,8 +545,6 @@ setup_env() {
   chmod 640 .env
 }
 
-# Shared by create_app_directories and install_services so both stay in
-# sync with .env.
 resolve_app_directories() {
   local envfile="$INSTALL_DIR/.env"
   [ -f "$envfile" ] || error ".env not found"
@@ -422,14 +616,32 @@ install_services() {
   )
   [ -n "$rw_paths" ] || error "No application directories resolved for ReadWritePaths"
 
-  local svc
-  for svc in "${ALL_UNITS[@]}"; do
-    [ -f "$svc" ] || error "Service file not found: $svc"
-    # # as delimiter, a resolved path could contain a pipe.
+  # Only matches unit-name references (PartOf=, WantedBy=, ...), never
+  # Description=/Documentation=: those read "RelaySMS Publisher" (space,
+  # capitalized), not this lowercase-hyphenated pattern.
+  local instance_sed_args=()
+  if [ -n "$INSTANCE_NAME" ]; then
+    instance_sed_args+=(-e "s/relaysms-publisher\.target/$TARGET_UNIT/g")
+    local svc_name
+    for svc_name in rest grpc worker beat smtp; do
+      instance_sed_args+=(
+        -e "s/relaysms-publisher-$svc_name\.service/relaysms-publisher-$INSTANCE_NAME-$svc_name.service/g"
+        -e "s/relaysms-publisher-$svc_name\$/relaysms-publisher-$INSTANCE_NAME-$svc_name/g"
+      )
+    done
+  fi
+
+  local template dest
+  for template in "${ALL_UNIT_TEMPLATES[@]}"; do
+    [ -f "$template" ] || error "Service file not found: $template"
+    dest=$(unit_name_for "$template")
+    # rw_paths/INSTALL_DIR are absolute paths, so / can't be the sed delimiter.
     sed \
       -e "s/User=relaysms/User=$SERVICE_USER/" \
+      -e "s#/opt/relaysms/relaysms-publisher#$INSTALL_DIR#g" \
       -e "s#__RW_PATHS__#$rw_paths#" \
-      "$svc" >"/etc/systemd/system/$svc"
+      "${instance_sed_args[@]}" \
+      "$template" >"/etc/systemd/system/$dest"
   done
 
   systemctl daemon-reload
@@ -440,9 +652,6 @@ install_services() {
   systemctl start "$TARGET_UNIT"
 }
 
-# Opt-in. Skipped outright with SKIP_NGINX=1. Non-interactive automation
-# sets SITE_NAME (and optionally LETSENCRYPT_EMAIL) up front; interactive
-# runs get prompted for both instead.
 configure_nginx() {
   if [ "${SKIP_NGINX:-0}" = "1" ]; then
     log "Skipping nginx setup (SKIP_NGINX=1)"
@@ -467,6 +676,10 @@ configure_nginx() {
       return
     }
   fi
+  # Rejects path separators (path traversal into conf_dest below) and
+  # anything that could be read as a certbot flag instead of a domain.
+  [[ "$site" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]] ||
+    error "'$site' is not a valid hostname"
 
   if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
     log "Installing nginx and certbot"
@@ -550,10 +763,32 @@ configure_database() {
   *) error "--setup-db must be 'mysql' or 'postgres', got '$dialect'" ;;
   esac
 
+  if [ "$DB_EXISTING_SET" != "1" ]; then
+    local choice=""
+    prompt choice "Use an existing $dialect server, or create a new local one? [existing/new, default: new] " "new"
+    case "$choice" in
+    existing | Existing | EXISTING | e | E) DB_EXISTING=1 ;;
+    *) DB_EXISTING=0 ;;
+    esac
+  fi
+
   local args=(--install-dir "$INSTALL_DIR")
   [ -n "$DB_NAME" ] && args+=(--db-name "$DB_NAME")
-  [ -n "$DB_USER" ] && args+=(--db-user "$DB_USER")
-  [ -n "$DB_PASSWORD" ] && args+=(--db-password "$DB_PASSWORD")
+
+  if [ "$DB_EXISTING" = "1" ]; then
+    args+=(--existing)
+    [ -n "$DB_HOST" ] || prompt DB_HOST "Existing $dialect host: " ""
+    [ -n "$DB_HOST" ] || error "A host is required to use an existing database"
+    [ -n "$DB_USER" ] || prompt DB_USER "Existing $dialect user: " ""
+    [ -n "$DB_USER" ] || error "A user is required to use an existing database"
+    [ -n "$DB_PASSWORD" ] || prompt_secret DB_PASSWORD "Existing $dialect password: "
+    [ -n "$DB_PASSWORD" ] || error "A password is required to use an existing database"
+    args+=(--db-host "$DB_HOST" --db-user "$DB_USER" --db-password "$DB_PASSWORD")
+    [ -n "$DB_PORT" ] && args+=(--db-port "$DB_PORT")
+  else
+    [ -n "$DB_USER" ] && args+=(--db-user "$DB_USER")
+    [ -n "$DB_PASSWORD" ] && args+=(--db-password "$DB_PASSWORD")
+  fi
 
   log "Setting up $dialect"
   "$INSTALL_DIR/scripts/setup-$dialect.sh" "${args[@]}"
@@ -578,10 +813,33 @@ configure_broker() {
   *) error "--setup-broker must be 'rabbitmq', got '$broker'" ;;
   esac
 
+  if [ "$BROKER_EXISTING_SET" != "1" ]; then
+    local choice=""
+    prompt choice "Use an existing RabbitMQ server, or create a new local one? [existing/new, default: new] " "new"
+    case "$choice" in
+    existing | Existing | EXISTING | e | E) BROKER_EXISTING=1 ;;
+    *) BROKER_EXISTING=0 ;;
+    esac
+  fi
+
   local args=(--install-dir "$INSTALL_DIR")
   [ -n "$BROKER_VHOST" ] && args+=(--broker-vhost "$BROKER_VHOST")
-  [ -n "$BROKER_USER" ] && args+=(--broker-user "$BROKER_USER")
-  [ -n "$BROKER_PASSWORD" ] && args+=(--broker-password "$BROKER_PASSWORD")
+
+  if [ "$BROKER_EXISTING" = "1" ]; then
+    args+=(--existing)
+    [ -n "$BROKER_HOST" ] || prompt BROKER_HOST "Existing RabbitMQ host: " ""
+    [ -n "$BROKER_HOST" ] || error "A host is required to use an existing broker"
+    [ -n "$BROKER_USER" ] || prompt BROKER_USER "Existing RabbitMQ user: " ""
+    [ -n "$BROKER_USER" ] || error "A user is required to use an existing broker"
+    [ -n "$BROKER_PASSWORD" ] || prompt_secret BROKER_PASSWORD "Existing RabbitMQ password: "
+    [ -n "$BROKER_PASSWORD" ] || error "A password is required to use an existing broker"
+    args+=(--broker-host "$BROKER_HOST" --broker-user "$BROKER_USER" --broker-password "$BROKER_PASSWORD")
+    [ -n "$BROKER_PORT" ] && args+=(--broker-port "$BROKER_PORT")
+    [ -n "$BROKER_MGMT_PORT" ] && args+=(--broker-mgmt-port "$BROKER_MGMT_PORT")
+  else
+    [ -n "$BROKER_USER" ] && args+=(--broker-user "$BROKER_USER")
+    [ -n "$BROKER_PASSWORD" ] && args+=(--broker-password "$BROKER_PASSWORD")
+  fi
 
   log "Setting up $broker"
   "$INSTALL_DIR/scripts/setup-$broker.sh" "${args[@]}"
@@ -617,8 +875,11 @@ configure_observability() {
 main() {
   parse_args "$@"
   check_root
+  git check-ref-format --branch "$BRANCH" &>/dev/null ||
+    error "--branch '$BRANCH' is not a valid branch name"
   log "Installing RelaySMS Publisher (service user: $SERVICE_USER)"
 
+  configure_install_dir
   install_system_deps
   install_rust
   setup_service_user
