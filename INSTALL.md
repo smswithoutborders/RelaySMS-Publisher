@@ -6,6 +6,22 @@
 curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | sudo bash
 ```
 
+Installs to `/opt/relaysms/relaysms-publisher` by default. Pass `--install-dir PATH` for a different location, or run without it and you'll be prompted.
+
+### Running Multiple Instances
+
+To run a second, independent copy of Publisher on the same host, give it its own install directory and `--instance-name`:
+
+```bash
+sudo ./install.sh --install-dir /srv/relaysms-acme --instance-name acme
+```
+
+This namespaces the systemd units (`relaysms-publisher-acme.target`, `relaysms-publisher-acme-rest.service`, ...) so they don't collide with the default instance's, and `manage.sh` inside each install directory manages only its own instance. You still need to give each instance distinct `PORT`/`GRPC_PORT` values in its `.env`: two instances can't share a port on the same host, and `install.sh` doesn't assign this for you.
+
+Re-running `install.sh` against an existing named instance doesn't require repeating `--instance-name`; it's remembered automatically. Passing a *different* `--instance-name` than the instance was set up with is rejected.
+
+Run `install.sh --help` for the full flag list, including `--force-deps` to reinstall system dependencies even if already marked done.
+
 ## Manual Installation
 
 ### System Dependencies
@@ -253,6 +269,16 @@ sudo ./scripts/setup-postgres.sh --db-name relaysms --db-user relaysms
 
 Add `--db-password PASS` to set a specific password instead of a generated one. Both scripts write the resulting `DATABASE_DIALECT` and connection details into `.env` for you; the sections below are for manual configuration instead (e.g. pointing at a database server on another host).
 
+**Already have a database?** Add `--db-existing` (plus `--db-host`, `--db-port` if not local) to connect to it instead of installing/provisioning a new one:
+
+```bash
+sudo ./install.sh --setup-db postgres --db-existing \
+    --db-host db.example.com --db-port 5432 \
+    --db-name relaysms --db-user relaysms --db-password 'your-existing-password'
+```
+
+This only validates the connection and writes it to `.env` — it never creates, alters, or drops anything on that server. If the connection or credentials are wrong, the error message tells you to re-run without `--db-existing` to create a new local database instead. Run interactively (no `--setup-db`) and you'll be prompted for "existing" or "new" instead of needing the flags.
+
 **SQLite (default):**
 
 ```bash
@@ -317,6 +343,16 @@ sudo ./scripts/setup-rabbitmq.sh --broker-vhost relaysms --broker-user relaysms
 ```
 
 Add `--broker-password PASS` to set a specific password instead of a generated one. The script writes the resulting `CELERY_BROKER_TYPE` and `CELERY_RABBITMQ_URL` into `.env` for you; the block below is for manual configuration instead (e.g. pointing at a broker on another host).
+
+**Already have a broker?** Add `--broker-existing` (plus `--broker-host` if not local) to connect to it instead:
+
+```bash
+sudo ./install.sh --setup-broker rabbitmq --broker-existing \
+    --broker-host mq.example.com \
+    --broker-vhost relaysms --broker-user relaysms --broker-password 'your-existing-password'
+```
+
+This validates the credentials against the broker's management API (default port `15672`, override with `--broker-mgmt-port`) rather than `rabbitmqctl`, since that only talks to a local node. It never creates or modifies anything on the broker. A failed check tells you to re-run without `--broker-existing` to create a new local broker instead.
 
 ```bash
 # Broker/backend type: sqlite | redis | rabbitmq

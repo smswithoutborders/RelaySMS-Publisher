@@ -1,23 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# Installs Docker and Foundry if missing, brings up SigNoz + Uptime Kuma,
-# optionally fronts them with nginx + TLS, and turns on OTel tracing for
-# Publisher. Re-runnable. See observability/README.md.
+# Brings up SigNoz + Uptime Kuma and turns on OTel tracing. Re-runnable.
 set -Eeuo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"
 SITE_NAME=""
 LETSENCRYPT_EMAIL=""
 SKIP_NGINX=0
 SKIP_TRACING=0
-
-log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
-error() {
-  echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
-  exit 1
-}
-on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
-trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 usage() {
   cat <<'EOF'
@@ -67,6 +59,7 @@ done
 
 [ "$EUID" -eq 0 ] || error "Run with sudo"
 [ -d "$INSTALL_DIR/observability" ] || error "$INSTALL_DIR/observability not found, run install.sh first"
+[ -z "$SITE_NAME" ] || validate_hostname "--site-name" "$SITE_NAME"
 cd "$INSTALL_DIR"
 
 if ! command -v docker &>/dev/null; then
@@ -130,8 +123,11 @@ if [ "$SKIP_NGINX" != "1" ] && [ -n "$SITE_NAME" ]; then
   else
     htpasswd_password=$(openssl rand -hex 16)
     htpasswd -cb "$htpasswd_file" admin "$htpasswd_password"
-    log "Created $htpasswd_file. User: admin, password: $htpasswd_password"
-    log "Record the password now, it's not stored anywhere else"
+    highlight \
+      "Observability reverse proxy credentials" \
+      "User     : admin" \
+      "Password : $htpasswd_password" \
+      "Written to $htpasswd_file -- not stored anywhere else, save it now."
   fi
 
   nginx -t || error "nginx config test failed"

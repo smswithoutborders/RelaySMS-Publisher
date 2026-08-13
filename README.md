@@ -49,6 +49,8 @@ Add `--setup-observability` to also stand up self-hosted tracing/metrics/uptime 
 
 Run with no flags at all and the installer walks you through each of these choices interactively instead.
 
+Add `--install-dir PATH` to install somewhere other than `/opt/relaysms/relaysms-publisher`, and `--instance-name NAME` to run a second, independent copy on the same host. See [Running Multiple Instances](INSTALL.md#running-multiple-instances).
+
 Manage services:
 
 ```bash
