@@ -88,18 +88,34 @@ if [ "$BROKER_EXISTING" = "1" ]; then
   validate_secret "--broker-password" "$BROKER_PASSWORD"
 
   # rabbitmqctl only works locally, so this checks the management HTTP API
-  # instead. /api/vhosts/<vhost> 401s for anyone without the administrator
-  # tag, so /api/exchanges/<vhost> is used to work for a plain vhost user.
+  # instead. A user without the "management" tag gets 401 on every endpoint
+  # here, indistinguishable from a wrong password by status code alone --
+  # hence the body sniff below.
   log "Checking connection to existing RabbitMQ server at $BROKER_HOST:$BROKER_MGMT_PORT"
-  http_code=$(curl -s -o /dev/null -w '%{http_code}' -u "$BROKER_USER:$BROKER_PASSWORD" \
+  tmp_body=$(mktemp)
+  http_code=$(curl -s -o "$tmp_body" -w '%{http_code}' -u "$BROKER_USER:$BROKER_PASSWORD" \
     "http://$BROKER_HOST:$BROKER_MGMT_PORT/api/exchanges/$BROKER_VHOST") || http_code="000"
+  http_body=$(cat "$tmp_body" 2>/dev/null || true)
+  rm -f "$tmp_body"
+
   case "$http_code" in
   200)
     log "Connected successfully"
     ;;
-  401 | 403)
-    error "Authentication failed for RabbitMQ user '$BROKER_USER' at $BROKER_HOST.
+  401)
+    if [[ "$http_body" == *"Not management user"* ]]; then
+      error "RabbitMQ user '$BROKER_USER' at $BROKER_HOST has no 'management' tag, so the HTTP API refuses it -- this is unrelated to the password.
+Run on that RabbitMQ server: rabbitmqctl set_user_tags $BROKER_USER management
+Then re-run this installer."
+    else
+      error "Authentication failed for RabbitMQ user '$BROKER_USER' at $BROKER_HOST (wrong password).
 Re-run without --existing (or choose 'new' at the prompt) to create a new local broker instead."
+    fi
+    ;;
+  403)
+    error "RabbitMQ user '$BROKER_USER' at $BROKER_HOST is authenticated but not authorized for vhost '$BROKER_VHOST'.
+Run on that RabbitMQ server: rabbitmqctl set_permissions -p $BROKER_VHOST $BROKER_USER '.*' '.*' '.*'
+Then re-run this installer."
     ;;
   404)
     error "Vhost '$BROKER_VHOST' not found on $BROKER_HOST.
@@ -132,6 +148,7 @@ else
   else
     rabbitmqctl add_user "$BROKER_USER" "$BROKER_PASSWORD"
   fi
+  rabbitmqctl set_user_tags "$BROKER_USER" management
   rabbitmqctl set_permissions -p "$BROKER_VHOST" "$BROKER_USER" ".*" ".*" ".*"
 fi
 
