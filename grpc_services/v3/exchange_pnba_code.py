@@ -78,11 +78,15 @@ def ExchangePNBACodeAndStore(self, request, context):
             )
 
         if pipe.get("error"):
+            logger.error(
+                "Adapter error for platform %r: %s", request.platform, pipe["error"]
+            )
             return self.handle_create_grpc_error_response(
                 context,
                 response,
                 pipe["error"],
-                grpc.StatusCode.INVALID_ARGUMENT,
+                grpc.StatusCode.INTERNAL,
+                user_msg="Oops! Something went wrong. Please try again later.",
                 error_type="UNKNOWN",
             )
 

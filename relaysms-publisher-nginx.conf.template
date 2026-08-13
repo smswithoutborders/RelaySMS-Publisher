@@ -73,6 +73,49 @@ server {
 
     location / {
         proxy_pass http://publisher_rest;
+
+        error_page 500 = /_errors/500.json;
+        error_page 502 = /_errors/502.json;
+        error_page 503 = /_errors/503.json;
+        error_page 504 = /_errors/504.json;
+        error_page 413 = /_errors/413.json;
+        error_page 494 = /_errors/494.json;
+    }
+
+    location = /_errors/500.json {
+        internal;
+        default_type application/json;
+        return 500 '{"error": "Something went wrong. Please try again later."}';
+    }
+
+    location = /_errors/502.json {
+        internal;
+        default_type application/json;
+        return 502 '{"error": "Service is temporarily unavailable. Please try again shortly."}';
+    }
+
+    location = /_errors/503.json {
+        internal;
+        default_type application/json;
+        return 503 '{"error": "Service is temporarily unavailable. Please try again shortly."}';
+    }
+
+    location = /_errors/504.json {
+        internal;
+        default_type application/json;
+        return 504 '{"error": "The service took too long to respond. Please try again shortly."}';
+    }
+
+    location = /_errors/413.json {
+        internal;
+        default_type application/json;
+        return 413 '{"error": "Request is too large."}';
+    }
+
+    location = /_errors/494.json {
+        internal;
+        default_type application/json;
+        return 494 '{"error": "Request headers are too large."}';
     }
 
     # proxy_set_header above doesn't apply to grpc_pass; repeated here via
