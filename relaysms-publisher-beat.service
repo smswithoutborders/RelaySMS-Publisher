@@ -11,7 +11,9 @@ Type=exec
 User=relaysms
 WorkingDirectory=/opt/relaysms/relaysms-publisher
 EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
-ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/celery \
+Environment=OTEL_SERVICE_NAME=relaysms-publisher-beat
+Environment=PATH=/opt/relaysms/relaysms-publisher/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/relaysms/relaysms-publisher/scripts/otel-wrap.sh /opt/relaysms/relaysms-publisher/venv/bin/celery \
     -A tasks.celery_app:celery_app beat \
     --loglevel=info
 Restart=on-failure

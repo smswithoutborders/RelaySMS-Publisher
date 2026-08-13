@@ -222,6 +222,19 @@ Payloads queued here are tagged with protocol `sms`. If `OFFLINE_PUBLISH_ALLOWED
 
 Decryption, unsupported payload type, unsupported protocol, and adapter errors are all detected later, inside the async publish pipeline, so they never surface as an HTTP error here. They're logged server-side only.
 
+### 9. Health Check
+
+Liveness/readiness check for uptime monitoring. Verifies a database session can be opened.
+
+**URL:** `/health` (not under `/v1`)
+**Method:** `GET`
+
+**Response Body:**
+
+```json
+{ "status": "ok" }
+```
+
 ## Error Handling
 
 The API uses standard HTTP status codes:

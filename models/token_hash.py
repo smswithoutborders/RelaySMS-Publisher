@@ -6,7 +6,7 @@ import hashlib
 import secrets
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import ForeignKey, LargeBinary
+from sqlalchemy import ForeignKey, Index, LargeBinary
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from db import Base
@@ -25,7 +25,7 @@ class TokenHash(Base):
     __tablename__ = "token_hashes"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32))
     token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"))
     created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(
@@ -39,6 +39,17 @@ class TokenHash(Base):
     )
     client_keys: Mapped[List["ClientEphemeralKey"]] = relationship(
         "ClientEphemeralKey", back_populates="token_hash", cascade="all, delete-orphan"
+    )
+
+    # MySQL can't index a BLOB/TEXT column without an explicit key length;
+    # mysql_length is ignored on other dialects.
+    __table_args__ = (
+        Index(
+            "uq_token_hashes_token_hash",
+            "token_hash",
+            unique=True,
+            mysql_length=32,
+        ),
     )
 
 

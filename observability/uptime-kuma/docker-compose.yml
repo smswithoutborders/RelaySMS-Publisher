@@ -1,0 +1,21 @@
+# Uptime Kuma: self-hosted uptime monitoring.
+# https://github.com/louislam/uptime-kuma
+#
+# Data is SQLite-backed and needs POSIX file locks: keep the volume on
+# local disk, not a network filesystem mount.
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    container_name: uptime-kuma
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+    mem_limit: 256m
+    mem_reservation: 64m
+
+volumes:
+  uptime-kuma-data:

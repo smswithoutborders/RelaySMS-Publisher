@@ -9,6 +9,7 @@ import ssl
 import time
 import traceback
 
+import requests
 from imap_tools import (
     AND,
     MailBox,
@@ -46,6 +47,19 @@ if SMTP_TRANSPORT_ENABLED:
 else:
     IMAP_SERVER = IMAP_PORT = IMAP_USERNAME = IMAP_PASSWORD = MAIL_FOLDERS = None
     TLS_CLIENT_CERTIFICATE = TLS_CLIENT_KEY = None
+
+UPTIME_KUMA_SMTP_PUSH_URL = get_configs("UPTIME_KUMA_SMTP_PUSH_URL")
+
+
+def _ping_heartbeat() -> None:
+    """Best-effort ping to the Uptime Kuma push monitor. No-op if unset."""
+    if not UPTIME_KUMA_SMTP_PUSH_URL:
+        return
+
+    try:
+        requests.get(UPTIME_KUMA_SMTP_PUSH_URL, timeout=5)
+    except requests.RequestException as exc:
+        logger.warning("Failed to ping SMTP listener heartbeat: %s", exc)
 
 
 def _mask_email(address: str) -> str:
@@ -181,6 +195,7 @@ def main() -> None:
                         logger.info("Received KeyboardInterrupt, exiting...")
                         done = True
                         break
+                    _ping_heartbeat()
                     connection_live_time = time.monotonic() - connection_start_time
         except (
             TimeoutError,

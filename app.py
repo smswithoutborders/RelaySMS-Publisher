@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from db import dispose_engine, get_session
 from gateway_clients.gateway_client_manager import GatewayClientManager
@@ -30,6 +31,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(v1_router, prefix="/v1")
+
+
+@app.get("/health")
+def health():
+    """Liveness/readiness check for uptime monitoring."""
+    with get_session() as db:
+        db.execute(text("SELECT 1"))
+    return {"status": "ok"}
 
 
 def _bad_request_handler(request: Request, exc: Exception):

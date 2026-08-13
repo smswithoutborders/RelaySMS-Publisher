@@ -1,0 +1,28 @@
+# SigNoz deployment spec for Foundry (https://github.com/SigNoz/foundry).
+#
+# Not run directly: the metastore Postgres fields below are placeholders.
+# scripts/setup-observability.sh generates observability/signoz/casting.yaml
+# (gitignored, contains real credentials) from this file. See
+# observability/README.md for the manual equivalent.
+#
+# Left unset, Foundry defaults all three fields to the literal string
+# "signoz", so don't cast this template file directly.
+#
+# Writes pours/deployment/ relative to the current directory (generated,
+# gitignored, do not hand-edit).
+apiVersion: v1alpha1
+metadata:
+  name: relaysms-publisher-signoz
+spec:
+  deployment:
+    flavor: compose
+    mode: docker
+  metastore:
+    kind: postgres # use "sqlite" instead for a single-node lightweight setup
+    spec:
+      env:
+        POSTGRES_DB: __POSTGRES_DB__
+        POSTGRES_USER: __POSTGRES_USER__
+        POSTGRES_PASSWORD: __POSTGRES_PASSWORD__
+  telemetrykeeper:
+    kind: clickhousekeeper

@@ -89,7 +89,12 @@ def make_celery() -> Celery:
         raise ValueError(f"Invalid CELERY_CLEANUP_CRON '{cleanup_cron}': {e}") from None
 
     app = Celery(
-        "relaysms_publisher", include=["tasks.publication_task", "tasks.cleanup_task"]
+        "relaysms_publisher",
+        include=[
+            "tasks.publication_task",
+            "tasks.cleanup_task",
+            "tasks.heartbeat_task",
+        ],
     )
     app.conf.update(
         broker_url=broker_url,
@@ -110,6 +115,11 @@ def make_celery() -> Celery:
             "cleanup-stale-payload-sessions": {
                 "task": "tasks.cleanup_task.cleanup_stale_payload_sessions",
                 "schedule": cleanup_schedule,
+            },
+            # Uptime Kuma push-monitor heartbeat, see observability/README.md
+            "worker-heartbeat": {
+                "task": "tasks.heartbeat_task.ping_worker_heartbeat",
+                "schedule": 60.0,
             },
         },
     )

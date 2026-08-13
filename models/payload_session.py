@@ -21,7 +21,7 @@ class PayloadSession(Base):
     __tablename__ = "payload_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    sender_id: Mapped[str] = mapped_column(String)
+    sender_id: Mapped[str] = mapped_column(String(255))
     session_id: Mapped[int] = mapped_column()
     created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(

@@ -133,6 +133,67 @@ def _has_mysql_config() -> bool:
     return all(get_configs(key) for key in required)
 
 
+def _build_postgres_url() -> str:
+    """Build PostgreSQL connection URL."""
+    host = get_configs("POSTGRES_HOST", default_value="localhost")
+    port = get_configs("POSTGRES_PORT", default_value="5432")
+    user = get_configs("POSTGRES_USER")
+    password = get_configs("POSTGRES_PASSWORD")
+    database = get_configs("POSTGRES_DATABASE")
+
+    if get_config_bool("DATABASE_ENCRYPTION_ENABLED"):
+        logger.info(
+            "Database encryption enabled - Postgres has no built-in TDE, "
+            "use disk-level encryption on the server"
+        )
+
+    safe_user = quote_plus(user) if user else ""
+    safe_password = quote_plus(password) if password else ""
+    safe_database = quote_plus(database) if database else ""
+
+    return f"postgresql+psycopg2://{safe_user}:{safe_password}@{host}:{port}/{safe_database}"
+
+
+def _ensure_postgres_database() -> None:
+    """Create PostgreSQL database if it doesn't exist."""
+    import psycopg2
+    from psycopg2 import sql
+
+    host = get_configs("POSTGRES_HOST", default_value="localhost")
+    port = int(get_configs("POSTGRES_PORT", default_value="5432"))
+    user = get_configs("POSTGRES_USER")
+    password = get_configs("POSTGRES_PASSWORD")
+    database = get_configs("POSTGRES_DATABASE")
+
+    try:
+        conn = psycopg2.connect(
+            host=host, port=port, user=user, password=password, dbname="postgres"
+        )
+        conn.autocommit = True
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (database,))
+            if cursor.fetchone() is None:
+                cursor.execute(
+                    sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database))
+                )
+        conn.close()
+        logger.debug(f"Database '{database}' ready")
+    except Exception as e:
+        logger.error(f"Failed to create database '{database}': {e}")
+        raise
+
+
+def _has_postgres_config() -> bool:
+    """Check if PostgreSQL configuration is complete."""
+    required = [
+        "POSTGRES_HOST",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_DATABASE",
+    ]
+    return all(get_configs(key) for key in required)
+
+
 def _sql_echo_enabled() -> bool:
     return get_configs("LOG_LEVEL", default_value="info").lower() == "debug"
 
@@ -155,9 +216,18 @@ def _create_engine() -> Engine:
             logger.warning("MySQL config incomplete, falling back to SQLite")
             engine_type = "sqlite"
 
+    if mode == "development" and engine_type.lower() == "postgres":
+        if not _has_postgres_config():
+            logger.warning("Postgres config incomplete, falling back to SQLite")
+            engine_type = "sqlite"
+
     if engine_type.lower() == "mysql":
         _ensure_mysql_database()
         url = _build_mysql_url()
+        engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
+    elif engine_type.lower() == "postgres":
+        _ensure_postgres_database()
+        url = _build_postgres_url()
         engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
     else:
         _ensure_sqlite_parent_dir()

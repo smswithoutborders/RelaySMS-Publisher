@@ -66,6 +66,27 @@ sync_app_directories() {
   done
 }
 
+run_migrations() {
+  local service_user
+  service_user="$(detect_service_user)"
+  [ -n "$service_user" ] || error "Could not detect service user from installed unit files"
+
+  log "Running database migrations"
+  sudo -u "$service_user" bash -c "
+    set -a
+    # shellcheck disable=SC1091
+    . '$INSTALL_DIR/.env'
+    set +a
+    cd '$INSTALL_DIR'
+    PATH='$INSTALL_DIR/venv/bin:\$PATH' make migrate-up
+  "
+}
+
+cmd_migrate() {
+  check_sudo
+  run_migrations
+}
+
 cmd_start() {
   check_sudo
   systemctl start "$TARGET_UNIT"
@@ -191,7 +212,34 @@ cmd_disable() {
   log "Services disabled on boot"
 }
 
+update_usage() {
+  cat <<'EOF'
+Usage: manage.sh update [OPTIONS]
+
+  -m, --migrate   Run database migrations after pulling and rebuilding
+  -h, --help      Show this help and exit
+EOF
+}
+
 cmd_update() {
+  local migrate=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    -m | --migrate)
+      migrate=1
+      shift
+      ;;
+    -h | --help)
+      update_usage
+      return
+      ;;
+    *)
+      update_usage
+      error "Unknown update option: $1"
+      ;;
+    esac
+  done
+
   check_sudo
   local svc
   for svc in "${SERVICE_UNITS[@]}"; do
@@ -204,11 +252,18 @@ cmd_update() {
 
   venv/bin/pip install --quiet --upgrade pip
   venv/bin/pip install --quiet -r requirements.txt
+  # Keep observability deps current too, but only if they were opted into
+  # (see observability/README.md); don't install them for everyone.
+  if venv/bin/pip show opentelemetry-sdk &>/dev/null; then
+    venv/bin/pip install --quiet -r requirements-observability.txt
+  fi
 
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
   make build-setup
 
   sync_app_directories
+
+  [ "$migrate" = "1" ] && run_migrations
 
   systemctl daemon-reload
   for svc in "${SERVICE_UNITS[@]}"; do
@@ -244,7 +299,7 @@ cmd_uninstall() {
 }
 
 usage() {
-  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|update|uninstall}"
+  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|migrate|update|uninstall}"
   exit 1
 }
 
@@ -260,7 +315,11 @@ main() {
     ;;
   enable) cmd_enable ;;
   disable) cmd_disable ;;
-  update) cmd_update ;;
+  migrate) cmd_migrate ;;
+  update)
+    shift
+    cmd_update "$@"
+    ;;
   uninstall) cmd_uninstall ;;
   *) usage ;;
   esac

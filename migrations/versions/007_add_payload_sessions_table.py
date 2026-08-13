@@ -21,7 +21,7 @@ def upgrade():
     op.create_table(
         "payload_sessions",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("sender_id", sa.String(), nullable=False),
+        sa.Column("sender_id", sa.String(length=255), nullable=False),
         sa.Column("session_id", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),

@@ -116,7 +116,8 @@ sudo sed \
     -e "s/User=relaysms/User=$SERVICE_USER/" \
     -e "s|__RW_PATHS__|$RW_PATHS|" \
     -i relaysms-publisher-rest.service relaysms-publisher-grpc.service \
-       relaysms-publisher-worker.service relaysms-publisher-beat.service
+       relaysms-publisher-worker.service relaysms-publisher-beat.service \
+       relaysms-publisher-smtp.service
 
 sudo cp relaysms-publisher.target relaysms-publisher-*.service /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -125,7 +126,7 @@ sudo systemctl start relaysms-publisher.target
 ```
 
 > [!WARNING]
-> All four services (`rest`, `grpc`, `worker`, `beat`) run with `ProtectSystem=strict` and `ProtectHome=true`, which make the entire filesystem read-only except for paths explicitly listed in `ReadWritePaths`. If you moved the SQLite database, Celery broker/result/beat files, or any adapter directory outside the installation root, add each resolved parent directory to `RW_PATHS` above - a path missing from `ReadWritePaths` will silently fail to write.
+> All five services (`rest`, `grpc`, `worker`, `beat`, `smtp`) run with `ProtectSystem=strict` and `ProtectHome=true`, which make the entire filesystem read-only except for paths explicitly listed in `ReadWritePaths`. If you moved the SQLite database, Celery broker/result/beat files, or any adapter directory outside the installation root, add each resolved parent directory to `RW_PATHS` above. A path missing from `ReadWritePaths` will silently fail to write.
 
 ### Nginx Reverse Proxy (optional)
 
@@ -175,6 +176,7 @@ sudo certbot --nginx -d publisher.example.com --redirect
 ./manage.sh logs        # View logs
 ./manage.sh enable      # Enable on boot
 ./manage.sh disable     # Disable on boot
+./manage.sh migrate     # Run pending database migrations
 ./manage.sh update      # Pull latest code and restart
 ./manage.sh uninstall   # Remove installation
 ```
@@ -183,6 +185,12 @@ sudo certbot --nginx -d publisher.example.com --redirect
 
 ```bash
 ./manage.sh logs --unit rest --unit grpc --since "1 hour ago" --lines 200
+```
+
+`update` takes `-m`/`--migrate` to run database migrations as part of the update, after dependencies are reinstalled and before services restart:
+
+```bash
+./manage.sh update --migrate
 ```
 
 ## Managing Platform Adapters
@@ -201,6 +209,18 @@ Use `platforms.sh` instead of calling `python3 -m platforms.cli` directly. It au
 
 See [Platforms Documentation](platforms/README.md) for details.
 
+## Observability (optional)
+
+Off by default, no impact on the steps above. Self-hosted tracing, metrics, log export, and uptime monitoring (SigNoz + Uptime Kuma):
+
+```bash
+sudo ./install.sh --setup-observability
+# or, against an already-installed Publisher:
+sudo ./scripts/setup-observability.sh
+```
+
+Installs Docker and Foundry if missing. Add `--observability-site-name DOMAIN` (`--site-name` for the standalone script) for a reverse proxy + TLS. See [observability/README.md](observability/README.md) for the full flag list and what each step does.
+
 ## Configuration
 
 Edit `/opt/relaysms/relaysms-publisher/.env`:
@@ -218,6 +238,21 @@ GRPC_SSL_PORT=6001
 
 ### Database
 
+To install MySQL or PostgreSQL and provision a dedicated database/user automatically (idempotent, safe to re-run), use `--setup-db` during install:
+
+```bash
+sudo ./install.sh --setup-db postgres
+```
+
+Or run the corresponding script directly against an already-installed instance:
+
+```bash
+sudo ./scripts/setup-postgres.sh --db-name relaysms --db-user relaysms
+# or: sudo ./scripts/setup-mysql.sh --db-name relaysms --db-user relaysms
+```
+
+Add `--db-password PASS` to set a specific password instead of a generated one. Both scripts write the resulting `DATABASE_DIALECT` and connection details into `.env` for you; the sections below are for manual configuration instead (e.g. pointing at a database server on another host).
+
 **SQLite (default):**
 
 ```bash
@@ -234,6 +269,17 @@ MYSQL_PORT=3306
 MYSQL_USER=your_user
 MYSQL_PASSWORD=your_password
 MYSQL_DATABASE=relaysms_publisher
+```
+
+**PostgreSQL:**
+
+```bash
+DATABASE_DIALECT=postgres
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
+POSTGRES_USER=your_user
+POSTGRES_PASSWORD=your_password
+POSTGRES_DATABASE=relaysms_publisher
 ```
 
 ### Database Encryption
@@ -257,6 +303,20 @@ DATABASE_FIELD_ENCRYPTION_KEY=<64 hex chars>
 > - The `DATABASE_FIELD_ENCRYPTION_KEY` is used to encrypt specific sensitive fields in the database.
 
 ### Celery (Worker / Beat)
+
+SQLite is fine for light load; under heavier throughput, move the broker to RabbitMQ. To install RabbitMQ and provision a dedicated vhost/user automatically (idempotent, safe to re-run), use `--setup-broker` during install:
+
+```bash
+sudo ./install.sh --setup-broker rabbitmq
+```
+
+Or run the script directly against an already-installed instance:
+
+```bash
+sudo ./scripts/setup-rabbitmq.sh --broker-vhost relaysms --broker-user relaysms
+```
+
+Add `--broker-password PASS` to set a specific password instead of a generated one. The script writes the resulting `CELERY_BROKER_TYPE` and `CELERY_RABBITMQ_URL` into `.env` for you; the block below is for manual configuration instead (e.g. pointing at a broker on another host).
 
 ```bash
 # Broker/backend type: sqlite | redis | rabbitmq

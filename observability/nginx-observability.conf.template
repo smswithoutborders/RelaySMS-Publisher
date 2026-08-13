@@ -1,0 +1,65 @@
+# nginx reverse proxy site template for SigNoz + Uptime Kuma.
+# Separate vhost from relaysms-publisher-nginx.conf.template.
+# Setup: observability/README.md
+
+upstream signoz_ui {
+    server 127.0.0.1:8080;
+    keepalive 32;
+}
+
+upstream uptime_kuma_ui {
+    server 127.0.0.1:3001;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SERVER_NAME__;
+
+    server_tokens off;
+
+    access_log /var/log/nginx/__SERVER_NAME__.access.log combined buffer=512k flush=1m;
+    error_log  /var/log/nginx/__SERVER_NAME__.error.log warn;
+
+    add_header Strict-Transport-Security    "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options       "nosniff" always;
+    add_header X-Frame-Options              "DENY" always;
+    add_header X-XSS-Protection             "0" always;
+    add_header Referrer-Policy              "no-referrer" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+    add_header Cross-Origin-Opener-Policy   "same-origin" always;
+
+    proxy_http_version 1.1;
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    proxy_hide_header  X-Powered-By;
+    proxy_hide_header  Server;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout    30s;
+    proxy_read_timeout    30s;
+
+    keepalive_timeout    65;
+    client_max_body_size 20m;
+
+    auth_basic           "Restricted";
+    auth_basic_user_file /etc/nginx/.htpasswd-observability;
+
+    location ~ /\.(?!well-known) {
+        deny all;
+    }
+
+    location / {
+        proxy_pass http://signoz_ui;
+    }
+
+    # /kuma/ needs the websocket upgrade headers for live status updates
+    location /kuma/ {
+        proxy_pass         http://uptime_kuma_ui/;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+    }
+}

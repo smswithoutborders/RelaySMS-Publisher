@@ -80,7 +80,7 @@ class PublicationService:
         raw_segment: bytes,
         payload_type: rrs.V1PayloadsTypes,
         protocol: Optional[str] = None,
-    ) -> bool:
+    ) -> Optional[str]:
         """Processes incoming payload and publishes to target platform."""
         payload = self._assemble(
             payload_raw=payload_raw,
@@ -90,10 +90,9 @@ class PublicationService:
         )
 
         if payload is None:
-            return False
+            return None
 
-        self._dispatch(payload, protocol=protocol)
-        return True
+        return self._dispatch(payload, protocol=protocol)
 
     def _assemble(
         self,
@@ -124,9 +123,7 @@ class PublicationService:
                 logger.error("Payload type not supported: %r", payload_type)
                 raise PayloadNotSupportedError(f"Unsupported type: {payload_type!r}")
 
-    def _dispatch(
-        self, payload: rrs.V1Payloads, protocol: Optional[str] = None
-    ) -> None:
+    def _dispatch(self, payload: rrs.V1Payloads, protocol: Optional[str] = None) -> str:
         token_id = payload.get_t_id()
 
         if token_id is None:
@@ -144,14 +141,13 @@ class PublicationService:
                     f"Protocol {protocol!r} is not allowed to publish offline content."
                 )
 
-            self._publish_offline_content(
+            return self._publish_offline_content(
                 key_id=payload.get_kid(),
                 len_att=payload.get_len_att(),
                 content_ciphertext=payload.get_content(),
             )
-            return
 
-        self._publish_online_content(
+        return self._publish_online_content(
             token_id=token_id,
             key_id=payload.get_kid(),
             len_att=payload.get_len_att(),
@@ -164,7 +160,7 @@ class PublicationService:
         key_id: int,
         len_att: int,
         content_ciphertext: bytes,
-    ) -> None:
+    ) -> str:
         token, token_hash_obj, ss_kid, es_kid, es_kid_pk, ec_kid_pk = (
             self.key_manager.get_token_and_keys_for_decryption(
                 token_id=token_id, key_id=key_id
@@ -278,6 +274,7 @@ class PublicationService:
 
         mark_token_hash_used(token_hash_obj, self.session)
         logger.info("Published message for token %d via %r.", token_id, token.platform)
+        return token.platform
 
     def _maybe_refresh_token(self, token, result: dict) -> None:
         refreshed_token = result.get("refreshed_token") or {}
@@ -291,7 +288,7 @@ class PublicationService:
 
     def _publish_offline_content(
         self, key_id: int, len_att: int, content_ciphertext: bytes
-    ) -> None:
+    ) -> str:
         ss_kid = get_private_key(key_id, self.session).private_bytes_raw()
 
         try:
@@ -329,6 +326,7 @@ class PublicationService:
             raise AdapterIntegrationError("Failed to send message via adapter.")
 
         logger.info("Published offline content via %r.", adapter.name)
+        return adapter.name
 
     def _store_segment_and_try_join(
         self, *, sender_id: str, payload_raw: bytes, raw_segment: bytes

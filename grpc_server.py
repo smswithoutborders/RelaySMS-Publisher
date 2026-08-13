@@ -8,6 +8,7 @@ from concurrent import futures
 from pathlib import Path
 
 import grpc
+from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_interceptor import ServerInterceptor
 
 from db import dispose_engine, get_session
@@ -16,13 +17,9 @@ from keys import KeyManager
 from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2_grpc as v3_grpc
-from sentry_config import SENTRY_ENABLED, initialize_sentry
 from utils import get_configs
 
 logger = get_logger("publisher.grpc.server")
-
-if SENTRY_ENABLED:
-    initialize_sentry()
 
 
 class LoggingInterceptor(ServerInterceptor):
@@ -71,6 +68,13 @@ def _build_server(max_workers: int) -> grpc.Server:
 
     PublisherServiceV3.adapter_manager = AdapterManager()
     v3_grpc.add_PublisherServicer_to_server(PublisherServiceV3(), grpc_server)
+
+    health_servicer = health.HealthServicer()
+    health_pb2_grpc.add_HealthServicer_to_server(health_servicer, grpc_server)
+    health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
+    health_servicer.set(
+        "publisher.v3.Publisher", health_pb2.HealthCheckResponse.SERVING
+    )
 
     return grpc_server
 

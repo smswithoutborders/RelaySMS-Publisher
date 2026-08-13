@@ -11,7 +11,9 @@ Type=exec
 User=relaysms
 WorkingDirectory=/opt/relaysms/relaysms-publisher
 EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
-ExecStart=/opt/relaysms/relaysms-publisher/venv/bin/python3 -u grpc_server.py
+Environment=OTEL_SERVICE_NAME=relaysms-publisher-grpc
+Environment=PATH=/opt/relaysms/relaysms-publisher/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/relaysms/relaysms-publisher/scripts/otel-wrap.sh /opt/relaysms/relaysms-publisher/venv/bin/python3 -u grpc_server.py
 Restart=on-failure
 RestartSec=5
 SyslogIdentifier=relaysms-publisher-grpc

@@ -16,7 +16,7 @@ Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS w
 ## Requirements
 
 - **Python:** >= 3.8.10
-- **Database:** MySQL (>= 8.0.28), MariaDB, or SQLite
+- **Database:** SQLite, MySQL (>= 8.0.28) / MariaDB, or PostgreSQL (>= 12)
 
 **Ubuntu Dependencies:**
 
@@ -33,6 +33,21 @@ Quick install:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | sudo bash
 ```
+
+Defaults to SQLite. To install and provision MySQL or PostgreSQL instead, add `--setup-db`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | \
+    sudo bash -s -- --setup-db postgres
+```
+
+This installs the database server if it's not already present, creates a dedicated database and user with a generated password, and writes the connection details into `.env`. See [INSTALL.md](INSTALL.md#database) for `--db-name`/`--db-user`/`--db-password` and manual configuration.
+
+Add `--setup-broker rabbitmq` to install RabbitMQ and switch Celery's broker to it (SQLite is fine for light load, but doesn't scale under heavier throughput). See [INSTALL.md](INSTALL.md#celery-worker--beat) for `--broker-vhost`/`--broker-user`/`--broker-password` and manual configuration.
+
+Add `--setup-observability` to also stand up self-hosted tracing/metrics/uptime monitoring (SigNoz + Uptime Kuma). See [Observability](#logging--observability) below.
+
+Run with no flags at all and the installer walks you through each of these choices interactively instead.
 
 Manage services:
 
@@ -68,17 +83,22 @@ make migrate-up
 ### Docker
 
 ```bash
-# Build
-docker build -t relaysms-publisher:latest .
-
-# Configure
 cp template.env .env
 # Edit .env as needed
 
-# Run
+docker compose up -d --build
+```
+
+The container entrypoint runs pending database migrations, then starts the gRPC server, REST API, Celery worker, and Celery beat scheduler together (via `scripts/run.sh`). `docker-compose.yml` forces `HOST`/`GRPC_HOST` to `0.0.0.0` regardless of what's in `.env`, since `127.0.0.1` (the `template.env` default, meant for bare-metal) would make the container unreachable from outside.
+
+To customize the exposed ports, set `PORT`/`GRPC_PORT` in `.env` before starting; `docker-compose.yml` reads them for its port mappings. To run without Compose:
+
+```bash
+docker build -t relaysms-publisher:latest .
 docker run -d \
   --name relaysms-publisher \
   --env-file .env \
+  -e HOST=0.0.0.0 -e GRPC_HOST=0.0.0.0 \
   -p 16000:16000 \
   -p 6000:6000 \
   -v $(pwd)/data:/publisher/data \
@@ -86,11 +106,6 @@ docker run -d \
   -v $(pwd)/gateway_clients:/publisher/gateway_clients \
   relaysms-publisher:latest
 ```
-
-The container entrypoint runs pending database migrations, then starts the gRPC server, REST API, Celery worker, and Celery beat scheduler together (via `scripts/run.sh`).
-
-> [!TIP]
-> `HOST` and `GRPC_HOST` default to `0.0.0.0` inside the container so it's reachable from outside. If your `.env` file explicitly sets `HOST=127.0.0.1` or `GRPC_HOST=127.0.0.1` (e.g. copied unedited from `template.env`), it will override the container default and the services won't be reachable - remove or update those lines in `.env` for Docker deployments.
 
 ## Configuration
 
@@ -101,10 +116,10 @@ Configure via environment variables in `.env` file:
 ```bash
 MODE=production                 # development or production
 HOST=127.0.0.1                  # REST API host
-PORT=9000                       # REST API port
-GRPC_HOST=127.0.0.1            # gRPC server host
+PORT=16000                      # REST API port
+GRPC_HOST=127.0.0.1             # gRPC server host
 GRPC_PORT=6000                  # gRPC server port
-GRPC_SSL_PORT=6001             # gRPC SSL port
+GRPC_SSL_PORT=6001              # gRPC SSL port
 SSL_CERTIFICATE=                # SSL certificate path (optional)
 SSL_KEY=                        # SSL key path (optional)
 ```
@@ -120,11 +135,24 @@ SQLITE_DATABASE_PATH=data/relaysms.db
 **MySQL:**
 
 ```bash
+DATABASE_DIALECT=mysql
 MYSQL_HOST=127.0.0.1
 MYSQL_USER=your_user
 MYSQL_PASSWORD=your_password
 MYSQL_DATABASE=relaysms_publisher
 ```
+
+**PostgreSQL:**
+
+```bash
+DATABASE_DIALECT=postgres
+POSTGRES_HOST=127.0.0.1
+POSTGRES_USER=your_user
+POSTGRES_PASSWORD=your_password
+POSTGRES_DATABASE=relaysms_publisher
+```
+
+Whole-database encryption (`DATABASE_ENCRYPTION_ENABLED`) is SQLCipher for SQLite and TDE for MySQL; Postgres has no built-in equivalent, use disk-level encryption on the server instead.
 
 ### Adapters
 
@@ -144,26 +172,13 @@ Offline payloads are tagged with the protocol they came in on: `https` for [REST
 
 `https` is excluded by default since it's unauthenticated and free to spam. `smtp` and `sms` are allowed because their listeners authenticate the sender first (DKIM + allowlist for `smtp`, signature check for `sms`).
 
-### Logging & Monitoring
+### Logging & Observability
 
 ```bash
 LOG_LEVEL=info                  # debug, info, warning, error
 ```
 
-**Error Tracking (Optional):**
-
-Publisher supports Sentry-compatible error tracking:
-
-```bash
-SENTRY_DSN=https://your-dsn@sentry.io/project-id
-SENTRY_TRACES_SAMPLE_RATE=1.0
-SENTRY_PROFILES_SAMPLE_RATE=1.0
-```
-
-> [!NOTE]
-> **Using GlitchTip:** GlitchTip is a Sentry-compatible open-source error tracker. The `SENTRY_DSN` variable works with both Sentry and GlitchTip.
->
-> See [GlitchTip Installation Guide](https://glitchtip.com/documentation/install) to set up your own instance.
+Tracing, metrics, log export, and uptime monitoring are available via a self-hosted [SigNoz](https://signoz.io) + [Uptime Kuma](https://github.com/louislam/uptime-kuma) stack. Off by default (`OTEL_EXPORTER_OTLP_ENDPOINT` is blank in `template.env`), no impact on running Publisher without it. Install with `--setup-observability` (installer flag above) or `sudo ./scripts/setup-observability.sh` against an existing install. See [observability/README.md](observability/README.md) for setup.
 
 ## Platform Adapters
 
@@ -198,6 +213,7 @@ Registered gateway clients can be retrieved via the REST API: `/v1/gateway-clien
 - [REST API](docs/rest.md) - REST API reference
 - [Platform Adapters](platforms/README.md) - Extending functionality
 - [Gateway Clients](gateway_clients/README.md) - Managing the gateway client registry
+- [Observability](observability/README.md) - Tracing, metrics, logs, uptime monitoring
 
 ## Testing
 

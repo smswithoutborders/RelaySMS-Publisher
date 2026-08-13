@@ -11,6 +11,17 @@ NGINX_CONF_TEMPLATE="relaysms-publisher-nginx.conf.template"
 SITE_NAME="${SITE_NAME:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 SKIP_NGINX="${SKIP_NGINX:-0}"
+SETUP_DB="${SETUP_DB:-}"
+DB_NAME="${DB_NAME:-}"
+DB_USER="${DB_USER:-}"
+DB_PASSWORD="${DB_PASSWORD:-}"
+SETUP_BROKER="${SETUP_BROKER:-}"
+BROKER_VHOST="${BROKER_VHOST:-}"
+BROKER_USER="${BROKER_USER:-}"
+BROKER_PASSWORD="${BROKER_PASSWORD:-}"
+SETUP_OBSERVABILITY="${SETUP_OBSERVABILITY:-}"
+OBSERVABILITY_SITE_NAME="${OBSERVABILITY_SITE_NAME:-}"
+OBSERVABILITY_LETSENCRYPT_EMAIL="${OBSERVABILITY_LETSENCRYPT_EMAIL:-}"
 
 TARGET_UNIT="relaysms-publisher.target"
 SERVICE_UNITS=(
@@ -43,11 +54,22 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [OPTIONS]
 
-  --branch BRANCH             Git branch to install (default: main)
-  --site-name DOMAIN          Domain to front with nginx + Let's Encrypt
-  --letsencrypt-email EMAIL   Email for Let's Encrypt renewal notices
-  --skip-nginx                Skip the nginx/TLS setup entirely
-  -h, --help                  Show this help and exit
+  --branch BRANCH                          Git branch to install (default: main)
+  --site-name DOMAIN                       Domain to front with nginx + Let's Encrypt
+  --letsencrypt-email EMAIL                Email for Let's Encrypt renewal notices
+  --skip-nginx                             Skip the nginx/TLS setup entirely
+  --setup-db {mysql|postgres}              Install and provision a database server
+  --db-name NAME                           Database name (default: relaysms)
+  --db-user USER                           Database user (default: relaysms)
+  --db-password PASS                       Database password (default: randomly generated)
+  --setup-broker {rabbitmq}                Install and provision a message broker for Celery
+  --broker-vhost NAME                      RabbitMQ vhost (default: relaysms)
+  --broker-user USER                       RabbitMQ user (default: relaysms)
+  --broker-password PASS                   RabbitMQ password (default: randomly generated)
+  --setup-observability                    Install and start SigNoz + Uptime Kuma
+  --observability-site-name DOMAIN         Domain for the observability reverse proxy
+  --observability-letsencrypt-email EMAIL  Email for its Let's Encrypt renewal notices
+  -h, --help                               Show this help and exit
 
 Piped through curl, pass options after `-s --`:
   curl -fsSL .../install.sh | sudo bash -s -- --site-name publisher.example.com
@@ -83,6 +105,90 @@ parse_args() {
       ;;
     --skip-nginx)
       SKIP_NGINX=1
+      shift
+      ;;
+    --setup-db)
+      SETUP_DB="$2"
+      shift 2
+      ;;
+    --setup-db=*)
+      SETUP_DB="${1#*=}"
+      shift
+      ;;
+    --db-name)
+      DB_NAME="$2"
+      shift 2
+      ;;
+    --db-name=*)
+      DB_NAME="${1#*=}"
+      shift
+      ;;
+    --db-user)
+      DB_USER="$2"
+      shift 2
+      ;;
+    --db-user=*)
+      DB_USER="${1#*=}"
+      shift
+      ;;
+    --db-password)
+      DB_PASSWORD="$2"
+      shift 2
+      ;;
+    --db-password=*)
+      DB_PASSWORD="${1#*=}"
+      shift
+      ;;
+    --setup-broker)
+      SETUP_BROKER="$2"
+      shift 2
+      ;;
+    --setup-broker=*)
+      SETUP_BROKER="${1#*=}"
+      shift
+      ;;
+    --broker-vhost)
+      BROKER_VHOST="$2"
+      shift 2
+      ;;
+    --broker-vhost=*)
+      BROKER_VHOST="${1#*=}"
+      shift
+      ;;
+    --broker-user)
+      BROKER_USER="$2"
+      shift 2
+      ;;
+    --broker-user=*)
+      BROKER_USER="${1#*=}"
+      shift
+      ;;
+    --broker-password)
+      BROKER_PASSWORD="$2"
+      shift 2
+      ;;
+    --broker-password=*)
+      BROKER_PASSWORD="${1#*=}"
+      shift
+      ;;
+    --setup-observability)
+      SETUP_OBSERVABILITY=1
+      shift
+      ;;
+    --observability-site-name)
+      OBSERVABILITY_SITE_NAME="$2"
+      shift 2
+      ;;
+    --observability-site-name=*)
+      OBSERVABILITY_SITE_NAME="${1#*=}"
+      shift
+      ;;
+    --observability-letsencrypt-email)
+      OBSERVABILITY_LETSENCRYPT_EMAIL="$2"
+      shift 2
+      ;;
+    --observability-letsencrypt-email=*)
+      OBSERVABILITY_LETSENCRYPT_EMAIL="${1#*=}"
       shift
       ;;
     -h | --help)
@@ -424,6 +530,90 @@ configure_nginx() {
   log "Certificate installed for $site"
 }
 
+configure_database() {
+  local dialect="$SETUP_DB"
+  if [ -z "$dialect" ]; then
+    local choice=""
+    prompt choice "Install and provision a database server? [mysql/postgres/N, default keeps SQLite] " "n"
+    case "$choice" in
+    mysql | MySQL | MYSQL) dialect="mysql" ;;
+    postgres | Postgres | POSTGRES | postgresql) dialect="postgres" ;;
+    *)
+      log "Keeping SQLite"
+      return
+      ;;
+    esac
+  fi
+
+  case "$dialect" in
+  mysql | postgres) ;;
+  *) error "--setup-db must be 'mysql' or 'postgres', got '$dialect'" ;;
+  esac
+
+  local args=(--install-dir "$INSTALL_DIR")
+  [ -n "$DB_NAME" ] && args+=(--db-name "$DB_NAME")
+  [ -n "$DB_USER" ] && args+=(--db-user "$DB_USER")
+  [ -n "$DB_PASSWORD" ] && args+=(--db-password "$DB_PASSWORD")
+
+  log "Setting up $dialect"
+  "$INSTALL_DIR/scripts/setup-$dialect.sh" "${args[@]}"
+}
+
+configure_broker() {
+  local broker="$SETUP_BROKER"
+  if [ -z "$broker" ]; then
+    local choice=""
+    prompt choice "Install and provision RabbitMQ as the Celery broker? [y/N, default keeps SQLite] " "n"
+    case "$choice" in
+    y | Y | yes | YES) broker="rabbitmq" ;;
+    *)
+      log "Keeping SQLite broker"
+      return
+      ;;
+    esac
+  fi
+
+  case "$broker" in
+  rabbitmq) ;;
+  *) error "--setup-broker must be 'rabbitmq', got '$broker'" ;;
+  esac
+
+  local args=(--install-dir "$INSTALL_DIR")
+  [ -n "$BROKER_VHOST" ] && args+=(--broker-vhost "$BROKER_VHOST")
+  [ -n "$BROKER_USER" ] && args+=(--broker-user "$BROKER_USER")
+  [ -n "$BROKER_PASSWORD" ] && args+=(--broker-password "$BROKER_PASSWORD")
+
+  log "Setting up $broker"
+  "$INSTALL_DIR/scripts/setup-$broker.sh" "${args[@]}"
+}
+
+configure_observability() {
+  local do_setup="$SETUP_OBSERVABILITY"
+  if [ -z "$do_setup" ]; then
+    local choice=""
+    prompt choice "Set up observability (SigNoz + Uptime Kuma)? [y/N] " "n"
+    case "$choice" in
+    y | Y | yes | YES) do_setup=1 ;;
+    *)
+      log "Skipping observability setup"
+      return
+      ;;
+    esac
+  fi
+  [ "$do_setup" = "1" ] || {
+    log "Skipping observability setup"
+    return
+  }
+
+  local args=(--install-dir "$INSTALL_DIR")
+  [ -n "$OBSERVABILITY_SITE_NAME" ] && args+=(--site-name "$OBSERVABILITY_SITE_NAME")
+  [ -n "$OBSERVABILITY_LETSENCRYPT_EMAIL" ] &&
+    args+=(--letsencrypt-email "$OBSERVABILITY_LETSENCRYPT_EMAIL")
+
+  log "Setting up observability"
+  "$INSTALL_DIR/scripts/setup-observability.sh" "${args[@]}"
+}
+
 main() {
   parse_args "$@"
   check_root
@@ -436,10 +626,13 @@ main() {
   setup_virtualenv
   build_application
   setup_env
+  configure_database
+  configure_broker
   create_app_directories
   run_migrations
   install_services
   configure_nginx
+  configure_observability
 
   log "Installation complete"
   log "  Config : $INSTALL_DIR/.env"

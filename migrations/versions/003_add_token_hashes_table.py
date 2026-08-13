@@ -21,7 +21,7 @@ def upgrade():
     op.create_table(
         "token_hashes",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("token_hash", sa.LargeBinary(length=32), nullable=False, unique=True),
+        sa.Column("token_hash", sa.LargeBinary(length=32), nullable=False),
         sa.Column(
             "token_id",
             sa.Integer(),
@@ -31,6 +31,15 @@ def upgrade():
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("last_used_at", sa.DateTime(), nullable=True),
+    )
+    # MySQL can't index a BLOB/TEXT column without an explicit key length;
+    # mysql_length is ignored on other dialects.
+    op.create_index(
+        "uq_token_hashes_token_hash",
+        "token_hashes",
+        ["token_hash"],
+        unique=True,
+        mysql_length=32,
     )
 
 

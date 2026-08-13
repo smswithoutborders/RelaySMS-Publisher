@@ -6,16 +6,16 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-class PublicationsCreate(BaseModel):
+class PublicationStatsCreate(BaseModel):
     country_code: Optional[str] = None
-    platform_name: str
-    source: str
+    platform_name: Optional[str] = None
+    protocol: Optional[str] = None
     status: str
-    gateway_client: Optional[str] = None
-    date_created: Optional[datetime.datetime] = None
+    failure_reason: Optional[str] = None
+    created_at: Optional[datetime.datetime] = None
 
 
-class PublicationsRead(PublicationsCreate):
+class PublicationStatsRead(PublicationStatsCreate):
     id: int
 
 
@@ -26,11 +26,11 @@ class Pagination(BaseModel):
     total_pages: int
 
 
-class PublicationsResponse(BaseModel):
+class PublicationStatsResponse(BaseModel):
     total_publications: int
     total_published: int
     total_failed: int
-    data: list[PublicationsRead]
+    data: list[PublicationStatsRead]
     pagination: Optional[Pagination] = None
 
 

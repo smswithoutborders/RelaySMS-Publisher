@@ -1,0 +1,27 @@
+# Resource caps and hardening for Foundry's generated
+# pours/deployment/compose.yaml. Not hand-editing the generated file,
+# foundryctl cast overwrites it.
+#
+# Service names are derived from casting.yaml's metadata.name
+# (relaysms-publisher-signoz), but Foundry could rename its own scheme in
+# a future release. If `up -d` below errors about an unknown service,
+# re-check with:
+#   docker compose -f pours/deployment/compose.yaml config --services
+services:
+  relaysms-publisher-signoz-telemetrystore-clickhouse-0-0:
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 3g
+    mem_reservation: 1g
+
+  ingester:
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    mem_reservation: 128m
+
+  relaysms-publisher-signoz-signoz-0:
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    mem_reservation: 256m
