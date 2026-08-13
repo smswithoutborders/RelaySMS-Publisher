@@ -88,6 +88,19 @@ def make_celery() -> Celery:
     except ValueError as e:
         raise ValueError(f"Invalid CELERY_CLEANUP_CRON '{cleanup_cron}': {e}") from None
 
+    beat_schedule = {
+        "cleanup-stale-payload-sessions": {
+            "task": "tasks.cleanup_task.cleanup_stale_payload_sessions",
+            "schedule": cleanup_schedule,
+        },
+    }
+    if get_configs("UPTIME_KUMA_WORKER_PUSH_URL"):
+        # Uptime Kuma push-monitor heartbeat, see observability/README.md
+        beat_schedule["worker-heartbeat"] = {
+            "task": "tasks.heartbeat_task.ping_worker_heartbeat",
+            "schedule": 60.0,
+        }
+
     app = Celery(
         "relaysms_publisher",
         include=[
@@ -111,17 +124,7 @@ def make_celery() -> Celery:
         worker_log_format=_WORKER_LOG_FORMAT,
         worker_task_log_format=_WORKER_TASK_LOG_FORMAT,
         beat_schedule_filename=schedule_path,
-        beat_schedule={
-            "cleanup-stale-payload-sessions": {
-                "task": "tasks.cleanup_task.cleanup_stale_payload_sessions",
-                "schedule": cleanup_schedule,
-            },
-            # Uptime Kuma push-monitor heartbeat, see observability/README.md
-            "worker-heartbeat": {
-                "task": "tasks.heartbeat_task.ping_worker_heartbeat",
-                "schedule": 60.0,
-            },
-        },
+        beat_schedule=beat_schedule,
     )
     return app
 
