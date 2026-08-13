@@ -126,7 +126,7 @@ run_as_service_user() {
     . '$ENV_FILE'
     set +a
     cd '$INSTALL_DIR'
-    export PATH=\"$VENV_DIR/bin:\$PATH\"
+    export PATH=\"$VENV_DIR/bin:$PATH\"
     $inner_cmd
   "
 

@@ -78,7 +78,7 @@ run_migrations() {
     . '$INSTALL_DIR/.env'
     set +a
     cd '$INSTALL_DIR'
-    PATH='$INSTALL_DIR/venv/bin:\$PATH' make migrate-up
+    PATH='$INSTALL_DIR/venv/bin:$PATH' make migrate-up
   "
 }
 
