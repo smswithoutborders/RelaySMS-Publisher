@@ -1,8 +1,8 @@
-# nginx reverse proxy site template for SigNoz.
+# nginx reverse proxy site template for Uptime Kuma.
 # Setup: observability/README.md
 
-upstream signoz_ui {
-    server 127.0.0.1:8080;
+upstream uptime_kuma_ui {
+    server 127.0.0.1:3001;
     keepalive 32;
 }
 
@@ -42,7 +42,10 @@ server {
         deny all;
     }
 
+    # Websocket upgrade headers for Kuma's live status updates.
     location / {
-        proxy_pass http://signoz_ui;
+        proxy_pass         http://uptime_kuma_ui;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection "upgrade";
     }
 }

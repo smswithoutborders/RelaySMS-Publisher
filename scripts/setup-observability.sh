@@ -7,6 +7,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"
 SITE_NAME=""
+KUMA_SITE_NAME=""
 LETSENCRYPT_EMAIL=""
 SKIP_NGINX=0
 SKIP_TRACING=0
@@ -23,7 +24,8 @@ usage() {
 Usage: setup-observability.sh [OPTIONS]
 
   --install-dir DIR         Publisher install directory (default: /opt/relaysms/relaysms-publisher)
-  --site-name DOMAIN        Domain for the observability reverse proxy (optional; skips nginx/TLS if omitted)
+  --site-name DOMAIN        Domain for the SigNoz reverse proxy (optional; skips nginx/TLS if omitted)
+  --kuma-site-name DOMAIN   Domain for the Uptime Kuma reverse proxy (optional; must differ from --site-name)
   --letsencrypt-email EMAIL Email for Let's Encrypt renewal notices (optional)
   --skip-nginx              Skip the nginx/TLS setup even if --site-name is given
   --skip-tracing            Don't install requirements-observability.txt or turn on OTEL_EXPORTER_OTLP_ENDPOINT
@@ -43,6 +45,10 @@ while [ $# -gt 0 ]; do
     ;;
   --site-name)
     SITE_NAME="$2"
+    shift 2
+    ;;
+  --kuma-site-name)
+    KUMA_SITE_NAME="$2"
     shift 2
     ;;
   --letsencrypt-email)
@@ -88,6 +94,9 @@ done
 [ "$EUID" -eq 0 ] || error "Run with sudo"
 [ -d "$INSTALL_DIR/observability" ] || error "$INSTALL_DIR/observability not found, run install.sh first"
 [ -z "$SITE_NAME" ] || validate_hostname "--site-name" "$SITE_NAME"
+[ -z "$KUMA_SITE_NAME" ] || validate_hostname "--kuma-site-name" "$KUMA_SITE_NAME"
+[ -n "$SITE_NAME" ] && [ -n "$KUMA_SITE_NAME" ] && [ "$SITE_NAME" = "$KUMA_SITE_NAME" ] &&
+  error "--site-name and --kuma-site-name must be different domains"
 cd "$INSTALL_DIR"
 
 if ! command -v docker &>/dev/null; then
@@ -244,42 +253,51 @@ else
   docker compose -f observability/uptime-kuma/docker-compose.yml up -d
 fi
 
-if [ "$SKIP_NGINX" != "1" ] && [ -n "$SITE_NAME" ]; then
+# Renders $2 for $1, symlinks it, and issues a cert. $3/$4 are the
+# 127.0.0.1:PORT anchor in the template and the port to replace it with.
+setup_reverse_proxy() {
+  local site="$1" template="$2" port_from="$3" port_to="$4"
+  local conf_dest="/etc/nginx/sites-available/${site}.conf"
+  if [ -f "$conf_dest" ]; then
+    log "nginx site $conf_dest already exists, leaving it untouched"
+  else
+    sed \
+      -e "s/__SERVER_NAME__/$site/g" \
+      -e "s/127.0.0.1:$port_from/127.0.0.1:$port_to/" \
+      "$INSTALL_DIR/observability/$template" >"$conf_dest"
+    log "Wrote $conf_dest"
+  fi
+  ln -sf "$conf_dest" "/etc/nginx/sites-enabled/${site}.conf"
+
+  nginx -t || error "nginx config test failed"
+  systemctl enable nginx &>/dev/null || true
+  systemctl reload nginx 2>/dev/null || systemctl restart nginx
+
+  if [ -f "/etc/letsencrypt/live/${site}/fullchain.pem" ]; then
+    log "Certificate for $site already exists, skipping certbot"
+  else
+    local certbot_args=(--nginx -d "$site" --redirect --agree-tos --non-interactive)
+    if [ -n "$LETSENCRYPT_EMAIL" ]; then
+      certbot_args+=(-m "$LETSENCRYPT_EMAIL")
+    else
+      certbot_args+=(--register-unsafely-without-email)
+    fi
+    log "Requesting certificate for $site"
+    certbot "${certbot_args[@]}" || error "certbot failed to obtain a certificate for $site"
+  fi
+}
+
+if [ "$SKIP_NGINX" != "1" ] && { [ -n "$SITE_NAME" ] || [ -n "$KUMA_SITE_NAME" ]; }; then
   if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
     log "Installing nginx and certbot"
     apt-get install -y --no-install-recommends nginx certbot python3-certbot-nginx
   fi
   mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
 
-  conf_dest="/etc/nginx/sites-available/${SITE_NAME}.conf"
-  if [ -f "$conf_dest" ]; then
-    log "nginx site $conf_dest already exists, leaving it untouched"
-  else
-    sed \
-      -e "s/__SERVER_NAME__/$SITE_NAME/g" \
-      -e "s/127.0.0.1:8080/127.0.0.1:$SIGNOZ_PORT/" \
-      -e "s/127.0.0.1:3001/127.0.0.1:$KUMA_PORT/" \
-      "$INSTALL_DIR/observability/nginx-observability.conf.template" >"$conf_dest"
-    log "Wrote $conf_dest"
-  fi
-  ln -sf "$conf_dest" "/etc/nginx/sites-enabled/${SITE_NAME}.conf"
-
-  nginx -t || error "nginx config test failed"
-  systemctl enable nginx &>/dev/null || true
-  systemctl reload nginx 2>/dev/null || systemctl restart nginx
-
-  if [ -f "/etc/letsencrypt/live/${SITE_NAME}/fullchain.pem" ]; then
-    log "Certificate for $SITE_NAME already exists, skipping certbot"
-  else
-    certbot_args=(--nginx -d "$SITE_NAME" --redirect --agree-tos --non-interactive)
-    if [ -n "$LETSENCRYPT_EMAIL" ]; then
-      certbot_args+=(-m "$LETSENCRYPT_EMAIL")
-    else
-      certbot_args+=(--register-unsafely-without-email)
-    fi
-    log "Requesting certificate for $SITE_NAME"
-    certbot "${certbot_args[@]}" || error "certbot failed to obtain a certificate for $SITE_NAME"
-  fi
+  [ -n "$SITE_NAME" ] &&
+    setup_reverse_proxy "$SITE_NAME" "nginx-observability.conf.template" "8080" "$SIGNOZ_PORT"
+  [ -n "$KUMA_SITE_NAME" ] &&
+    setup_reverse_proxy "$KUMA_SITE_NAME" "nginx-uptime-kuma.conf.template" "3001" "$KUMA_PORT"
 fi
 
 if [ "$SKIP_TRACING" != "1" ]; then
@@ -291,5 +309,6 @@ if [ "$SKIP_TRACING" != "1" ]; then
 fi
 
 log "SigNoz: http://localhost:$SIGNOZ_PORT  Uptime Kuma: http://localhost:$KUMA_PORT"
-[ -n "$SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "Reverse proxy: https://$SITE_NAME"
+[ -n "$SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "SigNoz reverse proxy: https://$SITE_NAME"
+[ -n "$KUMA_SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "Uptime Kuma reverse proxy: https://$KUMA_SITE_NAME"
 log "Create Uptime Kuma monitors and set retention in SigNoz, see observability/README.md"
