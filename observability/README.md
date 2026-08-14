@@ -159,16 +159,25 @@ Blank the value and restart to turn it back off.
 
 ## Alerts
 
-SigNoz UI, Alerts > New Alert > Logs signal, paste the filter, set the threshold
-to count > 0 over a rolling window, attach a notification channel.
+SigNoz UI, Alerts > New Alert > Logs signal, paste the filter below into the
+search bar, set the threshold to count > 0 over a rolling window, attach a
+notification channel. `CONTAINS` is a real query-builder operator; wrap the
+`OR` group in parentheses since `AND` binds tighter than `OR`.
 
-- **Publish failures**: `service.name=relaysms-publisher-worker`, body
-  contains `Failed to process payload`, `Failed to publish message`, or
-  `An unexpected error occurred during task processing`
-  (`tasks/publication_task.py`).
-- **Platform adapter failures**: `service.name=relaysms-publisher-worker`,
-  body contains `Subprocess failed`, `Malformed JSON response`,
-  `Subprocess execution timed out`, or `Unexpected failure during IPC
-  invocation` (`platforms/adapter_ipc_handler.py`).
-- **Key management failures**: body contains `Failed to generate server
-  identity keys` or `Token hash missing` (`keys.py`).
+- **Publish failures** (`tasks/publication_task.py`):
+
+  ```
+  service.name = 'relaysms-publisher-worker' AND (body CONTAINS 'Failed to process payload' OR body CONTAINS 'Failed to publish message' OR body CONTAINS 'An unexpected error occurred during task processing')
+  ```
+
+- **Platform adapter failures** (`platforms/adapter_ipc_handler.py`):
+
+  ```
+  service.name = 'relaysms-publisher-worker' AND (body CONTAINS 'Subprocess failed' OR body CONTAINS 'Malformed JSON response' OR body CONTAINS 'Subprocess execution timed out' OR body CONTAINS 'Unexpected failure during IPC invocation')
+  ```
+
+- **Key management failures** (`keys.py`):
+
+  ```
+  body CONTAINS 'Failed to generate server identity keys' OR body CONTAINS 'Token hash missing'
+  ```
