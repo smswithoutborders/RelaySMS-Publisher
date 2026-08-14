@@ -44,6 +44,26 @@ validate_hostname() {
     error "$name must be a valid hostname (got: '$value')"
 }
 
+# Reads from the controlling terminal even when piped via `curl | sudo
+# bash` (stdin is the script itself there). Falls back to $default if no
+# tty is reachable. Mirrors install.sh's own copy, which can't source this
+# file (must also run standalone via curl | sudo bash).
+prompt() {
+  local __resultvar="$1" question="> $2" default="${3:-}" reply=""
+  if [ -t 0 ]; then
+    read -r -p "$question" reply
+  elif [ -r /dev/tty ]; then
+    read -r -p "$question" reply </dev/tty || true
+  fi
+  printf -v "$__resultvar" '%s' "${reply:-$default}"
+}
+
+# True (0) if nothing is currently listening on the given local TCP port.
+port_is_free() {
+  local port="$1"
+  ! ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE ":${port}\$"
+}
+
 # Mirrors install.sh's own copy, which can't source this file (must also
 # run standalone via curl | sudo bash).
 TARGET_UNIT_TEMPLATE="relaysms-publisher.target"
