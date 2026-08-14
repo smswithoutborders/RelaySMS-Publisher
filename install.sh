@@ -412,6 +412,39 @@ prompt() {
   printf -v "$__resultvar" '%s' "${reply:-$default}"
 }
 
+# Same as prompt(), but a numbered menu instead of free text. Options are
+# "label:value" pairs; default_idx is 1-based.
+# Usage: prompt_menu RESULTVAR "Question" default_idx "Label one:value1" "Label two:value2"
+prompt_menu() {
+  local __resultvar="$1" question="$2" default_idx="$3"
+  shift 3
+  local -a menu_labels=() menu_values=()
+  local menu_opt
+  for menu_opt in "$@"; do
+    menu_labels+=("${menu_opt%%:*}")
+    menu_values+=("${menu_opt#*:}")
+  done
+  local menu_n=${#menu_labels[@]} menu_i menu_sel
+
+  echo "$question"
+  for ((menu_i = 0; menu_i < menu_n; menu_i++)); do
+    if [ "$((menu_i + 1))" = "$default_idx" ]; then
+      printf '  %d) %s (default)\n' "$((menu_i + 1))" "${menu_labels[$menu_i]}"
+    else
+      printf '  %d) %s\n' "$((menu_i + 1))" "${menu_labels[$menu_i]}"
+    fi
+  done
+
+  while :; do
+    prompt menu_sel "Enter a number [1-$menu_n]: " "$default_idx"
+    if [[ "$menu_sel" =~ ^[0-9]+$ ]] && [ "$menu_sel" -ge 1 ] && [ "$menu_sel" -le "$menu_n" ]; then
+      printf -v "$__resultvar" '%s' "${menu_values[$((menu_sel - 1))]}"
+      return
+    fi
+    echo "Invalid choice: '$menu_sel' -- enter a number between 1 and $menu_n."
+  done
+}
+
 # Same as prompt(), but the value isn't echoed to the terminal as it's typed.
 prompt_secret() {
   local __resultvar="$1" question="> $2" reply=""
@@ -747,12 +780,20 @@ configure_database() {
   local dialect="$SETUP_DB"
   if [ -z "$dialect" ]; then
     local choice=""
-    prompt choice "Install and provision a database server? [mysql/postgres/N, default keeps SQLite] " "n"
+    prompt_menu choice "Install and provision a database server?" 3 \
+      "MySQL:mysql" \
+      "PostgreSQL:postgres" \
+      "SQLite:sqlite" \
+      "Skip:skip"
     case "$choice" in
-    mysql | MySQL | MYSQL) dialect="mysql" ;;
-    postgres | Postgres | POSTGRES | postgresql) dialect="postgres" ;;
-    *)
+    mysql) dialect="mysql" ;;
+    postgres) dialect="postgres" ;;
+    sqlite)
       log "Keeping SQLite"
+      return
+      ;;
+    skip)
+      log "Skipping database setup"
       return
       ;;
     esac
@@ -765,9 +806,16 @@ configure_database() {
 
   if [ "$DB_EXISTING_SET" != "1" ]; then
     local choice=""
-    prompt choice "Use an existing $dialect server, or create a new local one? [existing/new, default: new] " "new"
+    prompt_menu choice "Use an existing $dialect server, or create a new local one?" 1 \
+      "New:new" \
+      "Existing:existing" \
+      "Skip:skip"
     case "$choice" in
-    existing | Existing | EXISTING | e | E) DB_EXISTING=1 ;;
+    existing) DB_EXISTING=1 ;;
+    skip)
+      log "Skipping $dialect setup"
+      return
+      ;;
     *) DB_EXISTING=0 ;;
     esac
   fi
@@ -815,9 +863,16 @@ configure_broker() {
 
   if [ "$BROKER_EXISTING_SET" != "1" ]; then
     local choice=""
-    prompt choice "Use an existing RabbitMQ server, or create a new local one? [existing/new, default: new] " "new"
+    prompt_menu choice "Use an existing RabbitMQ server, or create a new local one?" 1 \
+      "New:new" \
+      "Existing:existing" \
+      "Skip:skip"
     case "$choice" in
-    existing | Existing | EXISTING | e | E) BROKER_EXISTING=1 ;;
+    existing) BROKER_EXISTING=1 ;;
+    skip)
+      log "Skipping RabbitMQ setup"
+      return
+      ;;
     *) BROKER_EXISTING=0 ;;
     esac
   fi
