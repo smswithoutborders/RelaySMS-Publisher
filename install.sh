@@ -450,7 +450,7 @@ prompt_menu() {
       printf -v "$__resultvar" '%s' "${menu_values[$((menu_sel - 1))]}"
       return
     fi
-    echo "Invalid choice: '$menu_sel' -- enter a number between 1 and $menu_n."
+    echo "Invalid choice: '$menu_sel'. Enter a number between 1 and $menu_n."
   done
 }
 
@@ -538,7 +538,7 @@ clone_repository() {
       clone --recurse-submodules -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
   fi
   # Git refuses to clone into a pre-existing non-empty dir, so this can't
-  # move earlier -- $INSTALL_DIR is only guaranteed to exist past this point.
+  # move earlier. $INSTALL_DIR is only guaranteed to exist past this point.
   echo "$INSTANCE_NAME" >"$INSTALL_DIR/.instance-name"
 }
 

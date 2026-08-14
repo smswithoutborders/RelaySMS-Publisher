@@ -18,6 +18,11 @@ OTLP_HTTP_PORT=4318
 SIGNOZ_EMAIL="admin@relaysms.local"
 SIGNOZ_EMAIL_SET=0
 SIGNOZ_PASSWORD=""
+SIGNOZ_SMTP_HOST=""
+SIGNOZ_SMTP_PORT="587"
+SIGNOZ_SMTP_USERNAME=""
+SIGNOZ_SMTP_PASSWORD=""
+SIGNOZ_SMTP_FROM=""
 
 usage() {
   cat <<'EOF'
@@ -33,6 +38,11 @@ Usage: setup-observability.sh [OPTIONS]
   --kuma-port PORT          Host port for Uptime Kuma (default: 3001)
   --signoz-email EMAIL      Admin account email for SigNoz's first-run setup (default: admin@relaysms.local)
   --signoz-password PASS    Admin account password (default: randomly generated)
+  --signoz-smtp-host HOST   SMTP relay host for SigNoz email alerts (optional; Email channel won't work without it)
+  --signoz-smtp-port PORT   SMTP relay port (default: 587)
+  --signoz-smtp-username U  SMTP relay username
+  --signoz-smtp-password P  SMTP relay password
+  --signoz-smtp-from EMAIL  From address for SigNoz email alerts
   -h, --help                Show this help and exit
 EOF
 }
@@ -80,6 +90,26 @@ while [ $# -gt 0 ]; do
     SIGNOZ_PASSWORD="$2"
     shift 2
     ;;
+  --signoz-smtp-host)
+    SIGNOZ_SMTP_HOST="$2"
+    shift 2
+    ;;
+  --signoz-smtp-port)
+    SIGNOZ_SMTP_PORT="$2"
+    shift 2
+    ;;
+  --signoz-smtp-username)
+    SIGNOZ_SMTP_USERNAME="$2"
+    shift 2
+    ;;
+  --signoz-smtp-password)
+    SIGNOZ_SMTP_PASSWORD="$2"
+    shift 2
+    ;;
+  --signoz-smtp-from)
+    SIGNOZ_SMTP_FROM="$2"
+    shift 2
+    ;;
   -h | --help)
     usage
     exit 0
@@ -97,6 +127,13 @@ done
 [ -z "$KUMA_SITE_NAME" ] || validate_hostname "--kuma-site-name" "$KUMA_SITE_NAME"
 [ -n "$SITE_NAME" ] && [ -n "$KUMA_SITE_NAME" ] && [ "$SITE_NAME" = "$KUMA_SITE_NAME" ] &&
   error "--site-name and --kuma-site-name must be different domains"
+[ -z "$SIGNOZ_SMTP_HOST" ] || validate_hostname "--signoz-smtp-host" "$SIGNOZ_SMTP_HOST"
+[[ "$SIGNOZ_SMTP_PORT" =~ ^[0-9]+$ ]] || error "--signoz-smtp-port must be a number"
+[ -z "$SIGNOZ_SMTP_PASSWORD" ] || validate_secret "--signoz-smtp-password" "$SIGNOZ_SMTP_PASSWORD"
+[ -z "$SIGNOZ_SMTP_USERNAME" ] || [[ "$SIGNOZ_SMTP_USERNAME" =~ ^[A-Za-z0-9@_.,!?+=~^-]+$ ]] ||
+  error "--signoz-smtp-username contains unsupported characters"
+[ -z "$SIGNOZ_SMTP_FROM" ] || [[ "$SIGNOZ_SMTP_FROM" =~ ^[A-Za-z0-9@_.,!?+=~^-]+$ ]] ||
+  error "--signoz-smtp-from contains unsupported characters"
 cd "$INSTALL_DIR"
 
 if ! command -v docker &>/dev/null; then
@@ -130,7 +167,7 @@ resolve_port() {
       prompt port "Enter a different port for $label, or leave blank to skip observability setup entirely: " ""
       [ -n "$port" ] || return 1
     else
-      prompt ack "$label is fixed at $port and can't be moved to a different port -- free it up and press enter to retry, or type 'skip' to skip observability setup entirely: " ""
+      prompt ack "$label is fixed at $port and can't be moved to a different port. Free it up and press enter to retry, or type 'skip' to skip observability setup entirely: " ""
       [ "$ack" != "skip" ] || return 1
     fi
   done
@@ -181,6 +218,8 @@ fi
 if [ ! -f observability/signoz/casting.yaml ]; then
   log "Generating SigNoz configuration"
   pg_password=$(openssl rand -hex 24)
+  smtp_smarthost=""
+  [ -n "$SIGNOZ_SMTP_HOST" ] && smtp_smarthost="$SIGNOZ_SMTP_HOST:$SIGNOZ_SMTP_PORT"
   sed \
     -e "s/__POSTGRES_DB__/signoz/" \
     -e "s/__POSTGRES_USER__/signoz/" \
@@ -188,6 +227,10 @@ if [ ! -f observability/signoz/casting.yaml ]; then
     -e "s/__SIGNOZ_PORT__/$SIGNOZ_PORT/" \
     -e "s/__OTLP_GRPC_PORT__/$OTLP_GRPC_PORT/" \
     -e "s/__OTLP_HTTP_PORT__/$OTLP_HTTP_PORT/" \
+    -e "s/__SMTP_SMARTHOST__/$smtp_smarthost/" \
+    -e "s/__SMTP_USERNAME__/$SIGNOZ_SMTP_USERNAME/" \
+    -e "s/__SMTP_PASSWORD__/$SIGNOZ_SMTP_PASSWORD/" \
+    -e "s/__SMTP_FROM__/$SIGNOZ_SMTP_FROM/" \
     observability/signoz/casting.yaml.template >observability/signoz/casting.yaml
 fi
 
@@ -220,7 +263,7 @@ if [[ "$signoz_version" == *'"setupCompleted":false'* ]]; then
   fi
   case "$create_admin" in
   n | N | no | NO)
-    log "Skipping SigNoz admin account -- OTLP ingestion stays blocked until one is created, see observability/README.md"
+    log "Skipping SigNoz admin account. OTLP ingestion stays blocked until one is created, see observability/README.md"
     ;;
   *)
     [ "$SIGNOZ_EMAIL_SET" = "1" ] || prompt SIGNOZ_EMAIL "SigNoz admin email [$SIGNOZ_EMAIL]: " "$SIGNOZ_EMAIL"

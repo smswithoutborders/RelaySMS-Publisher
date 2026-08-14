@@ -122,4 +122,4 @@ highlight \
   "Database : $DB_NAME" \
   "User     : $DB_USER" \
   "Password : $DB_PASSWORD" \
-  "Written to $INSTALL_DIR/.env -- not stored anywhere else, save it now."
+  "Written to $INSTALL_DIR/.env. Not stored anywhere else, save it now."

@@ -26,6 +26,13 @@ spec:
         POSTGRES_PASSWORD: __POSTGRES_PASSWORD__
   telemetrykeeper:
     kind: clickhousekeeper
+  signoz:
+    spec:
+      env:
+        SIGNOZ_ALERTMANAGER_SIGNOZ_GLOBAL_SMTP__SMARTHOST: "__SMTP_SMARTHOST__"
+        SIGNOZ_ALERTMANAGER_SIGNOZ_GLOBAL_SMTP__AUTH__USERNAME: "__SMTP_USERNAME__"
+        SIGNOZ_ALERTMANAGER_SIGNOZ_GLOBAL_SMTP__AUTH__PASSWORD: "__SMTP_PASSWORD__"
+        SIGNOZ_ALERTMANAGER_SIGNOZ_GLOBAL_SMTP__FROM: "__SMTP_FROM__"
   ingester:
     spec:
       config:

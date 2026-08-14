@@ -89,8 +89,8 @@ if [ "$BROKER_EXISTING" = "1" ]; then
 
   # rabbitmqctl only works locally, so this checks the management HTTP API
   # instead. A user without the "management" tag gets 401 on every endpoint
-  # here, indistinguishable from a wrong password by status code alone --
-  # hence the body sniff below.
+  # here, indistinguishable from a wrong password by status code alone.
+  # Hence the body sniff below.
   log "Checking connection to existing RabbitMQ server at $BROKER_HOST:$BROKER_MGMT_PORT"
   tmp_body=$(mktemp)
   http_code=$(curl -s -o "$tmp_body" -w '%{http_code}' -u "$BROKER_USER:$BROKER_PASSWORD" \
@@ -104,7 +104,7 @@ if [ "$BROKER_EXISTING" = "1" ]; then
     ;;
   401)
     if [[ "$http_body" == *"Not management user"* ]]; then
-      error "RabbitMQ user '$BROKER_USER' at $BROKER_HOST has no 'management' tag, so the HTTP API refuses it -- this is unrelated to the password.
+      error "RabbitMQ user '$BROKER_USER' at $BROKER_HOST has no 'management' tag, so the HTTP API refuses it. This is unrelated to the password.
 Run on that RabbitMQ server: rabbitmqctl set_user_tags $BROKER_USER management
 Then re-run this installer."
     else
@@ -161,4 +161,4 @@ highlight \
   "Vhost    : $BROKER_VHOST" \
   "User     : $BROKER_USER" \
   "Password : $BROKER_PASSWORD" \
-  "Written to $INSTALL_DIR/.env -- not stored anywhere else, save it now."
+  "Written to $INSTALL_DIR/.env. Not stored anywhere else, save it now."
