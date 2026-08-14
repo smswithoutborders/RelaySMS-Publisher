@@ -198,9 +198,9 @@ else
 fi
 
 if [ "$SKIP_NGINX" != "1" ] && [ -n "$SITE_NAME" ]; then
-  if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
-    log "Installing nginx and certbot"
-    apt-get install -y --no-install-recommends nginx certbot python3-certbot-nginx
+  if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null || ! command -v htpasswd &>/dev/null; then
+    log "Installing nginx, certbot, and apache2-utils"
+    apt-get install -y --no-install-recommends nginx certbot python3-certbot-nginx apache2-utils
   fi
   mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
 
