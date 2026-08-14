@@ -10,10 +10,13 @@ SITE_NAME=""
 LETSENCRYPT_EMAIL=""
 SKIP_NGINX=0
 SKIP_TRACING=0
-SIGNOZ_PORT=8080
+SIGNOZ_PORT=8090
 KUMA_PORT=3001
 OTLP_GRPC_PORT=4317
 OTLP_HTTP_PORT=4318
+SIGNOZ_EMAIL="admin@relaysms.local"
+SIGNOZ_EMAIL_SET=0
+SIGNOZ_PASSWORD=""
 
 usage() {
   cat <<'EOF'
@@ -24,8 +27,10 @@ Usage: setup-observability.sh [OPTIONS]
   --letsencrypt-email EMAIL Email for Let's Encrypt renewal notices (optional)
   --skip-nginx              Skip the nginx/TLS setup even if --site-name is given
   --skip-tracing            Don't install requirements-observability.txt or turn on OTEL_EXPORTER_OTLP_ENDPOINT
-  --signoz-port PORT        Host port for the SigNoz UI (default: 8080)
+  --signoz-port PORT        Host port for the SigNoz UI (default: 8090)
   --kuma-port PORT          Host port for Uptime Kuma (default: 3001)
+  --signoz-email EMAIL      Admin account email for SigNoz's first-run setup (default: admin@relaysms.local)
+  --signoz-password PASS    Admin account password (default: randomly generated)
   -h, --help                Show this help and exit
 EOF
 }
@@ -58,6 +63,15 @@ while [ $# -gt 0 ]; do
     ;;
   --kuma-port)
     KUMA_PORT="$2"
+    shift 2
+    ;;
+  --signoz-email)
+    SIGNOZ_EMAIL="$2"
+    SIGNOZ_EMAIL_SET=1
+    shift 2
+    ;;
+  --signoz-password)
+    SIGNOZ_PASSWORD="$2"
     shift 2
     ;;
   -h | --help)
@@ -153,15 +167,18 @@ if ! command -v foundryctl &>/dev/null; then
   curl -fsSL https://signoz.io/foundry.sh | FOUNDRY_INSTALL_DIR=/usr/local/bin bash
 fi
 
-# Foundry defaults the metastore Postgres credentials to the literal
-# string "signoz" for all three if left as the template's placeholders.
+# Generated once; a rerun with a different --signoz-port after this file
+# exists won't change it, same as the Postgres credentials.
 if [ ! -f observability/signoz/casting.yaml ]; then
-  log "Generating SigNoz metastore credentials"
+  log "Generating SigNoz configuration"
   pg_password=$(openssl rand -hex 24)
   sed \
     -e "s/__POSTGRES_DB__/signoz/" \
     -e "s/__POSTGRES_USER__/signoz/" \
     -e "s/__POSTGRES_PASSWORD__/$pg_password/" \
+    -e "s/__SIGNOZ_PORT__/$SIGNOZ_PORT/" \
+    -e "s/__OTLP_GRPC_PORT__/$OTLP_GRPC_PORT/" \
+    -e "s/__OTLP_HTTP_PORT__/$OTLP_HTTP_PORT/" \
     observability/signoz/casting.yaml.template >observability/signoz/casting.yaml
 fi
 
@@ -169,22 +186,52 @@ if [ "$SIGNOZ_UI_RUNNING" = "1" ]; then
   log "SigNoz already running, skipping"
 else
   log "Starting SigNoz"
-  if [ "$SIGNOZ_PORT" = "8080" ]; then
-    foundryctl cast -f observability/signoz/casting.yaml
-  else
-    # Foundry hardcodes the SigNoz UI to port 8080, no override in
-    # casting.yaml -- cast fails on just that container, everything else
-    # in the stack still comes up, and compose.yaml is written regardless.
-    foundryctl cast -f observability/signoz/casting.yaml || true
-    [ -f pours/deployment/compose.yaml ] ||
-      error "foundryctl cast failed before generating pours/deployment/compose.yaml, see output above"
-    sed -i "s/8080:8080/$SIGNOZ_PORT:8080/" pours/deployment/compose.yaml
-    docker rm -f relaysms-publisher-signoz-signoz-0 &>/dev/null || true
-  fi
+  foundryctl cast -f observability/signoz/casting.yaml
   docker compose \
     -f pours/deployment/compose.yaml \
     -f observability/signoz/docker-compose.override.yml \
     up -d
+fi
+
+# Until an org exists, SigNoz's opamp bug (casting.yaml.template) keeps
+# the OTLP receiver closed. Safe to call every run: setupCompleted flips
+# permanently once an org exists, and a second registration is rejected.
+log "Waiting for the SigNoz API"
+signoz_version=""
+for _ in $(seq 1 60); do
+  signoz_version=$(curl -fs "http://127.0.0.1:$SIGNOZ_PORT/api/v1/version" 2>/dev/null) && break
+  sleep 2
+done
+[ -n "$signoz_version" ] || error "SigNoz API never came up on port $SIGNOZ_PORT, see docker logs relaysms-publisher-signoz-signoz-0"
+
+if [[ "$signoz_version" == *'"setupCompleted":false'* ]]; then
+  create_admin="y"
+  if [ "$SIGNOZ_EMAIL_SET" != "1" ] && [ -z "$SIGNOZ_PASSWORD" ]; then
+    prompt create_admin "Create the SigNoz admin account now? Required for tracing/log ingestion. [Y/n] " "y"
+  fi
+  case "$create_admin" in
+  n | N | no | NO)
+    log "Skipping SigNoz admin account -- OTLP ingestion stays blocked until one is created, see observability/README.md"
+    ;;
+  *)
+    [ "$SIGNOZ_EMAIL_SET" = "1" ] || prompt SIGNOZ_EMAIL "SigNoz admin email [$SIGNOZ_EMAIL]: " "$SIGNOZ_EMAIL"
+    if [ -z "$SIGNOZ_PASSWORD" ]; then
+      prompt_secret SIGNOZ_PASSWORD "SigNoz admin password (blank to auto-generate): "
+      [ -n "$SIGNOZ_PASSWORD" ] || SIGNOZ_PASSWORD="$(openssl rand -hex 16)Aa1!"
+    fi
+    log "Creating SigNoz admin account"
+    register_response=$(curl -s -X POST "http://127.0.0.1:$SIGNOZ_PORT/api/v1/register" \
+      -H "Content-Type: application/json" \
+      -d "{\"name\":\"Admin\",\"orgId\":\"\",\"orgName\":\"RelaySMS\",\"email\":\"$SIGNOZ_EMAIL\",\"password\":\"$SIGNOZ_PASSWORD\"}")
+    [[ "$register_response" == *'"status":"success"'* ]] ||
+      error "SigNoz admin account creation failed: $register_response"
+    highlight \
+      "SigNoz admin account" \
+      "Email    : $SIGNOZ_EMAIL" \
+      "Password : $SIGNOZ_PASSWORD" \
+      "Not stored anywhere else, save it now."
+    ;;
+  esac
 fi
 
 if [ "$KUMA_RUNNING" = "1" ]; then
@@ -198,9 +245,9 @@ else
 fi
 
 if [ "$SKIP_NGINX" != "1" ] && [ -n "$SITE_NAME" ]; then
-  if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null || ! command -v htpasswd &>/dev/null; then
-    log "Installing nginx, certbot, and apache2-utils"
-    apt-get install -y --no-install-recommends nginx certbot python3-certbot-nginx apache2-utils
+  if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
+    log "Installing nginx and certbot"
+    apt-get install -y --no-install-recommends nginx certbot python3-certbot-nginx
   fi
   mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
 
@@ -216,19 +263,6 @@ if [ "$SKIP_NGINX" != "1" ] && [ -n "$SITE_NAME" ]; then
     log "Wrote $conf_dest"
   fi
   ln -sf "$conf_dest" "/etc/nginx/sites-enabled/${SITE_NAME}.conf"
-
-  htpasswd_file="/etc/nginx/.htpasswd-observability"
-  if [ -f "$htpasswd_file" ]; then
-    log "$htpasswd_file already exists, leaving it untouched"
-  else
-    htpasswd_password=$(openssl rand -hex 16)
-    htpasswd -cb "$htpasswd_file" admin "$htpasswd_password"
-    highlight \
-      "Observability reverse proxy credentials" \
-      "User     : admin" \
-      "Password : $htpasswd_password" \
-      "Written to $htpasswd_file -- not stored anywhere else, save it now."
-  fi
 
   nginx -t || error "nginx config test failed"
   systemctl enable nginx &>/dev/null || true

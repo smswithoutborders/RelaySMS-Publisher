@@ -379,7 +379,6 @@ configure_install_dir() {
   for template in "${SERVICE_UNIT_TEMPLATES[@]}"; do
     SERVICE_UNITS+=("$(unit_name_for "$template")")
   done
-  ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
   if [ -n "$INSTANCE_NAME" ]; then
     log "Instance: $INSTANCE_NAME (target unit: $TARGET_UNIT)"
   fi
@@ -846,11 +845,18 @@ configure_broker() {
   local broker="$SETUP_BROKER"
   if [ -z "$broker" ]; then
     local choice=""
-    prompt choice "Install and provision RabbitMQ as the Celery broker? [y/N, default keeps SQLite] " "n"
+    prompt_menu choice "Install and provision a message broker for Celery?" 2 \
+      "RabbitMQ:rabbitmq" \
+      "SQLite:sqlite" \
+      "Skip:skip"
     case "$choice" in
-    y | Y | yes | YES) broker="rabbitmq" ;;
-    *)
+    rabbitmq) broker="rabbitmq" ;;
+    sqlite)
       log "Keeping SQLite broker"
+      return
+      ;;
+    skip)
+      log "Skipping broker setup"
       return
       ;;
     esac

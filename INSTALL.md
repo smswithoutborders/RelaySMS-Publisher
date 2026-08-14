@@ -277,7 +277,7 @@ sudo ./install.sh --setup-db postgres --db-existing \
     --db-name relaysms --db-user relaysms --db-password 'your-existing-password'
 ```
 
-This only validates the connection and writes it to `.env` — it never creates, alters, or drops anything on that server. If the connection or credentials are wrong, the error message tells you to re-run without `--db-existing` to create a new local database instead. Run interactively (no `--setup-db`) and you'll be prompted for "existing" or "new" instead of needing the flags.
+This only validates the connection and writes it to `.env`: it never creates, alters, or drops anything on that server. If the connection or credentials are wrong, the error message tells you to re-run without `--db-existing` to create a new local database instead. Run interactively (no `--setup-db`) and you'll be prompted for "existing" or "new" instead of needing the flags.
 
 **SQLite (default):**
 

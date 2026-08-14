@@ -44,9 +44,6 @@ server {
     keepalive_timeout    65;
     client_max_body_size 20m;
 
-    auth_basic           "Restricted";
-    auth_basic_user_file /etc/nginx/.htpasswd-observability;
-
     location ~ /\.(?!well-known) {
         deny all;
     }

@@ -1,11 +1,11 @@
 # SigNoz deployment spec for Foundry (https://github.com/SigNoz/foundry).
 #
-# Not run directly: the metastore Postgres fields below are placeholders.
-# scripts/setup-observability.sh generates observability/signoz/casting.yaml
-# (gitignored, contains real credentials) from this file. See
-# observability/README.md for the manual equivalent.
+# Not run directly: the placeholders below are filled in by
+# scripts/setup-observability.sh, which writes
+# observability/signoz/casting.yaml (gitignored, contains real
+# credentials). See observability/README.md for the manual equivalent.
 #
-# Left unset, Foundry defaults all three fields to the literal string
+# Left unset, Foundry defaults the Postgres fields to the literal string
 # "signoz", so don't cast this template file directly.
 #
 # Writes pours/deployment/ relative to the current directory (generated,
@@ -26,3 +26,25 @@ spec:
         POSTGRES_PASSWORD: __POSTGRES_PASSWORD__
   telemetrykeeper:
     kind: clickhousekeeper
+  ingester:
+    spec:
+      config:
+        data:
+          # Foundry points this at the metastore Postgres container instead
+          # of the actual SigNoz backend, so the collector can never
+          # register as an opamp agent.
+          opamp.yaml: |
+            server_endpoint: ws://relaysms-publisher-signoz-signoz-0:4320/v1/opamp
+  patches:
+    # Foundry publishes these on 0.0.0.0 by default; restrict to localhost.
+    - target: "deployment/compose.yaml"
+      operations:
+        - op: replace
+          path: /services/relaysms-publisher-signoz-signoz-0/ports/0
+          value: "127.0.0.1:__SIGNOZ_PORT__:8080"
+        - op: replace
+          path: /services/ingester/ports/0
+          value: "127.0.0.1:__OTLP_GRPC_PORT__:4317"
+        - op: replace
+          path: /services/ingester/ports/1
+          value: "127.0.0.1:__OTLP_HTTP_PORT__:4318"
