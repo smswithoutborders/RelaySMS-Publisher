@@ -26,20 +26,21 @@ The sections below are what that script automates, useful for understanding or c
 ### 1. SigNoz
 
 ```bash
-# Install foundryctl (one-time). Pin the install dir: the default
-# (~/.local/bin) isn't reliably on PATH for a non-interactive root shell.
+# Default install dir (~/.local/bin) isn't reliably on PATH for a
+# non-interactive root shell, so pin it.
 curl -fsSL https://signoz.io/foundry.sh | FOUNDRY_INSTALL_DIR=/usr/local/bin bash
 
-# Fill in real Postgres credentials (Foundry defaults all three to the
-# literal string "signoz" if left unset). Contains secrets; gitignored.
+# Fills in Postgres credentials and ports. Output is gitignored (secrets).
 sed \
   -e "s/__POSTGRES_DB__/signoz/" \
   -e "s/__POSTGRES_USER__/signoz/" \
   -e "s/__POSTGRES_PASSWORD__/$(openssl rand -hex 24)/" \
+  -e "s/__SIGNOZ_PORT__/8090/" \
+  -e "s/__OTLP_GRPC_PORT__/4317/" \
+  -e "s/__OTLP_HTTP_PORT__/4318/" \
   observability/signoz/casting.yaml.template > observability/signoz/casting.yaml
 
-# Generates pours/deployment/ and deploys directly, not a dry run.
-# Run from the repo root.
+# Generates pours/deployment/ and deploys. Run from the repo root.
 foundryctl cast -f observability/signoz/casting.yaml
 
 # cast doesn't know about the resource-limit override; apply it separately.
@@ -47,27 +48,36 @@ docker compose \
   -f pours/deployment/compose.yaml \
   -f observability/signoz/docker-compose.override.yml \
   up -d
+
+# Until an org exists, SigNoz never opens its OTLP receiver.
+until curl -fs http://127.0.0.1:8090/api/v1/version | grep -q setupCompleted; do sleep 2; done
+curl -X POST http://127.0.0.1:8090/api/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Admin","orgId":"","orgName":"RelaySMS","email":"admin@relaysms.local","password":"<a password with 12+ chars, upper, lower, number, symbol>"}'
 ```
 
 `casting.yaml.template` uses Postgres as the metastore (Foundry's
 recommended backend). For a smaller single-node setup, change
 `metastore.kind` to `sqlite` (and drop the `spec.env` block under it,
-which only applies to Postgres) before generating `casting.yaml`.
+which only applies to Postgres).
 
-`docker-compose.override.yml`'s service names are specific to this
-`casting.yaml` and could drift if Foundry changes its naming scheme in a
-future release. If the `up -d` above errors about an unknown service,
-recheck with:
+`docker-compose.override.yml` and the `patches`/`ingester` blocks in
+`casting.yaml.template` reference exact Foundry-generated service names,
+which could drift in a future Foundry release. If `up -d` errors about an
+unknown service, recheck with:
 
 ```bash
 docker compose -f pours/deployment/compose.yaml config --services
 ```
 
-Set trace/log retention to a short window to keep ClickHouse's disk and
-memory footprint bounded: this isn't a `casting.yaml` field, it's
-configured after first login, in the SigNoz UI under Settings > Workspace
-tab > Retention Controls. Logs and traces offer 15/30/90/180 days or 1
-year; click Save on each signal you change.
+`setup-observability.sh` asks before creating the admin account, then
+prompts for email/password if `--signoz-email`/`--signoz-password` weren't
+given (blank answers fall back to the defaults). Credentials are printed
+once and not stored anywhere else -- use them to log into the SigNoz UI.
+
+Trace/log retention isn't a `casting.yaml` field: set it after first
+login, in the SigNoz UI under Settings > Workspace > Retention Controls,
+to keep ClickHouse's disk and memory footprint bounded.
 
 ### 2. Uptime Kuma
 
@@ -108,27 +118,23 @@ sed -e "s/__SERVER_NAME__/<your-ops-domain>/g" \
     observability/nginx-observability.conf.template \
     > /etc/nginx/sites-available/<your-ops-domain>.conf
 ln -s /etc/nginx/sites-available/<your-ops-domain>.conf /etc/nginx/sites-enabled/
-htpasswd -c /etc/nginx/.htpasswd-observability <username>
 nginx -t && systemctl reload nginx
 certbot --nginx -d <your-ops-domain>
 ```
 
-The template enables `auth_basic` by default, on top of each tool's own
-login. It fronts SigNoz at `/` and Uptime Kuma at `/kuma/`.
+It fronts SigNoz at `/` and Uptime Kuma at `/kuma/`, each behind its own login.
 
 ## Security checklist
 
 Before exposing anything beyond localhost, confirm:
 
-- `pours/deployment/compose.yaml`: the SigNoz UI (8080) and OTLP receiver
+- `pours/deployment/compose.yaml`: the SigNoz UI (8090) and OTLP receiver
   (4317, 4318) publish on `127.0.0.1`, not `0.0.0.0` (they publish on all
   interfaces by default).
 - `observability/signoz/casting.yaml` actually has real Postgres
   credentials, not leftover placeholders from the template
   (`grep POSTGRES_ observability/signoz/casting.yaml` should show real
   values, not `__POSTGRES_DB__`/`__POSTGRES_USER__`/`__POSTGRES_PASSWORD__`).
-- `/etc/nginx/.htpasswd-observability` exists and `auth_basic` is active in
-  the vhost.
 - Both stacks are reachable only via the reverse proxy and TLS, never
   directly on their container ports from outside the host.
 

@@ -58,6 +58,21 @@ prompt() {
   printf -v "$__resultvar" '%s' "${reply:-$default}"
 }
 
+# Same as prompt(), but the value isn't echoed to the terminal as it's
+# typed. Mirrors install.sh's own copy, which can't source this file (must
+# also run standalone via curl | sudo bash).
+prompt_secret() {
+  local __resultvar="$1" question="> $2" reply=""
+  if [ -t 0 ]; then
+    read -rs -p "$question" reply
+    echo
+  elif [ -r /dev/tty ]; then
+    read -rs -p "$question" reply </dev/tty || true
+    echo
+  fi
+  printf -v "$__resultvar" '%s' "$reply"
+}
+
 # True (0) if nothing is currently listening on the given local TCP port.
 port_is_free() {
   local port="$1"
