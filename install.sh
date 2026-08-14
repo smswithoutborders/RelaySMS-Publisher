@@ -51,6 +51,7 @@ BROKER_USER="${BROKER_USER:-}"
 BROKER_PASSWORD="${BROKER_PASSWORD:-}"
 SETUP_OBSERVABILITY="${SETUP_OBSERVABILITY:-}"
 OBSERVABILITY_SITE_NAME="${OBSERVABILITY_SITE_NAME:-}"
+OBSERVABILITY_KUMA_SITE_NAME="${OBSERVABILITY_KUMA_SITE_NAME:-}"
 OBSERVABILITY_LETSENCRYPT_EMAIL="${OBSERVABILITY_LETSENCRYPT_EMAIL:-}"
 
 TARGET_UNIT_TEMPLATE="relaysms-publisher.target"
@@ -114,8 +115,9 @@ Usage: install.sh [OPTIONS]
   --broker-user USER                       RabbitMQ user (default: relaysms)
   --broker-password PASS                   RabbitMQ password (default: randomly generated; required with --broker-existing)
   --setup-observability                    Install and start SigNoz + Uptime Kuma
-  --observability-site-name DOMAIN         Domain for the observability reverse proxy
-  --observability-letsencrypt-email EMAIL  Email for its Let's Encrypt renewal notices
+  --observability-site-name DOMAIN         Domain for the SigNoz reverse proxy
+  --observability-kuma-site-name DOMAIN    Domain for the Uptime Kuma reverse proxy (must differ from the above)
+  --observability-letsencrypt-email EMAIL  Email for their Let's Encrypt renewal notices
   -h, --help                               Show this help and exit
 
 Piped through curl, pass options after `-s --`:
@@ -302,6 +304,14 @@ parse_args() {
       ;;
     --observability-site-name=*)
       OBSERVABILITY_SITE_NAME="${1#*=}"
+      shift
+      ;;
+    --observability-kuma-site-name)
+      OBSERVABILITY_KUMA_SITE_NAME="$2"
+      shift 2
+      ;;
+    --observability-kuma-site-name=*)
+      OBSERVABILITY_KUMA_SITE_NAME="${1#*=}"
       shift
       ;;
     --observability-letsencrypt-email)
@@ -924,13 +934,15 @@ configure_observability() {
     return
   }
 
-  if [ -z "$OBSERVABILITY_SITE_NAME" ]; then
+  if [ -z "$OBSERVABILITY_SITE_NAME" ] && [ -z "$OBSERVABILITY_KUMA_SITE_NAME" ]; then
     local enable=""
     prompt enable "Configure a reverse proxy for observability with a Let's Encrypt certificate? [y/N] " "n"
     case "$enable" in
     y | Y | yes | YES)
-      prompt OBSERVABILITY_SITE_NAME "Domain name for observability (e.g. ops.example.com): " ""
-      if [ -n "$OBSERVABILITY_SITE_NAME" ] && [ -z "$OBSERVABILITY_LETSENCRYPT_EMAIL" ]; then
+      prompt OBSERVABILITY_SITE_NAME "Domain name for SigNoz (e.g. ops.example.com): " ""
+      prompt OBSERVABILITY_KUMA_SITE_NAME "Domain name for Uptime Kuma (e.g. status.example.com, blank to skip): " ""
+      if { [ -n "$OBSERVABILITY_SITE_NAME" ] || [ -n "$OBSERVABILITY_KUMA_SITE_NAME" ]; } &&
+        [ -z "$OBSERVABILITY_LETSENCRYPT_EMAIL" ]; then
         prompt OBSERVABILITY_LETSENCRYPT_EMAIL "Email for Let's Encrypt renewal notices (optional): " ""
       fi
       ;;
@@ -939,6 +951,7 @@ configure_observability() {
 
   local args=(--install-dir "$INSTALL_DIR")
   [ -n "$OBSERVABILITY_SITE_NAME" ] && args+=(--site-name "$OBSERVABILITY_SITE_NAME")
+  [ -n "$OBSERVABILITY_KUMA_SITE_NAME" ] && args+=(--kuma-site-name "$OBSERVABILITY_KUMA_SITE_NAME")
   [ -n "$OBSERVABILITY_LETSENCRYPT_EMAIL" ] &&
     args+=(--letsencrypt-email "$OBSERVABILITY_LETSENCRYPT_EMAIL")
 

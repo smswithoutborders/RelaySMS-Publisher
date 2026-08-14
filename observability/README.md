@@ -18,7 +18,7 @@ sudo ./install.sh --setup-observability
 sudo ./scripts/setup-observability.sh
 ```
 
-Add `--observability-site-name DOMAIN` (`--site-name` for the standalone script) to also front both dashboards with nginx + TLS, e.g. `--observability-site-name ops.example.com`. `--skip-tracing` brings the stack up without touching `.env`. Run `scripts/setup-observability.sh --help` for the full flag list.
+Add `--observability-site-name DOMAIN` (`--site-name` standalone) to front SigNoz with nginx + TLS. Kuma needs a separate domain via `--observability-kuma-site-name` (`--kuma-site-name` standalone) -- see section 3. `--skip-tracing` brings the stack up without touching `.env`. Full flags: `scripts/setup-observability.sh --help`.
 
 The sections below are what that script automates, useful for understanding or customizing a step, or if you're doing this by hand. Manual prerequisites: Docker Engine and the Docker Compose plugin
 (<https://docs.docker.com/engine/install/>, <https://docs.docker.com/compose/install/>).
@@ -85,8 +85,11 @@ to keep ClickHouse's disk and memory footprint bounded.
 docker compose -f observability/uptime-kuma/docker-compose.yml up -d
 ```
 
-Open <http://localhost:3001> (or through the reverse proxy) and create the
-admin account on first visit. Then add:
+Bound to `127.0.0.1:3001`. Reach it either through its own reverse-proxy
+domain (section 3) or by tunneling
+(`ssh -L 3001:127.0.0.1:3001 <user>@<host>`, then open
+<http://localhost:3001>). Create the admin account on first visit, then
+add:
 
 - **REST**: Monitor Type "HTTP(s)", URL `https://<domain>/health`.
 - **gRPC**: Kuma has a native gRPC monitor type (look for "gRPC" in the
@@ -108,35 +111,29 @@ admin account on first visit. Then add:
 
 ### 3. Reverse proxy
 
-`observability/nginx-observability.conf.template` is a separate vhost from
-`relaysms-publisher-nginx.conf.template`, since these are internal
-dashboards and shouldn't share a domain with the public API. Not wired into
-`install.sh`; install it manually:
+Two vhosts, one per domain, separate from
+`relaysms-publisher-nginx.conf.template` (the public API). Manual setup:
 
 ```bash
+# SigNoz: observability/nginx-observability.conf.template -> your ops domain
 sed -e "s/__SERVER_NAME__/<your-ops-domain>/g" \
     observability/nginx-observability.conf.template \
     > /etc/nginx/sites-available/<your-ops-domain>.conf
 ln -s /etc/nginx/sites-available/<your-ops-domain>.conf /etc/nginx/sites-enabled/
+
+# Uptime Kuma: observability/nginx-uptime-kuma.conf.template -> a different domain
+sed -e "s/__SERVER_NAME__/<your-status-domain>/g" \
+    observability/nginx-uptime-kuma.conf.template \
+    > /etc/nginx/sites-available/<your-status-domain>.conf
+ln -s /etc/nginx/sites-available/<your-status-domain>.conf /etc/nginx/sites-enabled/
+
 nginx -t && systemctl reload nginx
 certbot --nginx -d <your-ops-domain>
+certbot --nginx -d <your-status-domain>
 ```
 
-It fronts SigNoz at `/` and Uptime Kuma at `/kuma/`, each behind its own login.
-
-## Security checklist
-
-Before exposing anything beyond localhost, confirm:
-
-- `pours/deployment/compose.yaml`: the SigNoz UI (8090) and OTLP receiver
-  (4317, 4318) publish on `127.0.0.1`, not `0.0.0.0` (they publish on all
-  interfaces by default).
-- `observability/signoz/casting.yaml` actually has real Postgres
-  credentials, not leftover placeholders from the template
-  (`grep POSTGRES_ observability/signoz/casting.yaml` should show real
-  values, not `__POSTGRES_DB__`/`__POSTGRES_USER__`/`__POSTGRES_PASSWORD__`).
-- Both stacks are reachable only via the reverse proxy and TLS, never
-  directly on their container ports from outside the host.
+Skip either half if you only want one of the two dashboards exposed (the
+other stays reachable by SSH tunnel).
 
 ## Usage
 
