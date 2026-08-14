@@ -783,6 +783,18 @@ configure_nginx() {
   log "Requesting certificate for $site"
   certbot "${certbot_args[@]}" || error "certbot failed to obtain a certificate for $site"
   log "Certificate installed for $site"
+
+  # certbot's nginx plugin always writes its own "listen 443 ssl;" and
+  # never carries over http2 from the port-80 block, so the gRPC location
+  # in $NGINX_CONF_TEMPLATE would be unreachable without this (gRPC
+  # requires HTTP/2).
+  sed -i \
+    -e "s/listen 443 ssl;/listen 443 ssl http2;/" \
+    -e "s/listen \[::\]:443 ssl;/listen [::]:443 ssl http2;/" \
+    -e "s/listen \[::\]:443 ssl ipv6only=on;/listen [::]:443 ssl http2 ipv6only=on;/" \
+    "$conf_dest"
+  nginx -t || error "nginx config test failed after enabling http2 on $site"
+  systemctl reload nginx
 }
 
 configure_database() {
