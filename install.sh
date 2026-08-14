@@ -918,6 +918,19 @@ configure_observability() {
     return
   }
 
+  if [ -z "$OBSERVABILITY_SITE_NAME" ]; then
+    local enable=""
+    prompt enable "Configure a reverse proxy for observability with a Let's Encrypt certificate? [y/N] " "n"
+    case "$enable" in
+    y | Y | yes | YES)
+      prompt OBSERVABILITY_SITE_NAME "Domain name for observability (e.g. ops.example.com): " ""
+      if [ -n "$OBSERVABILITY_SITE_NAME" ] && [ -z "$OBSERVABILITY_LETSENCRYPT_EMAIL" ]; then
+        prompt OBSERVABILITY_LETSENCRYPT_EMAIL "Email for Let's Encrypt renewal notices (optional): " ""
+      fi
+      ;;
+    esac
+  fi
+
   local args=(--install-dir "$INSTALL_DIR")
   [ -n "$OBSERVABILITY_SITE_NAME" ] && args+=(--site-name "$OBSERVABILITY_SITE_NAME")
   [ -n "$OBSERVABILITY_LETSENCRYPT_EMAIL" ] &&
