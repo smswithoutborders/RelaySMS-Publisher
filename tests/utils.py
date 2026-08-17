@@ -98,6 +98,7 @@ def build_v1_request_metadata(
         ss_kid_pk=ss_pk_bytes,
         method_name=method_name.encode(),
         payload=payload,
+        timestamp=None,
     )
 
     return (

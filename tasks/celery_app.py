@@ -117,6 +117,7 @@ def make_celery() -> Celery:
         accept_content=["json"],
         worker_enable_remote_control=False,
         worker_concurrency=concurrency,
+        worker_hijack_root_logger=False,
         task_acks_late=True,
         task_reject_on_worker_lost=True,
         worker_prefetch_multiplier=1,
