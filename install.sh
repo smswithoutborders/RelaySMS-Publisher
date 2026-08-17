@@ -79,12 +79,37 @@ else
   SERVICE_USER="relaysms"
 fi
 
-log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"; }
+# Colors are skipped when the relevant stream isn't a terminal.
+_no_color="${NO_COLOR:-}"
+if [[ -t 1 && -z "$_no_color" ]]; then
+  _grn=$'\033[0;32m'
+else
+  _grn=''
+fi
+if [[ -t 2 && -z "$_no_color" ]]; then
+  _red=$'\033[0;31m'
+  _ylw=$'\033[0;33m'
+else
+  _red=''
+  _ylw=''
+fi
+
+# $1=color $2=symbol $3=fd (1 or 2) $4=message. Reset code is derived from
+# whether $1 is set, so callers don't have to track a matching "off" value.
+_log_line() {
+  local now off=''
+  printf -v now '%(%Y-%m-%d %H:%M:%S)T' -1
+  [[ -n "$1" ]] && off=$'\033[0m'
+  printf '%s[%s]%s [%s] %s\n' "$1" "$2" "$off" "$now" "$4" >&"$3"
+}
+
+log() { _log_line "$_grn" '*' 1 "$*"; }
+warn() { _log_line "$_ylw" '!' 2 "$*"; }
 error() {
-  echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
+  _log_line "$_red" 'x' 2 "ERROR: $*"
   exit 1
 }
-on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
+on_err() { _log_line "$_red" 'x' 2 "ERROR: aborted at line $1 (last command: $2)"; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 usage() {
