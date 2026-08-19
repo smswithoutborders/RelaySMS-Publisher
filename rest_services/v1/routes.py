@@ -22,6 +22,7 @@ from rest_services.v1.schemas import (
     PublishContentResponse,
     ServerStaticPublicKey,
 )
+from tasks.forward_task import forward_twilio_webhook
 from tasks.publication_task import publish_message
 from utils import get_config_bool, get_configs
 
@@ -242,5 +243,7 @@ async def twilio_incoming_sms(request: Request) -> Response:
 
     publish_message.delay(text_payload, sender_address, "sms")
     logger.info("Successfully queued publication request via protocol %r.", "sms")
+
+    forward_twilio_webhook.delay(params, sender_address, text_payload)
 
     return Response(content=str(MessagingResponse()), media_type="text/xml")

@@ -26,6 +26,7 @@ def _enabled(monkeypatch):
     monkeypatch.setattr(routes, "TWILIO_SMS_TRANSPORT_ENABLED", True)
     monkeypatch.setattr(routes, "TWILIO_AUTH_TOKEN", AUTH_TOKEN)
     monkeypatch.setattr(routes, "publish_message", MagicMock())
+    monkeypatch.setattr(routes, "forward_twilio_webhook", MagicMock())
     monkeypatch.setattr(
         routes.PublicationService, "validate", staticmethod(lambda text: None)
     )
@@ -39,18 +40,18 @@ def _signed_post(client, params, auth_token=AUTH_TOKEN, url=WEBHOOK_URL):
 
 
 def test_valid_signature_queues_publication(client):
-    params = {"From": "+12025550123", "Body": "cGF5bG9hZA=="}
+    params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
     response = _signed_post(client, params)
 
     assert response.status_code == 200
     assert "text/xml" in response.headers["content-type"]
     routes.publish_message.delay.assert_called_once_with(
-        "cGF5bG9hZA==", "+12025550123", "sms"
+        "cGF5bG9hZA==", "+237123456789", "sms"
     )
 
 
 def test_invalid_signature_rejected(client):
-    params = {"From": "+12025550123", "Body": "cGF5bG9hZA=="}
+    params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
     response = _signed_post(client, params, auth_token="wrong-token")
 
     assert response.status_code == 403
@@ -59,7 +60,7 @@ def test_invalid_signature_rejected(client):
 
 def test_missing_signature_header_rejected(client):
     response = client.post(
-        "/v1/twilio-sms", data={"From": "+12025550123", "Body": "cGF5bG9hZA=="}
+        "/v1/twilio-sms", data={"From": "+237123456789", "Body": "cGF5bG9hZA=="}
     )
 
     assert response.status_code == 403
@@ -67,7 +68,7 @@ def test_missing_signature_header_rejected(client):
 
 
 def test_missing_body_field_rejected(client):
-    params = {"From": "+12025550123"}
+    params = {"From": "+237123456789"}
     response = _signed_post(client, params)
 
     assert response.status_code == 400
@@ -80,7 +81,7 @@ def test_malformed_payload_rejected(client, monkeypatch):
 
     monkeypatch.setattr(routes.PublicationService, "validate", staticmethod(_raise))
 
-    params = {"From": "+12025550123", "Body": "not-base64"}
+    params = {"From": "+237123456789", "Body": "not-base64"}
     response = _signed_post(client, params)
 
     assert response.status_code == 400
@@ -90,8 +91,18 @@ def test_malformed_payload_rejected(client, monkeypatch):
 def test_transport_disabled_returns_404(client, monkeypatch):
     monkeypatch.setattr(routes, "TWILIO_SMS_TRANSPORT_ENABLED", False)
 
-    params = {"From": "+12025550123", "Body": "cGF5bG9hZA=="}
+    params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
     response = _signed_post(client, params)
 
     assert response.status_code == 404
     routes.publish_message.delay.assert_not_called()
+
+
+def test_forwarding_queued(client):
+    params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
+    response = _signed_post(client, params)
+
+    assert response.status_code == 200
+    routes.forward_twilio_webhook.delay.assert_called_once_with(
+        params, "+237123456789", "cGF5bG9hZA=="
+    )

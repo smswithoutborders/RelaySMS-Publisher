@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import requests
-from celery.utils.log import get_task_logger
 
+from logutils import get_logger
 from tasks.celery_app import celery_app
 from utils import get_configs
 
-logger = get_task_logger(__name__)
+logger = get_logger(__name__)
 
 WORKER_PUSH_URL = get_configs("UPTIME_KUMA_WORKER_PUSH_URL")
 

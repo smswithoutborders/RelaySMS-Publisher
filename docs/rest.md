@@ -212,6 +212,11 @@ Ingests an inbound SMS relayed by Twilio's messaging webhook and queues it for p
 
 Payloads queued here are tagged with protocol `sms`. If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set without `sms`, offline payloads are discarded instead of published. See [Offline Publishing](../README.md#offline-publishing).
 
+**Forwarding to additional URLs:** Twilio only supports one webhook URL. Set `TWILIO_FORWARD_URLS_RAW` and/or `TWILIO_FORWARD_URLS_JSON` (comma-separated) to forward each inbound SMS.
+
+* `TWILIO_FORWARD_URLS_RAW`: same form-encoded params Twilio sent (`From`, `Body`, `MessageSid`, ...)
+* `TWILIO_FORWARD_URLS_JSON`: normalized `{"sender", "text", "received_at"}` JSON body
+
 **Error Responses:**
 
 | Status | Condition |
