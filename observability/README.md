@@ -41,6 +41,7 @@ sed \
   -e "s/__POSTGRES_PASSWORD__/$(openssl rand -hex 24)/" \
   -e "s/__SIGNOZ_PORT__/8090/" -e "s/__OTLP_GRPC_PORT__/4317/" -e "s/__OTLP_HTTP_PORT__/4318/" \
   -e "s/__SMTP_SMARTHOST__//" -e "s/__SMTP_USERNAME__//" -e "s/__SMTP_PASSWORD__//" -e "s/__SMTP_FROM__//" \
+  -e "s|__SIGNOZ_EXTERNAL_URL__|http://localhost:8090|" \
   observability/signoz/casting.yaml.template > observability/signoz/casting.yaml
 
 foundryctl cast -f observability/signoz/casting.yaml
@@ -59,8 +60,7 @@ curl -X POST http://127.0.0.1:8090/api/v1/register \
 `sqlite` for a single-node setup. Retention isn't a `casting.yaml` field:
 set it in the UI, under Settings > Workspace > Retention Controls.
 
-`casting.yaml` is only generated once: any `--signoz-*` flag (port, SMTP,
-etc.) on a rerun is ignored once the file already exists. To change
+`casting.yaml` is only generated once. To change
 something on an already-running install, edit the matching line in
 `observability/signoz/casting.yaml` directly, then re-run
 `foundryctl cast -f observability/signoz/casting.yaml`. This only

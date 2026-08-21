@@ -213,6 +213,9 @@ if ! command -v foundryctl &>/dev/null; then
   curl -fsSL https://signoz.io/foundry.sh | FOUNDRY_INSTALL_DIR=/usr/local/bin bash
 fi
 
+signoz_external_url="http://localhost:$SIGNOZ_PORT"
+[ -n "$SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && signoz_external_url="https://$SITE_NAME"
+
 # Generated once; a rerun with a different --signoz-port after this file
 # exists won't change it, same as the Postgres credentials.
 if [ ! -f observability/signoz/casting.yaml ]; then
@@ -231,6 +234,7 @@ if [ ! -f observability/signoz/casting.yaml ]; then
     -e "s/__SMTP_USERNAME__/$SIGNOZ_SMTP_USERNAME/" \
     -e "s/__SMTP_PASSWORD__/$SIGNOZ_SMTP_PASSWORD/" \
     -e "s/__SMTP_FROM__/$SIGNOZ_SMTP_FROM/" \
+    -e "s|__SIGNOZ_EXTERNAL_URL__|$signoz_external_url|" \
     observability/signoz/casting.yaml.template >observability/signoz/casting.yaml
 fi
 
@@ -352,6 +356,6 @@ if [ "$SKIP_TRACING" != "1" ]; then
 fi
 
 log "SigNoz: http://localhost:$SIGNOZ_PORT  Uptime Kuma: http://localhost:$KUMA_PORT"
-[ -n "$SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "SigNoz reverse proxy: https://$SITE_NAME"
+[ -n "$SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "SigNoz reverse proxy: $signoz_external_url"
 [ -n "$KUMA_SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "Uptime Kuma reverse proxy: https://$KUMA_SITE_NAME"
 log "Create Uptime Kuma monitors and set retention in SigNoz, see observability/README.md"
