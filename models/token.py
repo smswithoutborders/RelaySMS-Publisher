@@ -3,9 +3,9 @@
 
 import datetime
 import secrets
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict
 
-from sqlalchemy import BigInteger, SmallInteger, String, select
+from sqlalchemy import BigInteger, SmallInteger, String
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from db import Base
@@ -62,11 +62,6 @@ def create(
     session.add(token)
     session.flush()
     return token
-
-
-def get_by_token_id(token_id: bytes, session: Session) -> Optional[Token]:
-    """Fetch a token by its public token_id."""
-    return session.scalar(select(Token).where(Token.token_id == token_id))
 
 
 def update_token_data(

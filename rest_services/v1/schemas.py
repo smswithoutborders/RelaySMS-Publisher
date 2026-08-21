@@ -1,37 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
-
-
-class PublicationStatsCreate(BaseModel):
-    country_code: Optional[str] = None
-    platform_name: Optional[str] = None
-    protocol: Optional[str] = None
-    status: str
-    failure_reason: Optional[str] = None
-    created_at: Optional[datetime.datetime] = None
-
-
-class PublicationStatsRead(PublicationStatsCreate):
-    id: int
-
-
-class Pagination(BaseModel):
-    total_records: int
-    page: int
-    page_size: int
-    total_pages: int
-
-
-class PublicationStatsResponse(BaseModel):
-    total_publications: int
-    total_published: int
-    total_failed: int
-    data: list[PublicationStatsRead]
-    pagination: Optional[Pagination] = None
 
 
 class PlatformManifest(BaseModel):

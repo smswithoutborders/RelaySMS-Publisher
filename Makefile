@@ -24,7 +24,7 @@ endef
 
 grpc-compile:
 	$(call log,INFO,Compiling gRPC protos ...)
-	@for v in v1 v2 v3; do \
+	@for v in v3; do \
 		$(python) -m grpc_tools.protoc \
 			--proto_path=. \
 			--python_out=. \
