@@ -18,8 +18,8 @@ from rest_services.v1.schemas import (
     GatewayClientManifest,
     OAuthClientMetadata,
     PlatformManifest,
-    PublishContentRequest,
     PublishContentResponse,
+    PublishRestContentRequest,
     ServerStaticPublicKey,
 )
 from tasks.forward_task import forward_twilio_webhook
@@ -202,13 +202,13 @@ async def oauth_callback(
 
 
 @router.post("/publications", response_model=PublishContentResponse)
-def create_publications(body: PublishContentRequest) -> PublishContentResponse:
+def create_publications(body: PublishRestContentRequest) -> PublishContentResponse:
     try:
         PublicationService.validate(body.text)
     except PayloadMalformedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    publish_message.delay(body.text, body.address, "https")
+    publish_message.delay(body.text, body.address, "https", body.tag)
     logger.info("Successfully queued publication request via protocol %r.", "https")
     return PublishContentResponse(message="Publication request queued successfully.")
 

@@ -168,11 +168,14 @@ PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets
 
 ```bash
 OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=      # Comma-separated allowlist of ingestion protocols allowed to publish offline payloads, e.g. smtp,sms (empty allows all)
+OFFLINE_PUBLISH_SHARED_SECRET=          # Shared secret required in the "tag" field for offline payloads over https (empty disables the check). 64-char hex (32 bytes).
 ```
 
 Offline payloads are tagged with the protocol they came in on: `https` for [REST `/publications`](docs/rest.md#7-publish-content), `smtp` for the [SMTP transport](docs/smtp.md), `sms` for the [Twilio transport](docs/rest.md#8-twilio-incoming-sms). If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set, offline payloads from any other protocol are discarded.
 
 `https` is excluded by default since it's unauthenticated and free to spam. `smtp` and `sms` are allowed because their listeners authenticate the sender first (DKIM + allowlist for `smtp`, signature check for `sms`).
+
+If `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads submitted over `https` must also carry a matching `tag` value in the request body (`PublishContentRequest.tag`).
 
 ### Logging & Observability
 

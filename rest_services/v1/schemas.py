@@ -83,6 +83,16 @@ class PublishContentRequest(BaseModel):
     )
 
 
+class PublishRestContentRequest(PublishContentRequest):
+    tag: Optional[str] = Field(
+        None,
+        description=(
+            "Shared secret required to publish offline payloads "
+            "over https when OFFLINE_PUBLISH_SHARED_SECRET is configured."
+        ),
+    )
+
+
 class PublishContentResponse(BaseModel):
     message: Optional[str] = None
     error: Optional[str] = None

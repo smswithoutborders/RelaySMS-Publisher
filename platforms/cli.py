@@ -82,7 +82,7 @@ def exec_(name, proto_id, cat_id, cli_args):
     python_exec = Path(manifest.venv_path).resolve() / "bin" / "python3"
 
     if not adapter_cli.is_file():
-        raise click.ClickException(f"Adapter '{name}' has no cli.py — nothing to run.")
+        raise click.ClickException(f"Adapter '{name}' has no cli.py: nothing to run.")
     if not python_exec.is_file():
         raise click.ClickException(
             f"Adapter '{name}' virtualenv not found at {python_exec.parent.parent}."

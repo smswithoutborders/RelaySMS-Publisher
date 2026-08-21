@@ -10,6 +10,7 @@ from models.publication_stats import record as record_publication
 from platforms.adapter_manager import AdapterManager
 from publications import (
     AdapterIntegrationError,
+    OfflineTagError,
     PayloadMalformedError,
     PayloadNotSupportedError,
     ProtocolNotAllowedError,
@@ -57,7 +58,10 @@ def _get_adapter_manager() -> AdapterManager:
 
 @celery_app.task(name="tasks.publication_task.publish_message")
 def publish_message(
-    text_payload: str, sender_address: str, protocol: str | None = None
+    text_payload: str,
+    sender_address: str,
+    protocol: str | None = None,
+    tag: str | None = None,
 ) -> None:
     """Validate, assemble, and run message publication pipeline."""
     with get_session() as db:
@@ -75,6 +79,7 @@ def publish_message(
                 raw_segment=raw_segment,
                 payload_type=payload_type,
                 protocol=protocol,
+                tag=tag,
             )
 
             if platform_name is None:
@@ -93,6 +98,7 @@ def publish_message(
             PayloadMalformedError,
             PayloadNotSupportedError,
             ProtocolNotAllowedError,
+            OfflineTagError,
             KeyManagerError,
         ) as exc:
             record_publication(

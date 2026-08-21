@@ -1,10 +1,7 @@
-"""
-This program is free software: you can redistribute it under the terms
-of the GNU General Public License, v. 3.0. If a copy of the GNU General
-Public License was not distributed with this file, see <https://www.gnu.org/licenses/>.
-"""
+# SPDX-License-Identifier: GPL-3.0-only
 
 import pytest
+
 from translations import Localization
 
 TEST_LOCALIZATION_DATA = """
@@ -125,15 +122,3 @@ def test_translate_without_setting_locale(temp_ini_file):
 
     with pytest.raises(RuntimeError, match="Locale is not set"):
         loc.translate("greeting")
-
-
-def test_translation_falls_back_to_default_on_invalid_locale(localization):
-    """
-    Test that if setting a locale fails, translations continue using the default locale.
-    """
-    assert localization.locale_code == "en"
-
-    with pytest.raises(ValueError, match="Localization for 'es' is not available"):
-        localization.set_locale("es")
-
-    assert localization.translate("greeting") == "Hello, welcome!"

@@ -810,6 +810,14 @@ def cmd_sync_keys(host, port, tls, rest_api, token, **_):
     is_flag=True,
     help="Use the offline-first encryption scheme instead of the token-based flow.",
 )
+@click.option(
+    "--tag",
+    metavar="SECRET",
+    help=(
+        "Shared secret to send in the request's 'tag' field. Required when the "
+        "server has OFFLINE_PUBLISH_SHARED_SECRET set and --offline is used."
+    ),
+)
 def cmd_send(
     rest_api,
     platform,
@@ -823,6 +831,7 @@ def cmd_send(
     shuffle,
     dry_run,
     offline,
+    tag,
     **_,
 ):
     """Publish an encrypted message to any platform (online or offline) via the REST API."""
@@ -885,6 +894,8 @@ def cmd_send(
             click.echo(f"    send order : {order}")
         for pos, idx in enumerate(order):
             req_body = {"address": address, "text": segments_b64[idx]}
+        if tag:
+            req_body["tag"] = tag
             click.echo(f"  segment [{pos + 1}/{len(order)}] (seg_num={idx}):")
             click.echo(json.dumps(req_body, indent=4))
         return
@@ -904,6 +915,8 @@ def cmd_send(
 
     for pos, idx in enumerate(order):
         req_body = {"address": address, "text": segments_b64[idx]}
+        if tag:
+            req_body["tag"] = tag
         logger.info("sending segment [%d/%d] seg_num=%d", pos + 1, len(order), idx)
         try:
             resp = requests.post(url, json=req_body, timeout=30)

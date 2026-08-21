@@ -33,7 +33,23 @@ def test_valid_payload_queues_publication(client):
 
     assert response.status_code == 200
     routes.publish_message.delay.assert_called_once_with(
-        "cGF5bG9hZA==", "+12025550123", "https"
+        "cGF5bG9hZA==", "+12025550123", "https", None
+    )
+
+
+def test_tag_is_forwarded_when_present(client):
+    response = client.post(
+        "/v1/publications",
+        json={
+            "address": "+12025550123",
+            "text": "cGF5bG9hZA==",
+            "tag": "s3cret-tag",
+        },
+    )
+
+    assert response.status_code == 200
+    routes.publish_message.delay.assert_called_once_with(
+        "cGF5bG9hZA==", "+12025550123", "https", "s3cret-tag"
     )
 
 

@@ -14,12 +14,12 @@ grpcio-tools==1.83.0
 imap-tools==1.15.0
 msgspec==0.21.1
 opentelemetry-api==1.44.0
-phonenumbers==9.0.36
+phonenumbers==9.0.37
 psycopg2-binary==2.9.12
 pymysql==1.2.0
 python-magic==0.4.27
 requests==2.34.2
-sqlalchemy==2.0.51
+sqlalchemy==2.0.52
 sqlcipher3-binary==0.6.0
 tqdm==4.70.0
-twilio==9.10.9
+twilio==9.11.0

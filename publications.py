@@ -2,6 +2,7 @@
 """Publication processing pipeline service."""
 
 import base64
+import secrets
 import uuid
 from typing import Optional
 
@@ -21,11 +22,20 @@ from models.token import update_token_data
 from models.token_hash import update_last_used as mark_token_hash_used
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from platforms.adapter_manager import AdapterManager
-from utils import get_config_list
+from utils import get_config_list, get_configs
 
 logger = get_logger(__name__)
 
 OFFLINE_PUBLISH_ALLOWED_PROTOCOLS = get_config_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
+OFFLINE_PUBLISH_SHARED_SECRET = get_configs("OFFLINE_PUBLISH_SHARED_SECRET")
+
+if OFFLINE_PUBLISH_SHARED_SECRET:
+    try:
+        secret_len = len(bytes.fromhex(OFFLINE_PUBLISH_SHARED_SECRET))
+    except ValueError as e:
+        raise ValueError(f"Invalid OFFLINE_PUBLISH_SHARED_SECRET: {e}")
+    if secret_len != 32:
+        raise ValueError("OFFLINE_PUBLISH_SHARED_SECRET must be 32 bytes (64 hex chars)")
 
 
 class PublicationError(Exception):
@@ -45,6 +55,18 @@ class AdapterIntegrationError(PublicationError):
 
 
 class ProtocolNotAllowedError(PublicationError):
+    pass
+
+
+class OfflineTagError(PublicationError):
+    pass
+
+
+class OfflineTagMissingError(OfflineTagError):
+    pass
+
+
+class OfflineTagInvalidError(OfflineTagError):
     pass
 
 
@@ -80,6 +102,7 @@ class PublicationService:
         raw_segment: bytes,
         payload_type: rrs.V1PayloadsTypes,
         protocol: Optional[str] = None,
+        tag: Optional[str] = None,
     ) -> Optional[str]:
         """Processes incoming payload and publishes to target platform."""
         payload = self._assemble(
@@ -92,7 +115,7 @@ class PublicationService:
         if payload is None:
             return None
 
-        return self._dispatch(payload, protocol=protocol)
+        return self._dispatch(payload, protocol=protocol, tag=tag)
 
     def _assemble(
         self,
@@ -123,7 +146,12 @@ class PublicationService:
                 logger.error("Payload type not supported: %r", payload_type)
                 raise PayloadNotSupportedError(f"Unsupported type: {payload_type!r}")
 
-    def _dispatch(self, payload: rrs.V1Payloads, protocol: Optional[str] = None) -> str:
+    def _dispatch(
+        self,
+        payload: rrs.V1Payloads,
+        protocol: Optional[str] = None,
+        tag: Optional[str] = None,
+    ) -> str:
         token_id = payload.get_t_id()
 
         if token_id is None:
@@ -140,6 +168,25 @@ class PublicationService:
                 raise ProtocolNotAllowedError(
                     f"Protocol {protocol!r} is not allowed to publish offline content."
                 )
+
+            if protocol == "https" and OFFLINE_PUBLISH_SHARED_SECRET:
+                if not tag:
+                    logger.warning(
+                        "Discarding offline payload with missing tag (protocol=%r).",
+                        protocol,
+                    )
+                    raise OfflineTagMissingError(
+                        "Tag is required for offline content over https."
+                    )
+
+                if not secrets.compare_digest(
+                    tag.encode(), OFFLINE_PUBLISH_SHARED_SECRET.encode()
+                ):
+                    logger.warning(
+                        "Discarding offline payload with invalid tag (protocol=%r).",
+                        protocol,
+                    )
+                    raise OfflineTagInvalidError("Invalid tag for offline content.")
 
             return self._publish_offline_content(
                 key_id=payload.get_kid(),

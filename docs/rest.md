@@ -167,6 +167,7 @@ Submit an encrypted SMS payload for decryption and publication to its target pla
 | :--- | :--- | :--- | :--- |
 | address | string | Yes | Sender phone number in E.164 format (e.g., `+12025550123`) |
 | text | string | Yes | Base64-encoded serialized payload |
+| tag | string | No | Shared secret matching `OFFLINE_PUBLISH_SHARED_SECRET`; required for offline payloads when that variable is set. See [Offline Publishing](../README.md#offline-publishing). |
 
 **Response Body:** `PublishContentResponse`
 
@@ -181,7 +182,7 @@ Submit an encrypted SMS payload for decryption and publication to its target pla
 | `WITHOUT_ATTACHMENT` | Deserialized and published immediately |
 | `WITH_ATTACHMENT_HEADER` / `WITH_ATTACHMENT_NO_HEADER` | Segment stored; once all segments are assembled the full payload is published |
 
-Payloads queued here are tagged with protocol `https`. If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set without `https`, offline payloads are discarded instead of published. See [Offline Publishing](../README.md#offline-publishing).
+Payloads queued here are tagged with protocol `https`. If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set without `https`, offline payloads are discarded instead of published. If `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads also require a matching `tag`. See [Offline Publishing](../README.md#offline-publishing).
 
 **Error Responses:**
 

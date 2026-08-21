@@ -156,6 +156,12 @@ python -m tests.client send --platform gmail --address +237123456789 --to friend
 python -m tests.client send --offline --platform rmail --address +237123456789 --to friend@example.com --subject "Hello" --body "No token needed"
 ```
 
+If the server has `OFFLINE_PUBLISH_SHARED_SECRET` set, pass the matching value with `--tag`, or the offline publish is discarded:
+
+```sh
+python -m tests.client send --offline --platform rmail --address +237123456789 --to friend@example.com --subject "Hello" --body "No token needed" --tag <SECRET>
+```
+
 **Arguments:**
 
 | Argument | Required | Description |
@@ -170,6 +176,7 @@ python -m tests.client send --offline --platform rmail --address +237123456789 -
 | `--token` | No | Raw token (base64) to use. Omit for interactive prompt. |
 | `--dry-run` | No | Print all segments and their send order instead of transmitting. |
 | `--offline` | No | Use the offline-first encryption scheme instead of the token-based flow. |
+| `--tag` | No | Shared secret sent in the request's `tag` field. Required if the server has `OFFLINE_PUBLISH_SHARED_SECRET` set. |
 
 > [!NOTE]
 > Each online send consumes one ephemeral keypair. The used keypair is removed from local state after a successful publish. Run `sync-keys` to replenish the pool when it runs low. `--offline` sends do not consume ephemeral keypairs since they don't use a stored token.
