@@ -175,6 +175,8 @@ class PNBAProtocolInterface(BaseProtocolInterface):
             Dict[str, Any]: A dictionary containing:
                 - success (bool): True if the code was sent successfully, False otherwise.
                 - message (str): A response message.
+                - expires_at (int | str, optional): Code expiry, as epoch seconds
+                  or an ISO 8601 timestamp.
         """
 
     @abstractmethod

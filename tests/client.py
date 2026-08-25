@@ -416,6 +416,8 @@ def cmd_get_pnba_code(
 
     click.echo(f"Success : {response.success}")
     click.echo(f"Message : {response.message}")
+    if response.HasField("expires_at"):
+        click.echo(f"Expires At : {response.expires_at}")
 
 
 @cli.command("exchange-pnba-code")

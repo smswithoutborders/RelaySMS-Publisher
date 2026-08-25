@@ -235,6 +235,7 @@ Requests a one-time passcode (OTP) for Phone Number-Based Authentication.
 | :--- | :--- | :--- |
 | success | bool | Operation success |
 | message | string | Response message |
+| expires_at | int64 | Optional. Code expiry, Unix epoch seconds |
 
 **Example:**
 

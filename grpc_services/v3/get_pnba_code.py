@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """GetPNBACode gRPC service handler."""
 
+from datetime import datetime
+
 import grpc
 
 from logutils import get_logger
@@ -8,6 +10,20 @@ from platforms.adapter_ipc_handler import AdapterIPCHandler
 from protos.v3 import publisher_pb2
 
 logger = get_logger(__name__)
+
+
+def _to_epoch_seconds(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    try:
+        return int(
+            datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+        )
+    except ValueError:
+        logger.warning("Ignoring unparseable expires_at %r.", value)
+        return None
 
 
 def GetPNBACode(self, request, context):
@@ -63,7 +79,11 @@ def GetPNBACode(self, request, context):
                 grpc.StatusCode.INVALID_ARGUMENT,
             )
 
-        return response(success=True, message=result.get("message"))
+        expires_at = _to_epoch_seconds(result.get("expires_at"))
+        message = response(success=True, message=result.get("message"))
+        if expires_at is not None:
+            message.expires_at = expires_at
+        return message
 
     except NotImplementedError as exc:
         return self.handle_create_grpc_error_response(
