@@ -33,6 +33,16 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(v1_router, prefix="/v1")
 
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Apply baseline security headers to every response."""
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = "default-src 'none'"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
 @app.get("/health")
 def health():
     """Liveness/readiness check for uptime monitoring."""

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import html
 import json
 from pathlib import Path as PathLib
 from typing import List, Optional
@@ -181,16 +182,17 @@ async def oauth_callback(
         )
 
     table_rows = "".join(
-        f"<tr><td>{key}</td><td>{value}</td></tr>"
+        f"<tr><td>{html.escape(key)}</td><td>{html.escape(str(value))}</td></tr>"
         for key, value in request.query_params.items()
     )
+    platform_display_name = platform_name.capitalize()
 
     return HTMLResponse(
         content=f"""
     <html>
-        <head><title>{platform_name.capitalize()} OAuth Callback Params</title></head>
+        <head><title>{platform_display_name} OAuth Callback Params</title></head>
         <body>
-            <h2>{platform_name.capitalize()}'s Callback Params</h2>
+            <h2>{platform_display_name}'s Callback Params</h2>
             <table border="1">
                 <tr><th>Parameter</th><th>Value</th></tr>
                 {table_rows}
