@@ -10,8 +10,8 @@ from db import get_session
 from keys import KeyManager, KeyManagerError
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
-from platforms.adapter_ipc_handler import AdapterIPCHandler
 from protos.v3 import publisher_pb2
+from token_revocation import revoke_pnba_token_upstream
 
 logger = get_logger(__name__)
 
@@ -76,23 +76,12 @@ def RevokePNBAToken(self, request, context):
                     grpc.StatusCode.UNAUTHENTICATED,
                 )
 
-            adapter = self.adapter_manager.get_pnba_adapter(token.platform)
-
-            pipe = AdapterIPCHandler.invoke(
-                adapter_path=adapter.path,
-                venv_path=adapter.venv_path,
-                method="invalidate_session",
-                params={
-                    "phone_number": token.token_data["account_id"],
-                    "base_path": adapter.assets_path,
-                },
-            )
-
-            if pipe.get("error"):
+            error = revoke_pnba_token_upstream(token, self.adapter_manager)
+            if error:
                 logger.error(
                     "Adapter revocation failed for platform %r: %s",
                     token.platform,
-                    pipe["error"],
+                    error,
                 )
 
             s.delete(token)

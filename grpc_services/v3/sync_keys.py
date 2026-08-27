@@ -14,6 +14,7 @@ from grpc_services.v3.utils import (
 from keys import KeyManager, KeyManagerError
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
+from models.token_hash import update_last_used as mark_token_hash_used
 from protos.v3 import publisher_pb2
 
 logger = get_logger(__name__)
@@ -99,6 +100,7 @@ def SyncKeys(self, request, context):
                 client_ephemeral_public_keys=request.client_ephemeral_public_keys,
                 session=s,
             )
+            mark_token_hash_used(token_hash_obj, s)
             logger.info("Successfully synced keys for token_id=%s", request.token_id)
 
         return response(

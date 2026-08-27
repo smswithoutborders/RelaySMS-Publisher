@@ -59,6 +59,14 @@ _BROKER_BUILDERS = {
 _DEFAULT_CONCURRENCY = {"sqlite": 1, "redis": 4, "rabbitmq": 4}
 
 
+def _parse_cron(config_name: str, default_value: str) -> crontab:
+    cron_expr = get_configs(config_name, default_value=default_value)
+    try:
+        return crontab.from_string(cron_expr)
+    except ValueError as e:
+        raise ValueError(f"Invalid {config_name} '{cron_expr}': {e}") from None
+
+
 def make_celery() -> Celery:
     """Create and configure the Celery application."""
     broker_type = get_configs("CELERY_BROKER_TYPE", default_value="sqlite").lower()
@@ -82,16 +90,17 @@ def make_celery() -> Celery:
     )
     _ensure_db_dir(schedule_path)
 
-    cleanup_cron = get_configs("CELERY_CLEANUP_CRON", default_value="0 */3 * * *")
-    try:
-        cleanup_schedule = crontab.from_string(cleanup_cron)
-    except ValueError as e:
-        raise ValueError(f"Invalid CELERY_CLEANUP_CRON '{cleanup_cron}': {e}") from None
+    cleanup_schedule = _parse_cron("CELERY_CLEANUP_CRON", "0 */3 * * *")
+    token_cleanup_schedule = _parse_cron("CELERY_TOKEN_CLEANUP_CRON", "0 3 * * *")
 
     beat_schedule = {
         "cleanup-stale-payload-sessions": {
             "task": "tasks.cleanup_task.cleanup_stale_payload_sessions",
             "schedule": cleanup_schedule,
+        },
+        "cleanup-idle-tokens": {
+            "task": "tasks.cleanup_task.cleanup_idle_tokens",
+            "schedule": token_cleanup_schedule,
         },
     }
     if get_configs("UPTIME_KUMA_WORKER_PUSH_URL"):

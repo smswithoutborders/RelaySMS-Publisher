@@ -3,16 +3,14 @@
 
 import datetime
 import secrets
-from typing import TYPE_CHECKING, Any, Dict
+from typing import Any, Dict, List
 
-from sqlalchemy import BigInteger, SmallInteger, String
+from sqlalchemy import BigInteger, SmallInteger, String, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from db import Base
 from db_types import EncryptedJSON
-
-if TYPE_CHECKING:
-    from models import TokenHash
+from models.token_hash import TokenHash
 
 
 def _generate_uint32_token() -> int:
@@ -71,3 +69,13 @@ def update_token_data(
     token.token_data = new_token_data
     session.flush()
     return token
+
+
+def get_idle(older_than: datetime.datetime, session: Session) -> List[Token]:
+    return list(
+        session.scalars(
+            select(Token)
+            .join(TokenHash)
+            .where(func.coalesce(TokenHash.last_used_at, Token.created_at) < older_than)
+        )
+    )

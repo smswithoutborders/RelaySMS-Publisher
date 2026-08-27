@@ -50,6 +50,7 @@ class TokenHash(Base):
             unique=True,
             mysql_length=32,
         ),
+        Index("ix_token_hashes_last_used_at", "last_used_at"),
     )
 
 
