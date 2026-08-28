@@ -8,6 +8,14 @@ from logutils import get_logger
 logger = get_logger(__name__)
 
 
+class PlatformAwareError(Exception):
+    """Base for exceptions that may know which platform they occurred on."""
+
+    def __init__(self, message: str, *, platform_name: Optional[str] = None):
+        super().__init__(message)
+        self.platform_name = platform_name
+
+
 def get_configs(config_name, strict=False, default_value=None):
     """
     Retrieves the value of a configuration from the environment variables.

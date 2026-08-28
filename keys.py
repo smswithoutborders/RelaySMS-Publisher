@@ -13,11 +13,12 @@ from models.server_identity_key import ServerIdentityKey, get_private_key
 from models.server_identity_key import mark_key_used as mark_ss_kid_used
 from models.token import Token
 from models.token_hash import TokenHash
+from utils import PlatformAwareError
 
 logger = get_logger(__name__)
 
 
-class KeyManagerError(Exception):
+class KeyManagerError(PlatformAwareError):
     pass
 
 
@@ -119,11 +120,15 @@ class KeyManager:
         token_hash_obj = token.token_hash
         if token_hash_obj is None:
             logger.error("Token hash missing for token_id=%s", token_id)
-            raise KeyNotFoundError("Token hash not found")
+            raise KeyNotFoundError("Token hash not found", platform_name=token.platform)
 
-        ss_kid, se_private, se_public, ce_public = self.get_keys_for_decryption(
-            token_hash_id=token_hash_obj.id, key_id=key_id
-        )
+        try:
+            ss_kid, se_private, se_public, ce_public = self.get_keys_for_decryption(
+                token_hash_id=token_hash_obj.id, key_id=key_id
+            )
+        except KeyUnavailableError as exc:
+            exc.platform_name = token.platform
+            raise
         return token, token_hash_obj, ss_kid, se_private, se_public, ce_public
 
     def mark_identity_key_used(self, key_id: int) -> None:

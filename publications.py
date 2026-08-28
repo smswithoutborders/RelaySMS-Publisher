@@ -22,12 +22,13 @@ from models.token import update_token_data
 from models.token_hash import update_last_used as mark_token_hash_used
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from platforms.adapter_manager import AdapterManager
-from utils import get_config_list, get_configs
+from utils import PlatformAwareError, get_config_list, get_configs
 
 logger = get_logger(__name__)
 
 OFFLINE_PUBLISH_ALLOWED_PROTOCOLS = get_config_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
 OFFLINE_PUBLISH_SHARED_SECRET = get_configs("OFFLINE_PUBLISH_SHARED_SECRET")
+OFFLINE_CONTENT_PLATFORM = "rmail"
 
 if OFFLINE_PUBLISH_SHARED_SECRET:
     try:
@@ -35,10 +36,12 @@ if OFFLINE_PUBLISH_SHARED_SECRET:
     except ValueError as e:
         raise ValueError(f"Invalid OFFLINE_PUBLISH_SHARED_SECRET: {e}")
     if secret_len != 32:
-        raise ValueError("OFFLINE_PUBLISH_SHARED_SECRET must be 32 bytes (64 hex chars)")
+        raise ValueError(
+            "OFFLINE_PUBLISH_SHARED_SECRET must be 32 bytes (64 hex chars)"
+        )
 
 
-class PublicationError(Exception):
+class PublicationError(PlatformAwareError):
     pass
 
 
@@ -227,7 +230,9 @@ class PublicationService:
             logger.exception(
                 "Decryption failed for token %d with key %d.", token_id, key_id
             )
-            raise PayloadMalformedError("Decryption failed.") from exc
+            raise PayloadMalformedError(
+                "Online payload decryption failed.", platform_name=token.platform
+            ) from exc
 
         self.key_manager.mark_identity_key_used(key_id)
 
@@ -245,7 +250,9 @@ class PublicationService:
             )
         except Exception:
             logger.exception("Failed to deserialize content for token %d.", token_id)
-            raise PayloadMalformedError("Content deserialization failed.")
+            raise PayloadMalformedError(
+                "Online content deserialization failed.", platform_name=token.platform
+            )
 
         try:
             proto_id = rrs.v1_payload_support_protocols_from_u8(token.proto_id)
@@ -280,7 +287,9 @@ class PublicationService:
                 logger.error(
                     "Protocol %r not supported on token %d.", proto_id, token_id
                 )
-                raise PayloadNotSupportedError(f"Unsupported protocol: {proto_id!r}")
+                raise PayloadNotSupportedError(
+                    f"Unsupported protocol: {proto_id!r}", platform_name=token.platform
+                )
 
         pipe = AdapterIPCHandler.invoke(
             adapter_path=adapter.path,
@@ -296,7 +305,9 @@ class PublicationService:
                 token_id,
                 pipe["error"],
             )
-            raise AdapterIntegrationError("Failed to send message via adapter.")
+            raise AdapterIntegrationError(
+                f"Adapter error: {pipe['error']}", platform_name=token.platform
+            )
 
         result = pipe.get("result")
         if isinstance(result, bool):
@@ -317,7 +328,9 @@ class PublicationService:
                 token_id,
                 result.get("message"),
             )
-            raise AdapterIntegrationError("Failed to send message via adapter.")
+            raise AdapterIntegrationError(
+                f"Adapter error: {result.get('message')}", platform_name=token.platform
+            )
 
         mark_token_hash_used(token_hash_obj, self.session)
         logger.info("Published message for token %d via %r.", token_id, token.platform)
@@ -345,7 +358,10 @@ class PublicationService:
             )
         except Exception:
             logger.exception("Failed to decrypt offline payload with key %d.", key_id)
-            raise PayloadMalformedError("Decryption failed.")
+            raise PayloadMalformedError(
+                "Offline payload decryption failed.",
+                platform_name=OFFLINE_CONTENT_PLATFORM,
+            )
 
         self.key_manager.mark_identity_key_used(key_id)
 
@@ -356,9 +372,12 @@ class PublicationService:
             )
         except Exception:
             logger.exception("Failed to deserialize offline content")
-            raise PayloadMalformedError("Content deserialization failed.")
+            raise PayloadMalformedError(
+                "Offline content deserialization failed.",
+                platform_name=OFFLINE_CONTENT_PLATFORM,
+            )
 
-        adapter = self.adapter_manager.get_pnba_adapter("rmail")
+        adapter = self.adapter_manager.get_pnba_adapter(OFFLINE_CONTENT_PLATFORM)
         params = self._get_adapter_params(content=content)
 
         pipe = AdapterIPCHandler.invoke(
@@ -370,7 +389,9 @@ class PublicationService:
 
         if pipe.get("error"):
             logger.error("Adapter %r failed: %s", adapter.name, pipe["error"])
-            raise AdapterIntegrationError("Failed to send message via adapter.")
+            raise AdapterIntegrationError(
+                f"Adapter error: {pipe['error']}", platform_name=adapter.name
+            )
 
         logger.info("Published offline content via %r.", adapter.name)
         return adapter.name

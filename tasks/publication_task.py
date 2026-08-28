@@ -105,6 +105,7 @@ def publish_message(
                 db,
                 protocol=protocol,
                 status="failed",
+                platform_name=exc.platform_name,
                 country_code=_derive_country_code(sender_address),
                 failure_reason=_failure_reason(exc),
             )
@@ -115,6 +116,7 @@ def publish_message(
                 db,
                 protocol=protocol,
                 status="failed",
+                platform_name=exc.platform_name,
                 country_code=_derive_country_code(sender_address),
                 failure_reason=_failure_reason(exc),
             )
