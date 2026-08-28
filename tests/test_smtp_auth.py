@@ -47,10 +47,10 @@ class TestIsSenderAllowed:
 
 
 class TestEvaluateAuthentication:
-    def test_skipped_when_authserv_id_unconfigured(self, monkeypatch):
+    def test_fails_closed_when_authserv_id_unconfigured(self, monkeypatch):
         monkeypatch.setattr(smtp_auth, "SMTP_TRUSTED_AUTHSERV_ID", None)
         passed, _ = smtp_auth.evaluate_authentication(make_message())
-        assert passed is True
+        assert passed is False
 
     def test_fails_when_header_missing(self, monkeypatch):
         monkeypatch.setattr(smtp_auth, "SMTP_TRUSTED_AUTHSERV_ID", "mx.google.com")
@@ -148,6 +148,24 @@ class TestVerifyDkimIndependently:
         passed, _ = smtp_auth.verify_dkim_independently(b"raw", "user@example.com")
         assert passed is False
 
+    def test_fails_when_domain_is_trailing_substring_not_subdomain(self, monkeypatch):
+        monkeypatch.setattr(
+            smtp_auth.dkim,
+            "DKIM",
+            lambda raw: _FakeDKIM(raw, verified=True, domain=b"ample.com"),
+        )
+        passed, _ = smtp_auth.verify_dkim_independently(b"raw", "user@example.com")
+        assert passed is False
+
+    def test_passes_when_signing_domain_is_parent_of_from_domain(self, monkeypatch):
+        monkeypatch.setattr(
+            smtp_auth.dkim,
+            "DKIM",
+            lambda raw: _FakeDKIM(raw, verified=True, domain=b"example.com"),
+        )
+        passed, _ = smtp_auth.verify_dkim_independently(b"raw", "user@mail.example.com")
+        assert passed is True
+
     def test_handles_verification_errors_gracefully(self, monkeypatch):
         def _raise(_raw):
             raise ValueError("boom")
@@ -159,25 +177,31 @@ class TestVerifyDkimIndependently:
 
 class TestEvaluate:
     def test_independent_dkim_only_runs_when_enabled(self, monkeypatch):
-        monkeypatch.setattr(smtp_auth, "SMTP_TRUSTED_AUTHSERV_ID", None)
+        monkeypatch.setattr(smtp_auth, "SMTP_TRUSTED_AUTHSERV_ID", "mx.google.com")
+        monkeypatch.setattr(smtp_auth, "SMTP_REQUIRE_DKIM", True)
+        monkeypatch.setattr(smtp_auth, "SMTP_REQUIRE_SPF", True)
         monkeypatch.setattr(smtp_auth, "SMTP_VERIFY_DKIM_INDEPENDENTLY", False)
         monkeypatch.setattr(
             smtp_auth.dkim,
             "DKIM",
             lambda raw: _FakeDKIM(raw, verified=False, domain=b"example.com"),
         )
-        passed, _ = smtp_auth.evaluate(make_message(), b"raw", "user@example.com")
+        msg = make_message(auth_results=["mx.google.com; dkim=pass; spf=pass"])
+        passed, _ = smtp_auth.evaluate(msg, b"raw", "user@example.com")
         assert passed is True
 
     def test_independent_dkim_runs_and_can_fail_when_enabled(self, monkeypatch):
-        monkeypatch.setattr(smtp_auth, "SMTP_TRUSTED_AUTHSERV_ID", None)
+        monkeypatch.setattr(smtp_auth, "SMTP_TRUSTED_AUTHSERV_ID", "mx.google.com")
+        monkeypatch.setattr(smtp_auth, "SMTP_REQUIRE_DKIM", True)
+        monkeypatch.setattr(smtp_auth, "SMTP_REQUIRE_SPF", True)
         monkeypatch.setattr(smtp_auth, "SMTP_VERIFY_DKIM_INDEPENDENTLY", True)
         monkeypatch.setattr(
             smtp_auth.dkim,
             "DKIM",
             lambda raw: _FakeDKIM(raw, verified=False, domain=b"example.com"),
         )
-        passed, _ = smtp_auth.evaluate(make_message(), b"raw", "user@example.com")
+        msg = make_message(auth_results=["mx.google.com; dkim=pass; spf=pass"])
+        passed, _ = smtp_auth.evaluate(msg, b"raw", "user@example.com")
         assert passed is False
 
     def test_independent_dkim_skipped_when_primary_already_failed(self, monkeypatch):

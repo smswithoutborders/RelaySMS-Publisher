@@ -1,14 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Sender authentication for the SMTP transport.
-
-Two independent checks, both required: an allowlist of who may send at all,
-and trust in the receiving mail server's own Authentication-Results header
-(RFC 8601) rather than re-deriving SPF/DKIM ourselves - by the time a
-message reaches us over IMAP, the sender's connecting IP is long gone, but
-the mailbox's own MTA already checked it in real time. That header is only
-trusted when its authserv-id matches SMTP_TRUSTED_AUTHSERV_ID, since a
-sender could otherwise forge their own passing header.
-"""
+"""Sender authentication for the SMTP transport."""
 
 import re
 from email.message import Message
@@ -73,7 +64,7 @@ def _trusted_result(msg: Message) -> Optional[authres.AuthenticationResultsHeade
 def evaluate_authentication(msg: Message) -> tuple[bool, str]:
     """Check SPF/DKIM verdicts from a trusted Authentication-Results header."""
     if not SMTP_TRUSTED_AUTHSERV_ID:
-        return True, "SMTP_TRUSTED_AUTHSERV_ID not configured; check skipped"
+        return False, "SMTP_TRUSTED_AUTHSERV_ID not configured; rejecting all mail"
 
     header = _trusted_result(msg)
     if header is None:
@@ -104,7 +95,10 @@ def verify_dkim_independently(raw_bytes: bytes, from_email: str) -> tuple[bool, 
 
     signing_domain = (d.domain or b"").decode(errors="ignore").lower()
     from_domain = from_email.rsplit("@", 1)[-1].lower() if "@" in from_email else ""
-    if not signing_domain or not from_domain.endswith(signing_domain):
+    aligned = from_domain == signing_domain or from_domain.endswith(
+        "." + signing_domain
+    )
+    if not signing_domain or not aligned:
         return False, (
             f"DKIM signing domain {signing_domain!r} does not align with "
             f"From domain {from_domain!r}"

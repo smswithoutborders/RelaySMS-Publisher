@@ -63,11 +63,15 @@ server {
     keepalive_timeout    65;
     client_max_body_size 20m;
 
-    location ~ /\.(?!well-known) {
-        deny all;
+    if ($http_user_agent ~* "(nikto|sqlmap|nessus|openvas|w3af|acunetix|netsparker|zmeu|masscan|nmap|arachni|whatweb|wpscan|joomscan|dirbuster|gobuster|feroxbuster|ffuf|nuclei|metasploit|zgrab|commix|havij|qualys)") {
+        return 444;
     }
 
-    location ~* ^/(\.env|\.git|wp-admin|wp-login|xmlrpc|phpmyadmin|shell|config|backup|\.DS_Store) {
+    location ~ /\.(?!well-known) {
+        return 444;
+    }
+
+    location ~* (^/(id_rsa|wp-admin|wp-login|wp-content|wp-includes|wp-json|wlwmanifest|xmlrpc|phpmyadmin|pma|myadmin|adminer|administrator|manager|shell|config|backup|vendor|cgi-bin|server-status|actuator|solr|jenkins|console|telescope|phpunit|eval-stdin|composer\.json|dump\.sql|db\.sql)|\.(bak|backup|old|orig|save|swp|tar|tgz|tar\.gz|zip|rar|7z|sql|db|log|ini|conf)$) {
         return 444;
     }
 
