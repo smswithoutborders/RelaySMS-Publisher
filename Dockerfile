@@ -1,4 +1,4 @@
-FROM python:3.14.7-slim-bookworm AS builder
+FROM python:3.15.0rc1-slim-bookworm AS builder
 
 WORKDIR /publisher
 
@@ -32,7 +32,7 @@ RUN git config --global url."https://github.com/".insteadOf "git@github.com:" \
   && make build-setup
 
 
-FROM python:3.14.7-slim-bookworm
+FROM python:3.15.0rc1-slim-bookworm
 
 WORKDIR /publisher
 
