@@ -400,7 +400,9 @@ class PublicationService:
             )
 
         adapter = self.adapter_manager.get_pnba_adapter(OFFLINE_CONTENT_PLATFORM)
-        params = self._get_adapter_params(content=content)
+        params = self._get_adapter_params(
+            content=content, extras={"base_path": adapter.assets_path}
+        )
 
         pipe = AdapterIPCHandler.invoke(
             adapter_path=adapter.path,
