@@ -33,6 +33,7 @@ def revoke_pnba_token_upstream(
         method="invalidate_session",
         params={
             "phone_number": token.token_data["account_id"],
+            "session": token.token_data["token"],
             "base_path": adapter.assets_path,
         },
     )

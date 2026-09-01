@@ -4,7 +4,7 @@
 import base64
 import secrets
 import uuid
-from typing import Optional
+from typing import Any, Callable, Optional
 
 import magic
 from sqlalchemy.orm import Session
@@ -280,6 +280,7 @@ class PublicationService:
                     content=content,
                     extras={
                         "phone_number": account_id,
+                        "session": token.token_data["token"],
                         "base_path": adapter.assets_path,
                     },
                 )
@@ -320,6 +321,8 @@ class PublicationService:
         # Persist it regardless of outcome so the next attempt isn't stale.
         if proto_id == rrs.V1PayloadsSupportedProtocols.O_AUTH20:
             self._maybe_refresh_token(token, result)
+        elif proto_id == rrs.V1PayloadsSupportedProtocols.PNBA:
+            self._maybe_refresh_session(token, result)
 
         if not result.get("success", True):
             logger.error(
@@ -336,15 +339,34 @@ class PublicationService:
         logger.info("Published message for token %d via %r.", token_id, token.platform)
         return token.platform
 
-    def _maybe_refresh_token(self, token, result: dict) -> None:
-        refreshed_token = result.get("refreshed_token") or {}
-        new_refresh_token = refreshed_token.get("refresh_token")
-        old_refresh_token = token.token_data["token"].get("refresh_token")
-        if new_refresh_token and new_refresh_token != old_refresh_token:
+    def _maybe_refresh_token_data(
+        self,
+        token,
+        new_value: Optional[dict],
+        *,
+        label: str,
+        compare_key: Callable[[dict], Any] = lambda v: v,
+    ) -> None:
+        new_key = compare_key(new_value or {})
+        old_key = compare_key(token.token_data.get("token") or {})
+        if new_key and new_key != old_key:
             update_token_data(
-                token, {**token.token_data, "token": refreshed_token}, self.session
+                token, {**token.token_data, "token": new_value}, self.session
             )
-            logger.info("Refreshed OAuth token data for %r.", token.platform)
+            logger.info("Refreshed %s data for %r.", label, token.platform)
+
+    def _maybe_refresh_token(self, token, result: dict) -> None:
+        self._maybe_refresh_token_data(
+            token,
+            result.get("refreshed_token"),
+            label="OAuth token",
+            compare_key=lambda v: (v or {}).get("refresh_token"),
+        )
+
+    def _maybe_refresh_session(self, token, result: dict) -> None:
+        self._maybe_refresh_token_data(
+            token, result.get("refreshed_session"), label="PNBA session"
+        )
 
     def _publish_offline_content(
         self, key_id: int, len_att: int, content_ciphertext: bytes

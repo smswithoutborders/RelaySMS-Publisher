@@ -107,7 +107,7 @@ def ExchangePNBACodeAndStore(self, request, context):
                 proto_id=adapter.proto_id,
                 token_data={
                     "account_id": result["userinfo"]["account_identifier"],
-                    "token": {"name": result["userinfo"].get("name")},
+                    "token": result["session"],
                 },
                 session=s,
             )
