@@ -719,6 +719,22 @@ install_services() {
   systemctl start "$TARGET_UNIT"
 }
 
+# gRPC needs HTTP/2, which certbot never enables. nginx 1.25.1+ takes
+# "http2 on;"; below 1.25.1 only "listen ... http2" works.
+enable_nginx_http2() {
+  local conf="$1" version
+  version=$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9.]*\).*#\1#p')
+  if printf '%s\n' 1.25.1 "$version" | sort -V -C; then
+    sed -i 's/^\(\s*\)listen 443 ssl;.*/&\n\1http2 on;/' "$conf"
+  else
+    sed -i \
+      -e "s/listen 443 ssl;/listen 443 ssl http2;/" \
+      -e "s/listen \\[::\\]:443 ssl;/listen [::]:443 ssl http2;/" \
+      -e "s/listen \\[::\\]:443 ssl ipv6only=on;/listen [::]:443 ssl http2 ipv6only=on;/" \
+      "$conf"
+  fi
+}
+
 configure_nginx() {
   if [ "${SKIP_NGINX:-0}" = "1" ]; then
     log "Skipping nginx setup (SKIP_NGINX=1)"
@@ -809,15 +825,7 @@ configure_nginx() {
   certbot "${certbot_args[@]}" || error "certbot failed to obtain a certificate for $site"
   log "Certificate installed for $site"
 
-  # certbot's nginx plugin always writes its own "listen 443 ssl;" and
-  # never carries over http2 from the port-80 block, so the gRPC location
-  # in $NGINX_CONF_TEMPLATE would be unreachable without this (gRPC
-  # requires HTTP/2).
-  sed -i \
-    -e "s/listen 443 ssl;/listen 443 ssl http2;/" \
-    -e "s/listen \[::\]:443 ssl;/listen [::]:443 ssl http2;/" \
-    -e "s/listen \[::\]:443 ssl ipv6only=on;/listen [::]:443 ssl http2 ipv6only=on;/" \
-    "$conf_dest"
+  enable_nginx_http2 "$conf_dest"
   nginx -t || error "nginx config test failed after enabling http2 on $site"
   systemctl reload nginx
 }
@@ -1021,7 +1029,7 @@ main() {
 
   log "Installation complete"
   log "  Config : $INSTALL_DIR/.env"
-  log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|update}"
+  log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|update|nginx}"
   log "  Platforms : $INSTALL_DIR/platforms.sh {add|remove|update|list|recover|env|shell}"
   log "  Gateway Clients : $INSTALL_DIR/gateway-clients.sh {create|list|update|delete|env|shell}"
   log "  Admin Users : $INSTALL_DIR/admin-users.sh {create|list|reset-password|disable|enable|delete|revoke-sessions|env|shell}"

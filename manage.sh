@@ -260,6 +260,99 @@ cmd_update() {
   log "Update complete"
 }
 
+nginx_usage() {
+  cat <<'EOF'
+Usage: manage.sh nginx [DOMAIN]
+
+Re-renders the nginx site from the template, reattaches or obtains its
+certificate, enables HTTP/2 for gRPC and reloads nginx. DOMAIN defaults to
+this install's site. The previous file is kept as <site>.conf.bak and
+restored on failure.
+EOF
+}
+
+# Matches publisher_rest_<PORT> (this install) or an unsuffixed publisher_rest.
+detect_nginx_site() {
+  local port sites=()
+  port=$(read_env_var PORT "$INSTALL_DIR/.env")
+  mapfile -t sites < <(grep -lE "upstream publisher_rest(_${port:-16000})? \{" \
+    /etc/nginx/sites-available/*.conf 2>/dev/null)
+  [ "${#sites[@]}" -eq 1 ] ||
+    error "Found ${#sites[@]} matching nginx sites; pass the domain: $0 nginx DOMAIN"
+  basename "${sites[0]}" .conf
+}
+
+# gRPC needs HTTP/2, which certbot never enables. nginx 1.25.1+ takes
+# "http2 on;"; below 1.25.1 only "listen ... http2" works.
+enable_nginx_http2() {
+  local conf="$1" version
+  version=$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9.]*\).*#\1#p')
+  if printf '%s\n' 1.25.1 "$version" | sort -V -C; then
+    sed -i 's/^\(\s*\)listen 443 ssl;.*/&\n\1http2 on;/' "$conf"
+  else
+    sed -i \
+      -e "s/listen 443 ssl;/listen 443 ssl http2;/" \
+      -e "s/listen \\[::\\]:443 ssl;/listen [::]:443 ssl http2;/" \
+      -e "s/listen \\[::\\]:443 ssl ipv6only=on;/listen [::]:443 ssl http2 ipv6only=on;/" \
+      "$conf"
+  fi
+}
+
+install_nginx_site() {
+  local site="$1" conf="$2" envfile="$INSTALL_DIR/.env" rest_port grpc_port
+  rest_port=$(read_env_var PORT "$envfile")
+  grpc_port=$(read_env_var GRPC_PORT "$envfile")
+
+  sed \
+    -e "s/__SERVER_NAME__/$site/g" \
+    -e "s/__REST_PORT__/${rest_port:-16000}/g" \
+    -e "s/__GRPC_PORT__/${grpc_port:-6000}/g" \
+    "$INSTALL_DIR/relaysms-publisher-nginx.conf.template" >"$conf" || return 1
+  ln -sf "$conf" "/etc/nginx/sites-enabled/${site}.conf" || return 1
+
+  # Re-adds the 443 block that re-rendering dropped.
+  if [ -f "/etc/letsencrypt/live/${site}/fullchain.pem" ]; then
+    certbot install --nginx --cert-name "$site" --redirect --non-interactive || return 1
+  else
+    local email_args=(--register-unsafely-without-email)
+    [ -n "${LETSENCRYPT_EMAIL:-}" ] && email_args=(-m "$LETSENCRYPT_EMAIL")
+    certbot --nginx -d "$site" --redirect --agree-tos --non-interactive \
+      "${email_args[@]}" || return 1
+  fi
+
+  enable_nginx_http2 "$conf" || return 1
+  nginx -t || return 1
+}
+
+cmd_nginx() {
+  case "${1:-}" in
+  -h | --help)
+    nginx_usage
+    return
+    ;;
+  esac
+  check_sudo
+  command -v nginx &>/dev/null && command -v certbot &>/dev/null ||
+    error "nginx and certbot must be installed"
+
+  local site="${1:-}"
+  [ -n "$site" ] || site=$(detect_nginx_site)
+  validate_hostname "DOMAIN" "$site"
+
+  local conf="/etc/nginx/sites-available/${site}.conf"
+  [ -f "$conf" ] && cp -p "$conf" "$conf.bak"
+
+  if ! install_nginx_site "$site" "$conf"; then
+    if [ -f "$conf.bak" ]; then
+      cp -p "$conf.bak" "$conf"
+      nginx -t && systemctl reload nginx
+    fi
+    error "nginx setup failed for $site; previous config restored"
+  fi
+  systemctl reload nginx
+  log "nginx site $site updated"
+}
+
 cmd_uninstall() {
   check_sudo
   local confirm
@@ -289,7 +382,7 @@ cmd_uninstall() {
 }
 
 usage() {
-  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|migrate|update|uninstall}"
+  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|migrate|update|nginx|uninstall}"
   exit 1
 }
 
@@ -306,6 +399,10 @@ main() {
   enable) cmd_enable ;;
   disable) cmd_disable ;;
   migrate) cmd_migrate ;;
+  nginx)
+    shift
+    cmd_nginx "$@"
+    ;;
   update)
     shift
     cmd_update "$@"

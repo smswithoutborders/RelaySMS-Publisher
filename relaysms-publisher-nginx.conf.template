@@ -3,25 +3,28 @@
 # Installed to /etc/nginx/sites-available/<domain>.conf by install.sh, with
 # __SERVER_NAME__, __REST_PORT__ and __GRPC_PORT__ substituted from .env.
 #
+# Upstream, map and zone names are global in nginx, so they carry the REST
+# port to keep instances on one host apart.
+#
 # Defines only the plain-HTTP (port 80) block. Run `certbot --nginx -d
 # <domain>` afterwards (install.sh offers to do this) to add the HTTPS block
 # and redirect; certbot copies every directive here into it, so add
 # hardening here rather than to the generated 443 block.
 
 # Rate-limit logins and requests carrying Basic credentials.
-limit_req_zone $binary_remote_addr zone=publisher_admin_login:10m rate=5r/m;
-map $http_authorization $publisher_admin_basic_key {
+limit_req_zone $binary_remote_addr zone=publisher_admin_login___REST_PORT__:10m rate=5r/m;
+map $http_authorization $publisher_admin_basic_key___REST_PORT__ {
     default     "";
     "~*^basic " $binary_remote_addr;
 }
-limit_req_zone $publisher_admin_basic_key zone=publisher_admin_basic:10m rate=30r/m;
+limit_req_zone $publisher_admin_basic_key___REST_PORT__ zone=publisher_admin_basic___REST_PORT__:10m rate=30r/m;
 
-upstream publisher_rest {
+upstream publisher_rest___REST_PORT__ {
     server 127.0.0.1:__REST_PORT__;
     keepalive 32;
 }
 
-upstream publisher_grpc {
+upstream publisher_grpc___REST_PORT__ {
     server 127.0.0.1:__GRPC_PORT__;
     keepalive 32;
 }
@@ -84,9 +87,9 @@ server {
     }
 
     location = /v1/auth/login {
-        limit_req        zone=publisher_admin_login burst=5 nodelay;
+        limit_req        zone=publisher_admin_login___REST_PORT__ burst=5 nodelay;
         limit_req_status 429;
-        proxy_pass       http://publisher_rest;
+        proxy_pass       http://publisher_rest___REST_PORT__;
 
         error_page 500 = /_errors/500.json;
         error_page 502 = /_errors/502.json;
@@ -98,9 +101,9 @@ server {
     }
 
     location ~ ^/v1/(stats|auth)/ {
-        limit_req        zone=publisher_admin_basic burst=20 nodelay;
+        limit_req        zone=publisher_admin_basic___REST_PORT__ burst=20 nodelay;
         limit_req_status 429;
-        proxy_pass       http://publisher_rest;
+        proxy_pass       http://publisher_rest___REST_PORT__;
 
         error_page 500 = /_errors/500.json;
         error_page 502 = /_errors/502.json;
@@ -112,7 +115,7 @@ server {
     }
 
     location / {
-        proxy_pass http://publisher_rest;
+        proxy_pass http://publisher_rest___REST_PORT__;
 
         error_page 500 = /_errors/500.json;
         error_page 502 = /_errors/502.json;
@@ -168,7 +171,7 @@ server {
     # proxy_set_header above doesn't apply to grpc_pass; repeated here via
     # grpc_set_header so the gRPC backend also gets the real client IP, etc.
     location /publisher.v3.Publisher {
-        grpc_pass            grpc://publisher_grpc;
+        grpc_pass            grpc://publisher_grpc___REST_PORT__;
         grpc_set_header      Host              $host;
         grpc_set_header      X-Real-IP         $remote_addr;
         grpc_set_header      X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -179,7 +182,7 @@ server {
     }
 
     location /grpc.health.v1.Health {
-        grpc_pass            grpc://publisher_grpc;
+        grpc_pass            grpc://publisher_grpc___REST_PORT__;
         grpc_set_header      Host              $host;
         grpc_set_header      X-Real-IP         $remote_addr;
         grpc_set_header      X-Forwarded-For   $proxy_add_x_forwarded_for;

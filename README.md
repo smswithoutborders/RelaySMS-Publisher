@@ -56,7 +56,7 @@ Manage services:
 
 ```bash
 cd /opt/relaysms/relaysms-publisher
-./manage.sh {start|stop|restart|status|logs|update}
+./manage.sh {start|stop|restart|status|logs|update|nginx}
 ```
 
 See [INSTALL.md](INSTALL.md) for manual installation and detailed configuration.

@@ -194,6 +194,7 @@ sudo certbot --nginx -d publisher.example.com --redirect
 ./manage.sh disable     # Disable on boot
 ./manage.sh migrate     # Run pending database migrations
 ./manage.sh update      # Pull latest code and restart
+./manage.sh nginx       # Re-apply the nginx template and certificate
 ./manage.sh uninstall   # Remove installation
 ```
 
@@ -208,6 +209,8 @@ sudo certbot --nginx -d publisher.example.com --redirect
 ```bash
 ./manage.sh update --migrate
 ```
+
+`nginx` re-renders the site from `relaysms-publisher-nginx.conf.template`, reattaches the Let's Encrypt certificate (or obtains one), enables HTTP/2 for gRPC and reloads nginx. Run it after an update that changes the template. It detects the installed domain, or takes one: `sudo ./manage.sh nginx publisher.example.com`. The previous file is kept as `<site>.conf.bak` and restored if the new config fails.
 
 ## Managing Platform Adapters
 
