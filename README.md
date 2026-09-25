@@ -9,6 +9,7 @@ Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS w
 - [Configuration](#configuration)
 - [Platform Adapters](#platform-adapters)
 - [Gateway Clients](#gateway-clients)
+- [Admin Users](#admin-users)
 - [Documentation](#documentation)
 - [Testing](#testing)
 - [License](#license)
@@ -177,6 +178,19 @@ Offline payloads are tagged with the protocol they came in on: `https` for [REST
 
 If `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads submitted over `https` must also carry a matching `tag` value in the request body (`PublishContentRequest.tag`).
 
+### Admin Auth
+
+```bash
+ADMIN_WEB_ORIGINS=                    # Web client origins, comma-separated. Empty if same origin.
+ADMIN_SESSION_COOKIE_SAMESITE=strict  # strict | lax | none
+ADMIN_SESSION_COOKIE_SECURE=true      # false only for local http
+ADMIN_SESSION_COOKIE_DOMAIN=          # Empty for a host-only cookie
+ADMIN_SESSION_IDLE_MINUTES=30
+ADMIN_SESSION_MAX_HOURS=12
+```
+
+See [Admin Authentication](docs/rest.md#admin-authentication).
+
 ### Logging & Observability
 
 ```bash
@@ -210,6 +224,20 @@ Registered gateway clients can be retrieved via the REST API: `/v1/gateway-clien
 
 > [!TIP]
 > See [Gateway Clients Documentation](gateway_clients/README.md) for managing the registry.
+
+## Admin Users
+
+Admins can see `failure_reason` in [publication stats](docs/rest.md#10-list-publication-stats).
+
+```bash
+./admin-users.sh create --email admin@example.org          # shows the password once
+./admin-users.sh list
+./admin-users.sh reset-password --email admin@example.org
+./admin-users.sh disable --email admin@example.org
+./admin-users.sh enable --email admin@example.org
+./admin-users.sh revoke-sessions --email admin@example.org
+./admin-users.sh delete --email admin@example.org
+```
 
 ## Documentation
 

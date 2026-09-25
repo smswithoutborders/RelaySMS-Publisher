@@ -1,6 +1,6 @@
 # Publisher REST API Documentation
 
-The Publisher REST API provides metadata about supported platforms, registered gateway clients, and server identity keys required for gRPC v3 communication, as well as an endpoint for publishing encrypted content.
+The Publisher REST API provides metadata about supported platforms, registered gateway clients, and server identity keys required for gRPC v3 communication, as well as an endpoint for publishing encrypted content and publication stats.
 
 ## Base URL
 
@@ -241,14 +241,161 @@ Liveness/readiness check for uptime monitoring. Verifies a database session can 
 { "status": "ok" }
 ```
 
+### 10. List Publication Stats
+
+List publish attempts.
+
+**URL:** `/stats/publications`
+**Method:** `GET`
+**Auth:** Optional
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| status | string | No | Filter by status (e.g. `published`, `failed`) |
+| platform_name | string | No | Filter by platform name |
+| protocol | string | No | Filter by ingestion protocol (e.g. `https`, `smtp`, `sms`) |
+| country_code | string | No | Filter by ISO country code (e.g. `CM`) |
+| since | datetime | No | Rows created at or after this time (ISO-8601; UTC if no offset) |
+| until | datetime | No | Rows created before this time (ISO-8601; UTC if no offset) |
+| limit | integer | No | Page size, 1–200 (default `50`) |
+| cursor | string | No | Set by the `next`/`prev` links. Don't build it yourself. |
+
+Filter values accept alphanumerics, `_` and `-`.
+
+**Response Body:**
+
+```json
+{
+  "data": [
+    {
+      "id": 1042,
+      "platform_name": "gmail",
+      "protocol": "sms",
+      "status": "failed",
+      "country_code": "CM",
+      "created_at": "2026-09-24T10:39:30Z",
+      "failure_reason": "token_expired"
+    }
+  ],
+  "next": "https://<host>/v1/stats/publications?status=failed&limit=50&cursor=eyJ0Ijoi...",
+  "prev": null
+}
+```
+
+`failure_reason` is admin-only. Follow `next` and `prev` as-is: they keep your filters and `limit`, and are `null` on the last and first page.
+
+### 11. Publication Stats Summary
+
+Count publish attempts per group over a time window.
+
+**URL:** `/stats/publications/summary`
+**Method:** `GET`
+**Auth:** Optional (required to group by `failure_reason`)
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| group_by | string | No | `status` (default), `platform_name`, `protocol`, `country_code` or `failure_reason` (admin only). Repeatable. |
+| since | datetime | No | Window start (default: 30 days before `until`) |
+| until | datetime | No | Window end (default: now) |
+| interval | string | No | `day`, `week`, `month` or `year`. Adds a `period` field: the period start in UTC. Weeks start Monday. |
+| status, platform_name, protocol, country_code | string | No | Same filters as [List Publication Stats](#10-list-publication-stats) |
+
+Public requests can't span more than 366 days. Groups are sorted by `period`, then `count` descending.
+
+**Response Body** for `?interval=month&group_by=status`:
+
+```json
+{
+  "since": "2026-07-01T00:00:00Z",
+  "until": "2026-09-01T00:00:00Z",
+  "interval": "month",
+  "total": 95,
+  "groups": [
+    { "count": 40, "period": "2026-07-01T00:00:00Z", "status": "published" },
+    { "count": 5, "period": "2026-07-01T00:00:00Z", "status": "failed" },
+    { "count": 48, "period": "2026-08-01T00:00:00Z", "status": "published" },
+    { "count": 2, "period": "2026-08-01T00:00:00Z", "status": "failed" }
+  ]
+}
+```
+
+If `interval` isn't set, it's `null` in the response and groups have no `period`. Periods with no rows are omitted; treat them as `0` when charting.
+
+### 12. Admin Login
+
+Start a web session. Sets an `HttpOnly` session cookie and returns a CSRF token.
+
+**URL:** `/auth/login`
+**Method:** `POST`
+
+**Request Body:**
+
+```json
+{ "email": "admin@example.org", "password": "<password>" }
+```
+
+**Response Body:** `AdminMe`
+
+```json
+{
+  "email": "admin@example.org",
+  "auth_method": "session",
+  "csrf_token": "<token>",
+  "expires_at": "2026-09-24T22:00:00Z"
+}
+```
+
+Bad credentials and disabled accounts return the same `401`. An `Origin` other than this API or `ADMIN_WEB_ORIGINS` returns `403`.
+
+### 13. Admin Logout
+
+End the current session and clear the cookie.
+
+**URL:** `/auth/logout`
+**Method:** `POST`
+**Auth:** Session cookie + `X-CSRF-Token` header
+
+**Response:** `204 No Content`
+
+### 14. Current Admin
+
+Return the authenticated admin. Call it on page load to check the session and get the CSRF token.
+
+**URL:** `/auth/me`
+**Method:** `GET`
+**Auth:** Session cookie or Basic
+
+**Response Body:** `AdminMe`. `csrf_token` and `expires_at` are `null` for Basic auth.
+
+## Admin Authentication
+
+Admins are managed with [`./admin-users.sh`](../README.md#admin-users).
+
+* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`) and the `csrf_token` as `X-CSRF-Token` on `POST`s. Sessions end after 30 minutes idle or 12 hours.
+* **HTTP Basic:** email and password on every request, e.g. `curl -u admin@example.org:<password> .../v1/stats/publications`. HTTPS only.
+
+### Web clients on another origin
+
+Add each web client's origin to `ADMIN_WEB_ORIGINS` (exact origins, no wildcards) to allow credentialed CORS.
+
+> [!WARNING]
+> On an unrelated domain the cookie is third-party, and Safari, Firefox and Brave block or restrict it. Use a subdomain of the API's domain, or proxy `/v1` through the web client's domain.
+
 ## Error Handling
 
-The API uses standard HTTP status codes:
+The API uses standard HTTP status codes. Error bodies are `{"error": "<message>"}`:
 
 | Status | Meaning |
 | :--- | :--- |
 | `200 OK` | Request successful |
-| `400 Bad Request` | Invalid request parameters or payload |
+| `400 Bad Request` | Invalid request parameters or payload, invalid cursor, or invalid time window |
+| `401 Unauthorized` | Missing or invalid admin credentials |
+| `403 Forbidden` | Origin not allowed, missing/invalid CSRF token, or admin-only option |
 | `404 Not Found` | Platform or key not found |
 | `422 Unprocessable Entity` | Unsupported payload type or validation error |
+| `429 Too Many Requests` | Rate limited (login and Basic-auth requests) |
 | `500 Internal Server Error` | Unexpected server-side error |

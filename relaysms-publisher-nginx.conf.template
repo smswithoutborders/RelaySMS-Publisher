@@ -8,6 +8,14 @@
 # and redirect; certbot copies every directive here into it, so add
 # hardening here rather than to the generated 443 block.
 
+# Rate-limit logins and requests carrying Basic credentials.
+limit_req_zone $binary_remote_addr zone=publisher_admin_login:10m rate=5r/m;
+map $http_authorization $publisher_admin_basic_key {
+    default     "";
+    "~*^basic " $binary_remote_addr;
+}
+limit_req_zone $publisher_admin_basic_key zone=publisher_admin_basic:10m rate=30r/m;
+
 upstream publisher_rest {
     server 127.0.0.1:__REST_PORT__;
     keepalive 32;
@@ -75,6 +83,34 @@ server {
         return 444;
     }
 
+    location = /v1/auth/login {
+        limit_req        zone=publisher_admin_login burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass       http://publisher_rest;
+
+        error_page 500 = /_errors/500.json;
+        error_page 502 = /_errors/502.json;
+        error_page 503 = /_errors/503.json;
+        error_page 504 = /_errors/504.json;
+        error_page 413 = /_errors/413.json;
+        error_page 494 = /_errors/494.json;
+        error_page 429 = /_errors/429.json;
+    }
+
+    location ~ ^/v1/(stats|auth)/ {
+        limit_req        zone=publisher_admin_basic burst=20 nodelay;
+        limit_req_status 429;
+        proxy_pass       http://publisher_rest;
+
+        error_page 500 = /_errors/500.json;
+        error_page 502 = /_errors/502.json;
+        error_page 503 = /_errors/503.json;
+        error_page 504 = /_errors/504.json;
+        error_page 413 = /_errors/413.json;
+        error_page 494 = /_errors/494.json;
+        error_page 429 = /_errors/429.json;
+    }
+
     location / {
         proxy_pass http://publisher_rest;
 
@@ -84,6 +120,7 @@ server {
         error_page 504 = /_errors/504.json;
         error_page 413 = /_errors/413.json;
         error_page 494 = /_errors/494.json;
+        error_page 429 = /_errors/429.json;
     }
 
     location = /_errors/500.json {
@@ -114,6 +151,12 @@ server {
         internal;
         default_type application/json;
         return 413 '{"error": "Request is too large."}';
+    }
+
+    location = /_errors/429.json {
+        internal;
+        default_type application/json;
+        return 429 '{"error": "Too many requests. Please try again shortly."}';
     }
 
     location = /_errors/494.json {

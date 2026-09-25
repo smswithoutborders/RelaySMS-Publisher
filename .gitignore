@@ -9,6 +9,7 @@ platforms/available/*
 !manage.sh
 !platforms.sh
 !gateway-clients.sh
+!admin-users.sh
 !sync-env.sh
 !docker-entrypoint.sh
 !scripts/*.sh

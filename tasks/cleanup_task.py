@@ -6,6 +6,7 @@ from celery.signals import worker_init
 
 from db import get_session
 from logutils import get_logger
+from models.admin_session import delete_expired as delete_expired_admin_sessions
 from models.payload_session import delete_stale
 from platforms.adapter_manager import AdapterManager
 from tasks.celery_app import celery_app
@@ -67,3 +68,15 @@ def cleanup_idle_tokens() -> None:
         logger.info("Cleaned up %d idle token(s): %s", sum(counts.values()), counts)
     else:
         logger.debug("No idle tokens to clean up")
+
+
+@celery_app.task(name="tasks.cleanup_task.cleanup_expired_admin_sessions")
+def cleanup_expired_admin_sessions() -> None:
+    """Delete admin sessions past their expiry or idle timeout."""
+    with get_session() as db:
+        deleted = delete_expired_admin_sessions(db)
+
+    if deleted:
+        logger.info("Cleaned up %d expired admin session(s)", deleted)
+    else:
+        logger.debug("No expired admin sessions to clean up")

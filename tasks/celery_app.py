@@ -102,6 +102,10 @@ def make_celery() -> Celery:
             "task": "tasks.cleanup_task.cleanup_idle_tokens",
             "schedule": token_cleanup_schedule,
         },
+        "cleanup-expired-admin-sessions": {
+            "task": "tasks.cleanup_task.cleanup_expired_admin_sessions",
+            "schedule": cleanup_schedule,
+        },
     }
     if get_configs("UPTIME_KUMA_WORKER_PUSH_URL"):
         # Uptime Kuma push-monitor heartbeat, see observability/README.md
