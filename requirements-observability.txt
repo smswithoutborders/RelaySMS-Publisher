@@ -4,11 +4,11 @@
 # requirements.txt) already covers the app's direct, unconditional use of
 # the OTel API with safe no-op behavior when this isn't installed. See
 # observability/README.md.
-opentelemetry-distro==0.65b0
-opentelemetry-exporter-otlp-proto-grpc==1.44.0
-opentelemetry-instrumentation-celery==0.65b0
-opentelemetry-instrumentation-fastapi==0.65b0
-opentelemetry-instrumentation-grpc==0.65b0
-opentelemetry-instrumentation-logging==0.65b0
-opentelemetry-instrumentation-sqlalchemy==0.65b0
-opentelemetry-sdk==1.44.0
+opentelemetry-distro==0.66b0
+opentelemetry-exporter-otlp-proto-grpc==1.45.0
+opentelemetry-instrumentation-celery==0.66b0
+opentelemetry-instrumentation-fastapi==0.66b0
+opentelemetry-instrumentation-grpc==0.66b0
+opentelemetry-instrumentation-logging==0.66b0
+opentelemetry-instrumentation-sqlalchemy==0.66b0
+opentelemetry-sdk==1.45.0
