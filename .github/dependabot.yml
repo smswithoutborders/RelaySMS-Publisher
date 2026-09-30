@@ -1,30 +1,41 @@
 version: 2
 updates:
-  - package-ecosystem: "docker"
-    directory: "/"
-    target-branch: "staging"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 99
-    labels:
-      - "dependencies"
   - package-ecosystem: "pip"
     directory: "/"
     target-branch: "staging"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 99
-    allow:
-      - dependency-type: "direct"
-      - dependency-type: "indirect"
+    cooldown:
+      default-days: 3
+    labels:
+      - "dependencies"
+    ignore:
+      # kombu[sqlalchemy] (via celery) pins sqlalchemy<2.1 until kombu 5.7
+      - dependency-name: "sqlalchemy"
+        versions: [">=2.1"]
+    groups:
+      python:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
     labels:
       - "dependencies"
     groups:
-      production-dependencies:
-        dependency-type: "production"
-        patterns:
-          - "*"
-      development-dependencies:
-        dependency-type: "development"
+      actions:
         patterns:
           - "*"

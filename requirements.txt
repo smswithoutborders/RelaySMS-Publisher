@@ -20,7 +20,7 @@ psycopg2-binary==2.9.13
 pymysql==1.2.3
 python-magic==0.4.27
 requests==2.34.2
-sqlalchemy==2.1.1
+sqlalchemy==2.0.52
 sqlcipher3-binary==0.6.0
 tqdm==4.70.1
 twilio==9.11.1
