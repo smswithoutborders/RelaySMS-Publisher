@@ -3,7 +3,6 @@
 
 import datetime
 import hashlib
-import hmac
 import secrets
 from typing import TYPE_CHECKING, Optional
 
@@ -19,7 +18,6 @@ if TYPE_CHECKING:
 
 # Limits last_seen_at writes to one per interval.
 _TOUCH_INTERVAL = datetime.timedelta(seconds=60)
-_CSRF_CONTEXT = b"relaysms-admin-csrf"
 
 
 def _hash(raw: str) -> str:
@@ -104,16 +102,6 @@ def get_active(session: Session, raw_token: str) -> Optional[AdminSession]:
         admin_session.last_seen_at = now
         session.flush()
     return admin_session
-
-
-def csrf_token_for(raw_token: str) -> str:
-    return hmac.new(raw_token.encode(), _CSRF_CONTEXT, hashlib.sha256).hexdigest()
-
-
-def verify_csrf(raw_token: str, raw_csrf: Optional[str]) -> bool:
-    if not raw_csrf:
-        return False
-    return hmac.compare_digest(csrf_token_for(raw_token), raw_csrf)
 
 
 def revoke_all(session: Session, admin_user_id: int) -> int:

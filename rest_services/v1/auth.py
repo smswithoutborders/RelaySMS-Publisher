@@ -18,7 +18,7 @@ from models.admin_user import AdminUser, record_login, verify_credentials
 
 SESSION_COOKIE_NAME = "relaysms_admin_session"
 SESSION_COOKIE_PATH = "/v1"
-CSRF_HEADER_NAME = "X-CSRF-Token"
+SESSION_COOKIE_SAMESITE = "strict"
 BASIC_REALM = "relaysms-admin"
 # Basic auth runs on every request, so last_login_at writes are throttled.
 BASIC_LOGIN_RECORD_INTERVAL_SECONDS = 300
@@ -29,7 +29,6 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 class AdminContext:
     admin: AdminUser
     session: Optional[AdminSession] = None
-    session_token: Optional[str] = None
 
 
 def set_session_cookie(response: Response, raw_token: str) -> None:
@@ -38,10 +37,9 @@ def set_session_cookie(response: Response, raw_token: str) -> None:
         raw_token,
         max_age=int(config.settings.max_age.total_seconds()),
         path=SESSION_COOKIE_PATH,
-        domain=config.settings.cookie_domain,
         secure=config.settings.cookie_secure,
         httponly=True,
-        samesite=config.settings.cookie_samesite,
+        samesite=SESSION_COOKIE_SAMESITE,
     )
 
 
@@ -49,10 +47,9 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
         SESSION_COOKIE_NAME,
         path=SESSION_COOKIE_PATH,
-        domain=config.settings.cookie_domain,
         secure=config.settings.cookie_secure,
         httponly=True,
-        samesite=config.settings.cookie_samesite,
+        samesite=SESSION_COOKIE_SAMESITE,
     )
 
 
@@ -106,12 +103,6 @@ def check_origin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Origin not allowed.")
 
 
-def _check_csrf(request: Request, raw_token: str) -> None:
-    check_origin(request)
-    if not admin_sessions.verify_csrf(raw_token, request.headers.get(CSRF_HEADER_NAME)):
-        raise HTTPException(status_code=403, detail="Missing or invalid CSRF token.")
-
-
 def optional_admin(
     request: Request, db: Session = Depends(get_db)
 ) -> Optional[AdminContext]:
@@ -124,14 +115,9 @@ def optional_admin(
                 detail="Session expired or invalid. Please log in again.",
                 headers=_clear_cookie_header(),
             )
-        # Checked here so no route skips it. Basic is exempt: not sent cross-site.
         if request.method not in SAFE_METHODS:
-            _check_csrf(request, raw_token)
-        return AdminContext(
-            admin=admin_session.admin_user,
-            session=admin_session,
-            session_token=raw_token,
-        )
+            check_origin(request)
+        return AdminContext(admin=admin_session.admin_user, session=admin_session)
 
     authorization = request.headers.get("Authorization")
     if authorization:

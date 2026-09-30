@@ -247,7 +247,7 @@ List publish attempts.
 
 **URL:** `/stats/publications`
 **Method:** `GET`
-**Auth:** Optional
+**Auth:** Admin
 
 **Query Parameters:**
 
@@ -284,7 +284,7 @@ Filter values accept alphanumerics, `_` and `-`.
 }
 ```
 
-`failure_reason` is admin-only. Follow `next` and `prev` as-is: they keep your filters and `limit`, and are `null` on the last and first page.
+Follow `next` and `prev` as-is: they keep your filters and `limit`, and are `null` on the last and first page.
 
 ### 11. Publication Stats Summary
 
@@ -292,19 +292,19 @@ Count publish attempts per group over a time window.
 
 **URL:** `/stats/publications/summary`
 **Method:** `GET`
-**Auth:** Optional (required to group by `failure_reason`)
+**Auth:** Admin
 
 **Query Parameters:**
 
 | Parameter | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| group_by | string | No | `status` (default), `platform_name`, `protocol`, `country_code` or `failure_reason` (admin only). Repeatable. |
+| group_by | string | No | `status` (default), `platform_name`, `protocol`, `country_code` or `failure_reason`. Repeatable. |
 | since | datetime | No | Window start (default: 30 days before `until`) |
 | until | datetime | No | Window end (default: now) |
 | interval | string | No | `day`, `week`, `month` or `year`. Adds a `period` field: the period start in UTC. Weeks start Monday. |
 | status, platform_name, protocol, country_code | string | No | Same filters as [List Publication Stats](#10-list-publication-stats) |
 
-Public requests can't span more than 366 days. Groups are sorted by `period`, then `count` descending.
+Groups are sorted by `period`, then `count` descending.
 
 **Response Body** for `?interval=month&group_by=status`:
 
@@ -327,7 +327,7 @@ If `interval` isn't set, it's `null` in the response and groups have no `period`
 
 ### 12. Admin Login
 
-Start a web session. Sets an `HttpOnly` session cookie and returns a CSRF token.
+Start a web session. Sets an `HttpOnly`, `SameSite=Strict` session cookie.
 
 **URL:** `/auth/login`
 **Method:** `POST`
@@ -344,7 +344,6 @@ Start a web session. Sets an `HttpOnly` session cookie and returns a CSRF token.
 {
   "email": "admin@example.org",
   "auth_method": "session",
-  "csrf_token": "<token>",
   "expires_at": "2026-09-24T22:00:00Z"
 }
 ```
@@ -357,33 +356,26 @@ End the current session and clear the cookie.
 
 **URL:** `/auth/logout`
 **Method:** `POST`
-**Auth:** Session cookie + `X-CSRF-Token` header
+**Auth:** Session cookie
 
 **Response:** `204 No Content`
 
 ### 14. Current Admin
 
-Return the authenticated admin. Call it on page load to check the session and get the CSRF token.
+Return the authenticated admin. Call it on page load to check the session.
 
 **URL:** `/auth/me`
 **Method:** `GET`
 **Auth:** Session cookie or Basic
 
-**Response Body:** `AdminMe`. `csrf_token` and `expires_at` are `null` for Basic auth.
+**Response Body:** `AdminMe`. `expires_at` is `null` for Basic auth.
 
 ## Admin Authentication
 
 Admins are managed with [`./admin-users.sh`](../README.md#admin-users).
 
-* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`) and the `csrf_token` as `X-CSRF-Token` on `POST`s. Sessions end after 30 minutes idle or 12 hours.
+* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). `POST`s with the cookie must come from this API's origin or `ADMIN_WEB_ORIGINS`. Sessions end after 30 minutes idle or 12 hours.
 * **HTTP Basic:** email and password on every request, e.g. `curl -u admin@example.org:<password> .../v1/stats/publications`. HTTPS only.
-
-### Web clients on another origin
-
-Add each web client's origin to `ADMIN_WEB_ORIGINS` (exact origins, no wildcards) to allow credentialed CORS.
-
-> [!WARNING]
-> On an unrelated domain the cookie is third-party, and Safari, Firefox and Brave block or restrict it. Use a subdomain of the API's domain, or proxy `/v1` through the web client's domain.
 
 ## Error Handling
 
@@ -394,7 +386,7 @@ The API uses standard HTTP status codes. Error bodies are `{"error": "<message>"
 | `200 OK` | Request successful |
 | `400 Bad Request` | Invalid request parameters or payload, invalid cursor, or invalid time window |
 | `401 Unauthorized` | Missing or invalid admin credentials |
-| `403 Forbidden` | Origin not allowed, missing/invalid CSRF token, or admin-only option |
+| `403 Forbidden` | Origin not allowed |
 | `404 Not Found` | Platform or key not found |
 | `422 Unprocessable Entity` | Unsupported payload type or validation error |
 | `429 Too Many Requests` | Rate limited (login and Basic-auth requests) |

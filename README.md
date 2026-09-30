@@ -182,9 +182,7 @@ If `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads submitted over `http
 
 ```bash
 ADMIN_WEB_ORIGINS=                    # Web client origins, comma-separated. Empty if same origin.
-ADMIN_SESSION_COOKIE_SAMESITE=strict  # strict | lax | none
 ADMIN_SESSION_COOKIE_SECURE=true      # false only for local http
-ADMIN_SESSION_COOKIE_DOMAIN=          # Empty for a host-only cookie
 ADMIN_SESSION_IDLE_MINUTES=30
 ADMIN_SESSION_MAX_HOURS=12
 ```
@@ -227,7 +225,7 @@ Registered gateway clients can be retrieved via the REST API: `/v1/gateway-clien
 
 ## Admin Users
 
-Admins can see `failure_reason` in [publication stats](docs/rest.md#10-list-publication-stats).
+Only admins can read [publication stats](docs/rest.md#10-list-publication-stats).
 
 ```bash
 ./admin-users.sh create --email admin@example.org          # shows the password once

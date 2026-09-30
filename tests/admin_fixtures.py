@@ -50,9 +50,7 @@ def default_admin_settings(monkeypatch):
         dataclasses.replace(
             admin_auth_config.settings,
             web_origins=[],
-            cookie_samesite="strict",
             cookie_secure=True,
-            cookie_domain=None,
             idle_timeout=datetime.timedelta(minutes=30),
             max_age=datetime.timedelta(hours=12),
         ),

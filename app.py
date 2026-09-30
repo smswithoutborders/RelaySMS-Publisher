@@ -57,7 +57,7 @@ def configure_cors(app: FastAPI, settings: admin_auth_config.AdminAuthSettings) 
         allow_origins=settings.web_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", admin_auth.CSRF_HEADER_NAME],
+        allow_headers=["Content-Type"],
         max_age=600,
     )
 

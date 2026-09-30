@@ -2,7 +2,7 @@
 
 import datetime
 from enum import Enum
-from typing import Generic, List, Literal, Optional, TypeVar
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -74,34 +74,24 @@ class PublishContentResponse(BaseModel):
     error: Optional[str] = None
 
 
-class PublicationStatPublic(BaseModel):
+class PublicationStat(BaseModel):
     id: int
     platform_name: Optional[str] = None
     protocol: Optional[str] = None
     status: str
     country_code: Optional[str] = None
+    failure_reason: Optional[str] = None
     created_at: datetime.datetime
 
 
-class PublicationStatAdmin(PublicationStatPublic):
-    failure_reason: Optional[str]
-
-
-StatItem = TypeVar("StatItem", PublicationStatPublic, PublicationStatAdmin)
-
-
-class PublicationStatsPage(BaseModel, Generic[StatItem]):
-    data: List[StatItem]
+class PublicationStatsPage(BaseModel):
+    data: List[PublicationStat]
     next: Optional[str] = Field(
         None, description="URL of the next (older) page; null on the last page."
     )
     prev: Optional[str] = Field(
         None, description="URL of the previous (newer) page; null on the first page."
     )
-
-
-PublicStatsPage = PublicationStatsPage[PublicationStatPublic]
-AdminStatsPage = PublicationStatsPage[PublicationStatAdmin]
 
 
 StatsGroupBy = Enum(
@@ -135,10 +125,6 @@ class LoginRequest(BaseModel):
 class AdminMe(BaseModel):
     email: str
     auth_method: Literal["session", "basic"]
-    csrf_token: Optional[str] = Field(
-        None,
-        description="Send as X-CSRF-Token on POST requests (sessions only).",
-    )
     expires_at: Optional[datetime.datetime] = Field(
         None, description="Session expiry (session auth only)."
     )

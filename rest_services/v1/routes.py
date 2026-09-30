@@ -5,7 +5,7 @@ import datetime
 import html
 import json
 from pathlib import Path as PathLib
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fastapi.responses import HTMLResponse
@@ -30,19 +30,17 @@ from rest_services.v1.auth import (
     AdminContext,
     check_origin,
     clear_session_cookie,
-    optional_admin,
     require_admin,
     set_session_cookie,
 )
 from rest_services.v1.schemas import (
     AdminMe,
-    AdminStatsPage,
     GatewayClientManifest,
     LoginRequest,
     OAuthClientMetadata,
     PlatformManifest,
+    PublicationStatsPage,
     PublicationStatsSummary,
-    PublicStatsPage,
     PublishContentResponse,
     PublishRestContentRequest,
     ServerStaticPublicKey,
@@ -84,7 +82,6 @@ ALLOWED_GATEWAY_CLIENT_MANIFEST_KEYS = [
 
 NAME_PATTERN = r"^[a-zA-Z0-9_-]+$"
 STATS_SUMMARY_DEFAULT_WINDOW = datetime.timedelta(days=30)
-PUBLIC_STATS_CACHE_CONTROL = "public, max-age=60"
 PRIVATE_CACHE_CONTROL = "private, no-store"
 
 
@@ -125,16 +122,11 @@ def stats_filters(
     )
 
 
-def _stats_response(content: BaseModel, context: Optional[AdminContext]) -> Response:
+def _stats_response(content: BaseModel) -> Response:
     return Response(
         content=content.model_dump_json(),
         media_type="application/json",
-        headers={
-            "Cache-Control": (
-                PUBLIC_STATS_CACHE_CONTROL if context is None else PRIVATE_CACHE_CONTROL
-            ),
-            "Vary": "Authorization, Cookie",
-        },
+        headers={"Cache-Control": PRIVATE_CACHE_CONTROL},
     )
 
 
@@ -142,17 +134,12 @@ def _page_link(request: Request, cursor: Optional[str]) -> Optional[str]:
     return str(request.url.include_query_params(cursor=cursor)) if cursor else None
 
 
-def _admin_me(
-    admin: AdminUser,
-    session: Optional[AdminSession] = None,
-    session_token: Optional[str] = None,
-) -> AdminMe:
+def _admin_me(admin: AdminUser, session: Optional[AdminSession] = None) -> AdminMe:
     if session is None:
         return AdminMe(email=admin.email, auth_method="basic")
     return AdminMe(
         email=admin.email,
         auth_method="session",
-        csrf_token=admin_sessions.csrf_token_for(session_token),
         expires_at=session.expires_at,
     )
 
@@ -346,7 +333,8 @@ async def twilio_incoming_sms(request: Request) -> Response:
 @router.get(
     "/stats/publications",
     response_model=None,
-    responses={200: {"model": Union[PublicStatsPage, AdminStatsPage]}},
+    responses={200: {"model": PublicationStatsPage}},
+    dependencies=[Depends(require_admin)],
 )
 def list_publication_stats(
     request: Request,
@@ -355,30 +343,22 @@ def list_publication_stats(
     cursor: Optional[str] = Query(
         None, max_length=512, description="Set by the next and prev links"
     ),
-    context: Optional[AdminContext] = Depends(optional_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     """List publish attempts."""
     decoded_cursor = publication_stats.decode_cursor(cursor) if cursor else None
 
-    is_admin = context is not None
     page = publication_stats.list_stats(
-        db,
-        filters=filters,
-        limit=limit,
-        cursor=decoded_cursor,
-        is_admin=is_admin,
+        db, filters=filters, limit=limit, cursor=decoded_cursor
     )
-    page_model = AdminStatsPage if is_admin else PublicStatsPage
     return _stats_response(
-        page_model.model_validate(
+        PublicationStatsPage.model_validate(
             {
                 "data": page.data,
                 "next": _page_link(request, page.next_cursor),
                 "prev": _page_link(request, page.prev_cursor),
             }
-        ),
-        context,
+        )
     )
 
 
@@ -386,17 +366,17 @@ def list_publication_stats(
     "/stats/publications/summary",
     response_model=None,
     responses={200: {"model": PublicationStatsSummary}},
+    dependencies=[Depends(require_admin)],
 )
 def summarize_publication_stats(
     filters: publication_stats.StatsFilters = Depends(stats_filters),
     group_by: List[StatsGroupBy] = Query(
         [StatsGroupBy.status],
-        description="Repeatable. failure_reason requires auth.",
+        description="Repeatable.",
     ),
     interval: Optional[StatsInterval] = Query(
         None, description="Also group by period start, in UTC. Weeks start Monday."
     ),
-    context: Optional[AdminContext] = Depends(optional_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     """Count publish attempts per group. Defaults to the last 30 days."""
@@ -407,16 +387,12 @@ def summarize_publication_stats(
     if since >= until:
         raise HTTPException(status_code=400, detail="'since' must be before 'until'.")
 
-    try:
-        groups = publication_stats.summarize(
-            db,
-            group_by=columns,
-            filters=dataclasses.replace(filters, since=since, until=until),
-            interval=unit,
-            is_admin=context is not None,
-        )
-    except publication_stats.AdminOnlyColumnError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    groups = publication_stats.summarize(
+        db,
+        group_by=columns,
+        filters=dataclasses.replace(filters, since=since, until=until),
+        interval=unit,
+    )
     return _stats_response(
         PublicationStatsSummary(
             since=since,
@@ -424,8 +400,7 @@ def summarize_publication_stats(
             interval=unit,
             total=sum(group["count"] for group in groups),
             groups=groups,
-        ),
-        context,
+        )
     )
 
 
@@ -455,7 +430,7 @@ def admin_login(
     set_session_cookie(response, raw_token)
     response.headers["Cache-Control"] = PRIVATE_CACHE_CONTROL
     logger.info("Admin %s logged in.", admin.id)
-    return _admin_me(admin, admin_session, raw_token)
+    return _admin_me(admin, admin_session)
 
 
 @router.post("/auth/logout", status_code=204)
@@ -482,6 +457,6 @@ def admin_logout(
 def admin_me(
     response: Response, context: AdminContext = Depends(require_admin)
 ) -> AdminMe:
-    """Return the current admin and, for sessions, the CSRF token."""
+    """Return the current admin."""
     response.headers["Cache-Control"] = PRIVATE_CACHE_CONTROL
-    return _admin_me(context.admin, context.session, context.session_token)
+    return _admin_me(context.admin, context.session)

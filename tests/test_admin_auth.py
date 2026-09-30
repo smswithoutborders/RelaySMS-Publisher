@@ -17,7 +17,7 @@ from models import admin_user as admin_users
 from models.admin_session import AdminSession
 from rest_services.v1.auth import require_admin
 from tests.admin_fixtures import *  # noqa: F401,F403
-from tests.admin_fixtures import ADMIN_EMAIL, login
+from tests.admin_fixtures import ADMIN_EMAIL, basic_auth, login
 
 WEB_ORIGIN = "https://web.example.net"
 
@@ -39,14 +39,13 @@ def _ago(delta):
     return utc_now() - delta
 
 
-def test_login_sets_hardened_cookie_and_returns_csrf(client, admin_password):
+def test_login_sets_hardened_cookie(client, admin_password):
     response = login(client, admin_password)
 
     assert response.status_code == 200
     body = response.json()
     assert body["email"] == ADMIN_EMAIL
     assert body["auth_method"] == "session"
-    assert body["csrf_token"]
     assert response.headers["cache-control"] == "private, no-store"
 
     cookie = response.headers["set-cookie"]
@@ -92,13 +91,13 @@ def test_login_origin_check(client, admin_password, monkeypatch, headers, status
     assert response.status_code == status
 
 
-def test_me_returns_same_csrf_token_as_login(client, admin_password):
-    csrf = login(client, admin_password).json()["csrf_token"]
+def test_me_returns_session_admin(client, admin_password):
+    login(client, admin_password)
 
     response = client.get("/v1/auth/me")
 
     assert response.status_code == 200
-    assert response.json()["csrf_token"] == csrf
+    assert response.json()["email"] == ADMIN_EMAIL
     assert response.json()["auth_method"] == "session"
 
 
@@ -110,21 +109,22 @@ def test_me_unauthenticated_is_401_without_basic_prompt(client):
     assert "www-authenticate" not in response.headers
 
 
-def test_logout_rejects_foreign_origin_even_with_csrf(client, admin_password):
-    csrf = login(client, admin_password).json()["csrf_token"]
+@pytest.mark.parametrize(
+    "headers",
+    [{"Origin": "https://evil.example"}, {"Referer": "https://evil.example/page"}],
+    ids=["origin", "referer"],
+)
+def test_logout_rejects_foreign_origin(client, admin_password, headers):
+    login(client, admin_password)
 
-    response = client.post(
-        "/v1/auth/logout",
-        headers={"X-CSRF-Token": csrf, "Origin": "https://evil.example"},
-    )
-    assert response.status_code == 403
+    assert client.post("/v1/auth/logout", headers=headers).status_code == 403
 
 
 def test_logout_ends_session(client, admin_password):
-    csrf = login(client, admin_password).json()["csrf_token"]
+    login(client, admin_password)
     token = client.cookies.get("relaysms_admin_session")
 
-    response = client.post("/v1/auth/logout", headers={"X-CSRF-Token": csrf})
+    response = client.post("/v1/auth/logout", headers={"Origin": "https://testserver"})
 
     assert response.status_code == 204
     assert "Max-Age=0" in response.headers["set-cookie"]
@@ -134,17 +134,20 @@ def test_logout_ends_session(client, admin_password):
     assert replay.status_code == 401
 
 
-def test_csrf_applies_to_any_admin_write(app, client, admin_password):
+def test_origin_check_applies_to_any_session_write(
+    app, client, admin_password, monkeypatch
+):
     @app.post("/v1/admin-write")
     def admin_write(context=Depends(require_admin)):
         return {"ok": True}
 
-    csrf = login(client, admin_password).json()["csrf_token"]
+    _set_settings(monkeypatch, web_origins=[WEB_ORIGIN])
+    login(client, admin_password)
 
-    assert client.post("/v1/admin-write").status_code == 403
-    wrong = client.post("/v1/admin-write", headers={"X-CSRF-Token": "wrong"})
-    assert wrong.status_code == 403
-    ok = client.post("/v1/admin-write", headers={"X-CSRF-Token": csrf})
+    # A sibling subdomain is same-site, so SameSite alone would let it through.
+    sibling = {"Origin": "https://other.example.net"}
+    assert client.post("/v1/admin-write", headers=sibling).status_code == 403
+    ok = client.post("/v1/admin-write", headers={"Origin": WEB_ORIGIN})
     assert ok.status_code == 200
 
 
@@ -192,13 +195,6 @@ def test_account_changes_end_sessions(client, admin_password, change):
         assert db.query(AdminSession).count() == 0
 
 
-def test_samesite_none_forces_secure_cookie(monkeypatch):
-    monkeypatch.setenv("ADMIN_SESSION_COOKIE_SAMESITE", "none")
-    monkeypatch.setenv("ADMIN_SESSION_COOKIE_SECURE", "false")
-
-    assert admin_auth_config.load_settings().cookie_secure is True
-
-
 def test_wildcard_web_origin_is_rejected(monkeypatch):
     monkeypatch.setenv("ADMIN_WEB_ORIGINS", "*")
 
@@ -221,7 +217,7 @@ def test_cors_allows_configured_origin_with_credentials(cors_client):
         headers={
             "Origin": WEB_ORIGIN,
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type,x-csrf-token",
+            "Access-Control-Request-Headers": "content-type",
         },
     )
 
@@ -263,8 +259,8 @@ def test_cleanup_deletes_only_expired_sessions(client, admin_password):
         ),
     ],
 )
-def test_validation_errors_echo_query_input(client, url, error):
-    response = client.get(url)
+def test_validation_errors_echo_query_input(client, admin_password, url, error):
+    response = client.get(url, headers=basic_auth(ADMIN_EMAIL, admin_password))
 
     assert response.status_code == 422
     assert response.json() == {"error": error}

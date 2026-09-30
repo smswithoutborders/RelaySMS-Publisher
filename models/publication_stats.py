@@ -16,19 +16,9 @@ from db import Base
 from db_types import UTCDateTime, as_utc, date_bucket, utc_now
 
 Direction = Literal["next", "prev"]
-ADMIN_ONLY_COLUMNS = frozenset({"failure_reason"})
-PUBLIC_SUMMARY_MAX_WINDOW = datetime.timedelta(days=366)
 
 
 class InvalidCursorError(ValueError):
-    pass
-
-
-class SummaryWindowError(ValueError):
-    pass
-
-
-class AdminOnlyColumnError(PermissionError):
     pass
 
 
@@ -171,14 +161,11 @@ def list_stats(
     filters: StatsFilters,
     limit: int,
     cursor: Optional[Cursor] = None,
-    is_admin: bool = False,
 ) -> StatsPage:
-    columns = [c for c in LIST_COLUMNS if is_admin or c.key not in ADMIN_ONLY_COLUMNS]
-
     created_at, row_id = PublicationStats.created_at, PublicationStats.id
     backward = cursor is not None and cursor.direction == "prev"
 
-    stmt = select(*columns).where(*_filter_clauses(filters))
+    stmt = select(*LIST_COLUMNS).where(*_filter_clauses(filters))
     if cursor is not None:
         # OR form: row-value comparisons aren't consistent across databases.
         beyond = operator.gt if backward else operator.lt
@@ -229,21 +216,10 @@ def summarize(
     group_by: Sequence[str],
     filters: StatsFilters,
     interval: Optional[str] = None,
-    is_admin: bool = False,
 ) -> list[dict[str, Any]]:
     unknown = [name for name in group_by if name not in GROUPABLE_COLUMNS]
     if unknown:
         raise ValueError(f"Unsupported group_by column(s): {', '.join(unknown)}")
-    restricted = ADMIN_ONLY_COLUMNS.intersection(group_by)
-    if restricted and not is_admin:
-        raise AdminOnlyColumnError(
-            f"Grouping by {', '.join(sorted(restricted))} requires authentication."
-        )
-    if not is_admin and filters.until - filters.since > PUBLIC_SUMMARY_MAX_WINDOW:
-        raise SummaryWindowError(
-            f"Window can't exceed {PUBLIC_SUMMARY_MAX_WINDOW.days} days "
-            "without authentication."
-        )
 
     columns = [GROUPABLE_COLUMNS[name].label(name) for name in group_by]
     count = func.count(PublicationStats.id).label("count")

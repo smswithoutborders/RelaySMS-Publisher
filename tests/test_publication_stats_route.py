@@ -48,15 +48,20 @@ def _follow(client, url, direction, **kwargs):
     return pages
 
 
-def test_public_list_hides_failure_reason(client, seeded):
-    response = client.get("/v1/stats/publications")
+@pytest.fixture
+def admin_client(client, admin_password):
+    client.headers.update(basic_auth(ADMIN_EMAIL, admin_password))
+    return client
 
-    assert response.status_code == 200
-    items = response.json()["data"]
-    assert items
-    assert all("failure_reason" not in item for item in items)
-    assert response.headers["cache-control"] == "public, max-age=60"
-    assert response.headers["vary"] == "Authorization, Cookie"
+
+@pytest.mark.parametrize(
+    "url", ["/v1/stats/publications", "/v1/stats/publications/summary"]
+)
+def test_stats_require_auth(client, seeded, url):
+    response = client.get(url)
+
+    assert response.status_code == 401
+    assert "www-authenticate" not in response.headers
 
 
 @pytest.mark.parametrize("auth", ["basic", "session"])
@@ -82,7 +87,7 @@ def test_admin_list_includes_failure_reason(client, seeded, admin_password, auth
     [basic_auth(ADMIN_EMAIL, "wrong-password"), {"Authorization": "Bearer abc"}],
     ids=["wrong-password", "bearer"],
 )
-def test_bad_credentials_are_rejected_not_downgraded(client, seeded, headers):
+def test_bad_credentials_are_rejected(client, seeded, headers):
     response = client.get("/v1/stats/publications", headers=headers)
 
     assert response.status_code == 401
@@ -98,8 +103,8 @@ def test_invalid_session_cookie_is_rejected_and_cleared(client, seeded):
     assert "relaysms_admin_session=" in response.headers["set-cookie"]
 
 
-def test_forward_paging_visits_every_row_once_in_order(client, seeded):
-    pages = _follow(client, "/v1/stats/publications?limit=4", "next")
+def test_forward_paging_visits_every_row_once_in_order(admin_client, seeded):
+    pages = _follow(admin_client, "/v1/stats/publications?limit=4", "next")
 
     ids = [item["id"] for page in pages for item in page["data"]]
     assert len(ids) == len(seeded) == len(set(ids))
@@ -109,18 +114,18 @@ def test_forward_paging_visits_every_row_once_in_order(client, seeded):
     assert pages[-1]["next"] is None
 
 
-def test_backward_paging_returns_the_same_pages(client, seeded):
-    forward = _follow(client, "/v1/stats/publications?limit=4", "next")
-    backward = _follow(client, forward[-1]["prev"], "prev")
+def test_backward_paging_returns_the_same_pages(admin_client, seeded):
+    forward = _follow(admin_client, "/v1/stats/publications?limit=4", "next")
+    backward = _follow(admin_client, forward[-1]["prev"], "prev")
 
     as_ids = lambda pages: [[item["id"] for item in p["data"]] for p in pages]
     assert as_ids(reversed(backward)) == as_ids(forward[:-1])
     assert all(page["next"] for page in backward)
 
 
-def test_links_keep_filters_and_limit(client, seeded):
+def test_links_keep_filters_and_limit(admin_client, seeded):
     url = "/v1/stats/publications?status=failed&platform_name=telegram&limit=2"
-    pages = _follow(client, url, "next")
+    pages = _follow(admin_client, url, "next")
 
     assert len(pages) > 1
     assert all(len(page["data"]) <= 2 for page in pages)
@@ -132,8 +137,8 @@ def test_links_keep_filters_and_limit(client, seeded):
     assert pages[0]["next"].startswith("https://testserver/v1/stats/publications?")
 
 
-def test_filters_and_time_range(client, seeded):
-    response = client.get(
+def test_filters_and_time_range(admin_client, seeded):
+    response = admin_client.get(
         "/v1/stats/publications",
         params={
             "platform_name": "gmail",
@@ -167,12 +172,14 @@ def test_filters_and_time_range(client, seeded):
         ({"since": "2026-09-02T00:00:00Z", "until": "2026-09-01T00:00:00Z"}, 400),
     ],
 )
-def test_invalid_params(client, seeded, params, status):
-    assert client.get("/v1/stats/publications", params=params).status_code == status
+def test_invalid_params(admin_client, seeded, params, status):
+    assert (
+        admin_client.get("/v1/stats/publications", params=params).status_code == status
+    )
 
 
-def test_summary_counts_by_status(client, seeded):
-    response = client.get(
+def test_summary_counts_by_status(admin_client, seeded):
+    response = admin_client.get(
         "/v1/stats/publications/summary",
         params={"since": "2026-09-01T00:00:00Z", "until": "2026-09-02T00:00:00Z"},
     )
@@ -189,22 +196,16 @@ def test_summary_counts_by_status(client, seeded):
     assert all("period" not in group for group in body["groups"])
 
 
-def test_summary_failure_reason_requires_auth(client, seeded, admin_password):
-    params = {
-        "group_by": "failure_reason",
-        "since": "2026-09-01T00:00:00Z",
-        "until": "2026-09-02T00:00:00Z",
-    }
-
-    assert (
-        client.get("/v1/stats/publications/summary", params=params).status_code == 403
-    )
-
-    response = client.get(
+def test_summary_groups_by_failure_reason(admin_client, seeded):
+    response = admin_client.get(
         "/v1/stats/publications/summary",
-        params=params,
-        headers=basic_auth(ADMIN_EMAIL, admin_password),
+        params={
+            "group_by": "failure_reason",
+            "since": "2026-09-01T00:00:00Z",
+            "until": "2026-09-02T00:00:00Z",
+        },
     )
+
     assert response.status_code == 200
     assert {g["failure_reason"] for g in response.json()["groups"]} == {
         "token_expired",
@@ -212,7 +213,7 @@ def test_summary_failure_reason_requires_auth(client, seeded, admin_password):
     }
 
 
-def test_summary_defaults_to_last_30_days(client):
+def test_summary_defaults_to_last_30_days(admin_client):
     now = utc_now()
     _seed(
         [
@@ -221,7 +222,7 @@ def test_summary_defaults_to_last_30_days(client):
         ],
     )
 
-    body = client.get("/v1/stats/publications/summary").json()
+    body = admin_client.get("/v1/stats/publications/summary").json()
 
     assert body["total"] == 1
     since = datetime.datetime.fromisoformat(body["since"])
@@ -229,25 +230,7 @@ def test_summary_defaults_to_last_30_days(client):
     assert until - since == datetime.timedelta(days=30)
 
 
-def test_summary_window_is_capped_for_public_only(client, admin_password):
-    _seed(
-        [
-            dict(status="published", created_at=datetime.datetime(2016, 3, 1)),
-            dict(status="published", created_at=datetime.datetime(2026, 3, 1)),
-        ]
-    )
-    params = {"since": "2016-01-01T00:00:00Z", "until": "2026-06-01T00:00:00Z"}
-    url = "/v1/stats/publications/summary"
-
-    assert client.get(url, params=params).status_code == 400
-    admin = client.get(
-        url, params=params, headers=basic_auth(ADMIN_EMAIL, admin_password)
-    )
-    assert admin.status_code == 200
-    assert admin.json()["total"] == 2
-
-
-def test_summary_interval_buckets_by_week(client):
+def test_summary_interval_buckets_by_week(admin_client):
     _seed(
         [
             dict(status="published", created_at=datetime.datetime(2026, 9, 6, 23)),
@@ -257,7 +240,7 @@ def test_summary_interval_buckets_by_week(client):
         ]
     )
 
-    response = client.get(
+    response = admin_client.get(
         "/v1/stats/publications/summary",
         params={
             "interval": "week",
@@ -277,7 +260,7 @@ def test_summary_interval_buckets_by_week(client):
     ]
 
 
-def test_summary_interval_with_multiple_group_by(client):
+def test_summary_interval_with_multiple_group_by(admin_client):
     _seed(
         [
             dict(
@@ -298,7 +281,7 @@ def test_summary_interval_with_multiple_group_by(client):
         ]
     )
 
-    response = client.get(
+    response = admin_client.get(
         "/v1/stats/publications/summary",
         params={
             "interval": "month",
