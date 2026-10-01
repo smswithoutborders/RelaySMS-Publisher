@@ -117,7 +117,6 @@ If you changed any of the following path variables in `.env`, create the parent 
 ### Run Migrations
 
 ```bash
-set -a && . .env && set +a
 make migrate-up
 ```
 
@@ -192,6 +191,7 @@ sudo certbot --nginx -d publisher.example.com --redirect
 ./manage.sh logs        # View logs
 ./manage.sh enable      # Enable on boot
 ./manage.sh disable     # Disable on boot
+./manage.sh check       # Validate .env
 ./manage.sh migrate     # Run pending database migrations
 ./manage.sh update      # Pull latest code and restart
 ./manage.sh nginx       # Re-apply the nginx template and certificate
@@ -209,6 +209,8 @@ sudo certbot --nginx -d publisher.example.com --redirect
 ```bash
 ./manage.sh update --migrate
 ```
+
+`update` also validates `.env`. Services restart regardless, since each fails only on the settings it uses, but the command exits with an error if any setting is invalid.
 
 `nginx` re-renders the site from `relaysms-publisher-nginx.conf.template`, reattaches the Let's Encrypt certificate (or obtains one), enables HTTP/2 for gRPC and reloads nginx. Run it after an update that changes the template. It detects the installed domain, or takes one: `sudo ./manage.sh nginx publisher.example.com`. The previous file is kept as `<site>.conf.bak` and restored if the new config fails.
 
@@ -252,7 +254,7 @@ PORT=16000
 
 GRPC_HOST=127.0.0.1
 GRPC_PORT=6000
-GRPC_SSL_PORT=6001
+GRPC_TLS_ENABLED=false
 ```
 
 ### Database

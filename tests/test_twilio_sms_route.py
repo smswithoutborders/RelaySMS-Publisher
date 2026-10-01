@@ -22,9 +22,10 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def _enabled(monkeypatch):
-    monkeypatch.setattr(routes, "TWILIO_SMS_TRANSPORT_ENABLED", True)
-    monkeypatch.setattr(routes, "TWILIO_AUTH_TOKEN", AUTH_TOKEN)
+def _enabled(set_config, monkeypatch):
+    set_config(
+        routes, "twilio_config", sms_transport_enabled=True, auth_token=AUTH_TOKEN
+    )
     monkeypatch.setattr(routes, "publish_message", MagicMock())
     monkeypatch.setattr(routes, "forward_twilio_webhook", MagicMock())
     monkeypatch.setattr(
@@ -88,8 +89,8 @@ def test_malformed_payload_rejected(client, monkeypatch):
     routes.publish_message.delay.assert_not_called()
 
 
-def test_transport_disabled_returns_404(client, monkeypatch):
-    monkeypatch.setattr(routes, "TWILIO_SMS_TRANSPORT_ENABLED", False)
+def test_transport_disabled_returns_404(client, set_config):
+    set_config(routes, "twilio_config", sms_transport_enabled=False)
 
     params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
     response = _signed_post(client, params)

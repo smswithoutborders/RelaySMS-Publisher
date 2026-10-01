@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional
 import magic
 from sqlalchemy.orm import Session
 
+from config import OfflinePublishConfig
 from keys import KeyManager
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
@@ -22,23 +23,13 @@ from models.token import update_token_data
 from models.token_hash import update_last_used as mark_token_hash_used
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from platforms.adapter_manager import AdapterManager
-from utils import PlatformAwareError, get_config_list, get_configs
+from utils import PlatformAwareError
 
 logger = get_logger(__name__)
 
-OFFLINE_PUBLISH_ALLOWED_PROTOCOLS = get_config_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
-OFFLINE_PUBLISH_SHARED_SECRET = get_configs("OFFLINE_PUBLISH_SHARED_SECRET")
-OFFLINE_CONTENT_PLATFORM = "rmail"
+offline_config = OfflinePublishConfig.get()
 
-if OFFLINE_PUBLISH_SHARED_SECRET:
-    try:
-        secret_len = len(bytes.fromhex(OFFLINE_PUBLISH_SHARED_SECRET))
-    except ValueError as e:
-        raise ValueError(f"Invalid OFFLINE_PUBLISH_SHARED_SECRET: {e}")
-    if secret_len != 32:
-        raise ValueError(
-            "OFFLINE_PUBLISH_SHARED_SECRET must be 32 bytes (64 hex chars)"
-        )
+OFFLINE_CONTENT_PLATFORM = "rmail"
 
 
 class PublicationError(PlatformAwareError):
@@ -159,20 +150,20 @@ class PublicationService:
 
         if token_id is None:
             if (
-                OFFLINE_PUBLISH_ALLOWED_PROTOCOLS
-                and protocol not in OFFLINE_PUBLISH_ALLOWED_PROTOCOLS
+                offline_config.allowed_protocols
+                and protocol not in offline_config.allowed_protocols
             ):
                 logger.warning(
                     "Discarding offline payload from disallowed protocol %r "
                     "(allowed: %s).",
                     protocol,
-                    OFFLINE_PUBLISH_ALLOWED_PROTOCOLS,
+                    offline_config.allowed_protocols,
                 )
                 raise ProtocolNotAllowedError(
                     f"Protocol {protocol!r} is not allowed to publish offline content."
                 )
 
-            if protocol == "https" and OFFLINE_PUBLISH_SHARED_SECRET:
+            if protocol == "https" and offline_config.shared_secret:
                 if not tag:
                     logger.warning(
                         "Discarding offline payload with missing tag (protocol=%r).",
@@ -183,7 +174,7 @@ class PublicationService:
                     )
 
                 if not secrets.compare_digest(
-                    tag.encode(), OFFLINE_PUBLISH_SHARED_SECRET.encode()
+                    tag.encode(), offline_config.shared_secret.encode()
                 ):
                     logger.warning(
                         "Discarding offline payload with invalid tag (protocol=%r).",

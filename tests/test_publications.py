@@ -13,10 +13,6 @@ from publications import (
 )
 
 
-def _set_shared_secret(monkeypatch, secret):
-    monkeypatch.setattr(publications, "OFFLINE_PUBLISH_SHARED_SECRET", secret)
-
-
 def _payload(t_id=None):
     payload = MagicMock()
     payload.get_t_id.return_value = t_id
@@ -36,28 +32,27 @@ def service(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _reset_config(monkeypatch):
-    monkeypatch.setattr(publications, "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS", [])
-    _set_shared_secret(monkeypatch, None)
+def _reset_config(set_config):
+    set_config(publications, "offline_config", allowed_protocols=[], shared_secret=None)
 
 
-def test_https_offline_rejects_wrong_tag(monkeypatch, service):
-    _set_shared_secret(monkeypatch, "s3cret")
+def test_https_offline_rejects_wrong_tag(set_config, service):
+    set_config(publications, "offline_config", shared_secret="s3cret")
 
     with pytest.raises(OfflineTagInvalidError):
         service._dispatch(_payload(), protocol="https", tag="wrong")
 
 
 @pytest.mark.parametrize("tag", [None, ""])
-def test_https_offline_rejects_missing_tag(monkeypatch, service, tag):
-    _set_shared_secret(monkeypatch, "s3cret")
+def test_https_offline_rejects_missing_tag(set_config, service, tag):
+    set_config(publications, "offline_config", shared_secret="s3cret")
 
     with pytest.raises(OfflineTagMissingError):
         service._dispatch(_payload(), protocol="https", tag=tag)
 
 
-def test_https_offline_succeeds_with_correct_tag(monkeypatch, service):
-    _set_shared_secret(monkeypatch, "s3cret")
+def test_https_offline_succeeds_with_correct_tag(set_config, service):
+    set_config(publications, "offline_config", shared_secret="s3cret")
 
     result = service._dispatch(_payload(), protocol="https", tag="s3cret")
 
@@ -66,8 +61,8 @@ def test_https_offline_succeeds_with_correct_tag(monkeypatch, service):
 
 
 @pytest.mark.parametrize("protocol", ["smtp", "sms"])
-def test_non_https_offline_ignores_tag_check(monkeypatch, service, protocol):
-    _set_shared_secret(monkeypatch, "s3cret")
+def test_non_https_offline_ignores_tag_check(set_config, service, protocol):
+    set_config(publications, "offline_config", shared_secret="s3cret")
 
     result = service._dispatch(_payload(), protocol=protocol, tag=None)
 
@@ -81,19 +76,29 @@ def test_https_offline_unchecked_when_secret_unset(service):
     assert result == "rmail"
 
 
-def test_protocol_allowlist_is_still_enforced_before_tag_check(monkeypatch, service):
-    monkeypatch.setattr(publications, "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS", ["smtp"])
-    _set_shared_secret(monkeypatch, "s3cret")
+def test_protocol_allowlist_is_still_enforced_before_tag_check(set_config, service):
+    set_config(
+        publications,
+        "offline_config",
+        allowed_protocols=["smtp"],
+        shared_secret="s3cret",
+    )
 
     with pytest.raises(ProtocolNotAllowedError):
         service._dispatch(_payload(), protocol="https", tag="s3cret")
 
 
-def test_online_payload_bypasses_protocol_and_tag_checks(monkeypatch, service):
+def test_online_payload_bypasses_protocol_and_tag_checks(
+    set_config, monkeypatch, service
+):
     """A token-based (online) payload must skip the offline-only allowlist/tag
     checks entirely, even over https with a secret configured and no tag."""
-    monkeypatch.setattr(publications, "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS", ["smtp"])
-    _set_shared_secret(monkeypatch, "s3cret")
+    set_config(
+        publications,
+        "offline_config",
+        allowed_protocols=["smtp"],
+        shared_secret="s3cret",
+    )
     monkeypatch.setattr(
         service, "_publish_online_content", MagicMock(return_value="gmail")
     )

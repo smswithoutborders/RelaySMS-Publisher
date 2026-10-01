@@ -2,6 +2,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 set -Eeuo pipefail
 
+# Export .env so the host, port and OTEL settings used below match the app's.
+ENV_FILE="$(dirname "$0")/../.env"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
 PYTHON="${PYTHON:-python3}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-16000}"

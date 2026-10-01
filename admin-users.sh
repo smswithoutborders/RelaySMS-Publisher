@@ -85,8 +85,7 @@ main() {
     cmd_env
     ;;
   shell)
-    log "Opening shell as '$SERVICE_USER' in $INSTALL_DIR ..."
-    run_as_service_user "exec bash"
+    run_service_shell
     ;;
   *)
     local args=("$@")

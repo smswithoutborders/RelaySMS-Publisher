@@ -11,9 +11,8 @@ SAMPLE_PARAMS = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
 
 
 @pytest.fixture(autouse=True)
-def _no_urls(monkeypatch):
-    monkeypatch.setattr(forward_task, "TWILIO_FORWARD_URLS_RAW", [])
-    monkeypatch.setattr(forward_task, "TWILIO_FORWARD_URLS_JSON", [])
+def _no_urls(set_config):
+    set_config(forward_task, "forward_config", urls_raw=[], urls_json=[])
 
 
 def test_noop_when_no_urls_configured(monkeypatch):
@@ -25,12 +24,12 @@ def test_noop_when_no_urls_configured(monkeypatch):
     mock_post.assert_not_called()
 
 
-def test_forwards_raw_and_json_to_their_respective_urls(monkeypatch):
-    monkeypatch.setattr(
-        forward_task, "TWILIO_FORWARD_URLS_RAW", ["https://raw.example.com/hook"]
-    )
-    monkeypatch.setattr(
-        forward_task, "TWILIO_FORWARD_URLS_JSON", ["https://json.example.com/hook"]
+def test_forwards_raw_and_json_to_their_respective_urls(set_config, monkeypatch):
+    set_config(
+        forward_task,
+        "forward_config",
+        urls_raw=["https://raw.example.com/hook"],
+        urls_json=["https://json.example.com/hook"],
     )
     mock_post = MagicMock()
     monkeypatch.setattr(forward_task._session, "post", mock_post)
@@ -43,7 +42,7 @@ def test_forwards_raw_and_json_to_their_respective_urls(monkeypatch):
 
     raw_kwargs = calls_by_url["https://raw.example.com/hook"]
     assert raw_kwargs["data"] == params
-    assert raw_kwargs["timeout"] == forward_task.TWILIO_FORWARD_TIMEOUT
+    assert raw_kwargs["timeout"] == forward_task.forward_config.timeout
 
     json_kwargs = calls_by_url["https://json.example.com/hook"]
     assert json_kwargs["json"]["sender"] == "+237123456789"
@@ -51,11 +50,14 @@ def test_forwards_raw_and_json_to_their_respective_urls(monkeypatch):
     assert "received_at" in json_kwargs["json"]
 
 
-def test_one_failing_destination_does_not_prevent_others(monkeypatch):
-    monkeypatch.setattr(
+def test_one_failing_destination_does_not_prevent_others(set_config, monkeypatch):
+    set_config(
         forward_task,
-        "TWILIO_FORWARD_URLS_RAW",
-        ["https://down.example.com/hook", "https://up.example.com/hook"],
+        "forward_config",
+        urls_raw=[
+            "https://down.example.com/hook",
+            "https://up.example.com/hook",
+        ],
     )
 
     def _fake_post(url, **kwargs):

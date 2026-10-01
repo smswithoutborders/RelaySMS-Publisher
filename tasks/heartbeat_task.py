@@ -2,22 +2,22 @@
 
 import requests
 
+from config import CeleryConfig
 from logutils import get_logger
 from tasks.celery_app import celery_app
-from utils import get_configs
 
 logger = get_logger(__name__)
-
-WORKER_PUSH_URL = get_configs("UPTIME_KUMA_WORKER_PUSH_URL")
+celery_config = CeleryConfig.get()
 
 
 @celery_app.task(name="tasks.heartbeat_task.ping_worker_heartbeat")
 def ping_worker_heartbeat() -> None:
     """Ping the Uptime Kuma push monitor. No-op if unconfigured."""
-    if not WORKER_PUSH_URL:
+    url = celery_config.worker_heartbeat_url
+    if not url:
         return
 
     try:
-        requests.get(WORKER_PUSH_URL, timeout=5)
+        requests.get(url, timeout=5)
     except requests.RequestException as exc:
         logger.warning("Failed to ping worker heartbeat: %s", exc)

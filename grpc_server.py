@@ -11,20 +11,19 @@ import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_interceptor import ServerInterceptor
 
+from config import GrpcConfig
 from db import dispose_engine, get_session
 from grpc_services.v3.service import PublisherServiceV3
 from keys import KeyManager
 from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2_grpc as v3_grpc
-from utils import get_configs
 
 logger = get_logger("publisher.grpc.server")
+grpc_config = GrpcConfig.get()
 
 
 class LoggingInterceptor(ServerInterceptor):
-    """gRPC server interceptor for logging requests."""
-
     server_protocol = "HTTP/2.0"
 
     def intercept(self, method, request_or_iterator, context, method_name):
@@ -45,7 +44,6 @@ class LoggingInterceptor(ServerInterceptor):
 
 
 def _load_ssl_credentials(cert_path: Path, key_path: Path) -> grpc.ServerCredentials:
-    """Read a certificate/key pair from disk and build gRPC server credentials."""
     for label, path in (("certificate", cert_path), ("key", key_path)):
         if not path.is_file():
             raise FileNotFoundError(f"TLS {label} not found: {path}")
@@ -56,7 +54,6 @@ def _load_ssl_credentials(cert_path: Path, key_path: Path) -> grpc.ServerCredent
 
 
 def _build_server(max_workers: int) -> grpc.Server:
-    """Construct the gRPC server and register services."""
     grpc_server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=max_workers),
         interceptors=[LoggingInterceptor()],
@@ -79,20 +76,18 @@ def _build_server(max_workers: int) -> grpc.Server:
     return grpc_server
 
 
-def _bind_port(
-    grpc_server: grpc.Server, mode: str, hostname: str, port: str, secure_port: str
-) -> None:
-    """Bind the server to an insecure or TLS port depending on mode."""
-    if mode != "production":
-        grpc_server.add_insecure_port(f"{hostname}:{port}")
-        logger.warning("Insecure mode: %s:%s", hostname, port)
+def _bind_port(grpc_server: grpc.Server) -> None:
+    """Bind GRPC_PORT, with TLS when GRPC_TLS_ENABLED is set."""
+    address = f"{grpc_config.host}:{grpc_config.port}"
+    if not grpc_config.tls_enabled:
+        grpc_server.add_insecure_port(address)
+        logger.info("Serving without TLS: %s", address)
         return
 
-    cert_path = Path(get_configs("SSL_CERTIFICATE"))
-    key_path = Path(get_configs("SSL_KEY"))
-
     try:
-        credentials = _load_ssl_credentials(cert_path, key_path)
+        credentials = _load_ssl_credentials(
+            Path(grpc_config.tls_cert_file), Path(grpc_config.tls_key_file)
+        )
     except FileNotFoundError as e:
         logger.critical("TLS certificate or key file not found: %s", e)
         raise
@@ -100,12 +95,11 @@ def _bind_port(
         logger.critical("Error loading TLS credentials: %s", e)
         raise
 
-    grpc_server.add_secure_port(f"{hostname}:{secure_port}", credentials)
-    logger.info("TLS enabled: %s:%s", hostname, secure_port)
+    grpc_server.add_secure_port(address, credentials)
+    logger.info("Serving with TLS: %s", address)
 
 
 def _shutdown(grpc_server: grpc.Server, signum: int) -> None:
-    """Gracefully stop the server and clean up resources."""
     logger.info("Shutting down (signal %s) ...", signum)
     grpc_server.stop(grace=5).wait()
     dispose_engine()
@@ -114,24 +108,17 @@ def _shutdown(grpc_server: grpc.Server, signum: int) -> None:
 
 
 def serve() -> None:
-    """Start the gRPC server and listen for requests."""
-    mode = get_configs("MODE", default_value="development")
-    hostname = get_configs("GRPC_HOST")
-    port = get_configs("GRPC_PORT")
-    secure_port = get_configs("GRPC_SSL_PORT")
-    max_workers = get_configs("GRPC_MAX_WORKERS", default_value=10)
-
     logger.info(
-        "Starting server in %s mode | host=%s | port=%s | workers=%s",
-        mode,
-        hostname,
-        port,
-        max_workers,
+        "Starting server | tls=%s | host=%s | port=%s | workers=%s",
+        grpc_config.tls_enabled,
+        grpc_config.host,
+        grpc_config.port,
+        grpc_config.max_workers,
     )
     logger.info("Logical CPU cores available: %s", os.cpu_count())
 
-    grpc_server = _build_server(max_workers)
-    _bind_port(grpc_server, mode, hostname, port, secure_port)
+    grpc_server = _build_server(grpc_config.max_workers)
+    _bind_port(grpc_server)
 
     signal.signal(signal.SIGTERM, lambda signum, _frame: _shutdown(grpc_server, signum))
     signal.signal(signal.SIGINT, lambda signum, _frame: _shutdown(grpc_server, signum))

@@ -156,16 +156,12 @@ detect_service_user() {
   id -un
 }
 
-# Runs a command as SERVICE_USER, in INSTALL_DIR, with .env loaded and the
-# venv on PATH. Expects INSTALL_DIR, ENV_FILE, VENV_DIR, SERVICE_USER, and
-# CURRENT_USER to already be set by the caller.
+# Runs a command as SERVICE_USER, in INSTALL_DIR, with the venv on PATH.
+# Python commands load .env themselves through config. Expects INSTALL_DIR,
+# ENV_FILE, VENV_DIR, SERVICE_USER, and CURRENT_USER to be set by the caller.
 run_as_service_user() {
   local inner_cmd="$1"
   local run_cmd="
-    set -a
-    # shellcheck disable=SC1090
-    . '$ENV_FILE'
-    set +a
     cd '$INSTALL_DIR'
     export PATH=\"$VENV_DIR/bin:$PATH\"
     $inner_cmd
@@ -178,4 +174,11 @@ run_as_service_user() {
   else
     error "Must run as '$SERVICE_USER' or with sudo (current user: $CURRENT_USER)."
   fi
+}
+
+# Opens an interactive shell as SERVICE_USER with .env exported, for running
+# commands by hand.
+run_service_shell() {
+  log "Opening shell as '$SERVICE_USER' in $INSTALL_DIR ..."
+  run_as_service_user "set -a; . '$ENV_FILE'; set +a; exec bash"
 }

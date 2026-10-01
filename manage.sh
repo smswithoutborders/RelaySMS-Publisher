@@ -19,10 +19,12 @@ ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
 
 check_sudo() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 
-# Only targets an already-installed service, so no fallback beyond the unit file.
+# Reads the installed unit only. Prints nothing when the service isn't installed,
+# so callers can report it.
 detect_service_user() {
   local unit="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
-  grep -E "^User=" "$unit" 2>/dev/null | head -1 | cut -d= -f2
+  [ -f "$unit" ] || return 0
+  awk -F= '/^User=/ { print $2; exit }' "$unit"
 }
 
 # git pull doesn't fix ownership for directories .env added since the last run.
@@ -57,17 +59,25 @@ sync_app_directories() {
 run_migrations() {
   local service_user
   service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || error "Could not detect service user from installed unit files"
+  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m config"
 
   log "Running database migrations"
-  sudo -u "$service_user" bash -c "
-    set -a
-    # shellcheck disable=SC1091
-    . '$INSTALL_DIR/.env'
-    set +a
-    cd '$INSTALL_DIR'
-    PATH='$INSTALL_DIR/venv/bin:$PATH' make migrate-up
-  "
+  (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m alembic upgrade head)
+}
+
+run_config_check() {
+  local service_user
+  service_user="$(detect_service_user)"
+  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m config"
+
+  log "Checking configuration"
+  # config reads .env itself the same way systemd does, so it is not sourced here.
+  (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m config)
+}
+
+cmd_check() {
+  check_sudo
+  run_config_check
 }
 
 cmd_migrate() {
@@ -250,6 +260,10 @@ cmd_update() {
 
   sync_app_directories
 
+  # Each service fails only on the settings it uses, so restart all and report after.
+  local config_ok=1
+  run_config_check || config_ok=0
+
   [ "$migrate" = "1" ] && run_migrations
 
   systemctl daemon-reload
@@ -257,6 +271,7 @@ cmd_update() {
     systemctl restart "$svc"
   done
   systemctl start "$TARGET_UNIT"
+  [ "$config_ok" = "1" ] || error "Update applied, but .env has errors (above); services using those settings won't start"
   log "Update complete"
 }
 
@@ -382,7 +397,7 @@ cmd_uninstall() {
 }
 
 usage() {
-  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|migrate|update|nginx|uninstall}"
+  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|check|migrate|update|nginx|uninstall}"
   exit 1
 }
 
@@ -398,6 +413,7 @@ main() {
     ;;
   enable) cmd_enable ;;
   disable) cmd_disable ;;
+  check) cmd_check ;;
   migrate) cmd_migrate ;;
   nginx)
     shift

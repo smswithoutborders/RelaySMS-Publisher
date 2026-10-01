@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import ForeignKey, Index, String, delete, func, or_, select
 from sqlalchemy.orm import Mapped, Session, joinedload, mapped_column, relationship
 
-import admin_auth_config
+from config import AdminAuthConfig
 from db import Base
 from db_types import UTCDateTime, utc_now
 
@@ -28,7 +28,7 @@ def _expired_clause():
     now = utc_now()
     return or_(
         AdminSession.expires_at <= now,
-        AdminSession.last_seen_at <= now - admin_auth_config.settings.idle_timeout,
+        AdminSession.last_seen_at <= now - AdminAuthConfig.get().idle_timeout,
     )
 
 
@@ -93,7 +93,7 @@ def get_active(session: Session, raw_token: str) -> Optional[AdminSession]:
     now = utc_now()
     if admin_session.expires_at <= now:
         return None
-    if admin_session.last_seen_at + admin_auth_config.settings.idle_timeout <= now:
+    if admin_session.last_seen_at + AdminAuthConfig.get().idle_timeout <= now:
         return None
     if not admin_session.admin_user.is_active:
         return None

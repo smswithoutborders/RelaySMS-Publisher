@@ -50,6 +50,5 @@ COPY --from=builder /publisher /publisher
 RUN chmod +x /publisher/docker-entrypoint.sh /publisher/scripts/run.sh /publisher/scripts/otel-wrap.sh
 
 ENV PATH="/venv/bin:${PATH}"
-ENV MODE=production
 
 ENTRYPOINT ["/publisher/docker-entrypoint.sh"]

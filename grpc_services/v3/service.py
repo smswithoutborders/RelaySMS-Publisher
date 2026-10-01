@@ -7,6 +7,7 @@ import grpc
 from cachetools import TTLCache
 from opentelemetry import trace as otel_trace
 
+from config import GrpcConfig
 from grpc_services.v3.exchange_oauth2_code import ExchangeOAuth2CodeAndStore
 from grpc_services.v3.exchange_pnba_code import ExchangePNBACodeAndStore
 from grpc_services.v3.get_oauth2_auth_url import GetOAuth2AuthorizationUrl
@@ -18,18 +19,14 @@ from grpc_services.v3.utils import verify_v1_request
 from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2_grpc
-from utils import get_configs
 
 logger = get_logger(__name__)
-
-NONCE_TTL_SECONDS = int(get_configs("NONCE_TTL_SECONDS", default_value="600"))
+grpc_config = GrpcConfig.get()
 
 
 class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
-    """PublisherServiceV3 gRPC service handler."""
-
     adapter_manager: AdapterManager
-    _nonce_cache: TTLCache = TTLCache(maxsize=10000, ttl=NONCE_TTL_SECONDS)
+    _nonce_cache: TTLCache = TTLCache(maxsize=10000, ttl=grpc_config.nonce_ttl_seconds)
     _nonce_lock: threading.Lock = threading.Lock()
 
     GetOAuth2AuthorizationUrl = GetOAuth2AuthorizationUrl
@@ -42,7 +39,6 @@ class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
 
     @classmethod
     def _get_nonce_lock(cls) -> threading.Lock:
-        """Get the nonce lock for thread-safe nonce cache access."""
         return cls._nonce_lock
 
     def handle_v1_request_auth(
@@ -53,7 +49,7 @@ class PublisherServiceV3(publisher_pb2_grpc.PublisherServicer):
             context=context,
             nonce_cache=self._nonce_cache,
             nonce_lock=self._get_nonce_lock(),
-            nonce_cache_ttl=NONCE_TTL_SECONDS,
+            nonce_cache_ttl=grpc_config.nonce_ttl_seconds,
         )
         if error:
             return None, self.handle_create_grpc_error_response(

@@ -659,16 +659,15 @@ create_app_directories() {
   done
 }
 
+run_config_check() {
+  log "Checking configuration"
+  # config reads .env itself the same way systemd does, so it is not sourced here.
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m config)
+}
+
 run_migrations() {
   log "Running database migrations"
-  sudo -u "$SERVICE_USER" bash -c "
-    set -a
-    # shellcheck disable=SC1091
-    . '$INSTALL_DIR/.env'
-    set +a
-    cd '$INSTALL_DIR'
-    PATH='$INSTALL_DIR/venv/bin:$PATH' make migrate-up
-  "
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
 }
 
 install_services() {
@@ -1022,6 +1021,8 @@ main() {
   configure_database
   configure_broker
   create_app_directories
+  # Only warn, since the operator may still be filling in .env.
+  run_config_check || warn "Fix .env, then run: sudo $INSTALL_DIR/manage.sh check"
   run_migrations
   install_services
   configure_nginx
@@ -1029,7 +1030,7 @@ main() {
 
   log "Installation complete"
   log "  Config : $INSTALL_DIR/.env"
-  log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|update|nginx}"
+  log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|check|update|nginx}"
   log "  Platforms : $INSTALL_DIR/platforms.sh {add|remove|update|list|recover|env|shell}"
   log "  Gateway Clients : $INSTALL_DIR/gateway-clients.sh {create|list|update|delete|env|shell}"
   log "  Admin Users : $INSTALL_DIR/admin-users.sh {create|list|reset-password|disable|enable|delete|revoke-sessions|env|shell}"

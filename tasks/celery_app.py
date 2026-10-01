@@ -7,7 +7,7 @@ from pathlib import Path
 from celery import Celery
 from celery.schedules import crontab
 
-from utils import get_configs
+from config import CeleryConfig
 
 _UNDER_JOURNALD = bool(os.getenv("JOURNAL_STREAM")) and not sys.stderr.isatty()
 _WORKER_LOG_FORMAT = (
@@ -27,71 +27,35 @@ def _ensure_db_dir(path: str) -> None:
     Path(path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
 
 
-def _sqlite_urls() -> tuple[str, str]:
-    broker_path = get_configs(
-        "CELERY_BROKER_DB_PATH", default_value="data/celery_broker.db"
+def _broker_urls(celery: CeleryConfig) -> tuple[str, str | None]:
+    if celery.broker_type == "redis":
+        return celery.redis_url, celery.redis_url
+    if celery.broker_type == "rabbitmq":
+        return celery.rabbitmq_url, None
+    _ensure_db_dir(celery.broker_db_path)
+    _ensure_db_dir(celery.result_db_path)
+    return (
+        f"sqla+sqlite:///{celery.broker_db_path}",
+        f"db+sqlite:///{celery.result_db_path}",
     )
-    result_path = get_configs(
-        "CELERY_RESULT_DB_PATH", default_value="data/celery_results.db"
-    )
-    _ensure_db_dir(broker_path)
-    _ensure_db_dir(result_path)
-    return f"sqla+sqlite:///{broker_path}", f"db+sqlite:///{result_path}"
 
 
-def _redis_urls() -> tuple[str, str]:
-    url = get_configs("CELERY_REDIS_URL", default_value="redis://localhost:6379/0")
-    return url, url
-
-
-def _rabbitmq_urls() -> tuple[str, str | None]:
-    broker = get_configs(
-        "CELERY_RABBITMQ_URL", default_value="amqp://guest:guest@localhost:5672//"
-    )
-    return broker, None
-
-
-_BROKER_BUILDERS = {
-    "sqlite": _sqlite_urls,
-    "redis": _redis_urls,
-    "rabbitmq": _rabbitmq_urls,
-}
-_DEFAULT_CONCURRENCY = {"sqlite": 1, "redis": 4, "rabbitmq": 4}
-
-
-def _parse_cron(config_name: str, default_value: str) -> crontab:
-    cron_expr = get_configs(config_name, default_value=default_value)
+def _parse_cron(name: str, expression: str) -> crontab:
     try:
-        return crontab.from_string(cron_expr)
+        return crontab.from_string(expression)
     except ValueError as e:
-        raise ValueError(f"Invalid {config_name} '{cron_expr}': {e}") from None
+        raise ValueError(f"Invalid {name} {expression!r}: {e}") from None
 
 
 def make_celery() -> Celery:
-    """Create and configure the Celery application."""
-    broker_type = get_configs("CELERY_BROKER_TYPE", default_value="sqlite").lower()
-    try:
-        build_urls = _BROKER_BUILDERS[broker_type]
-    except KeyError:
-        raise ValueError(
-            f"Unknown CELERY_BROKER_TYPE '{broker_type}'. "
-            f"Choose one of: {', '.join(_BROKER_BUILDERS)}"
-        ) from None
+    celery = CeleryConfig.get()
+    broker_url, result_backend = _broker_urls(celery)
+    _ensure_db_dir(celery.beat_schedule_path)
 
-    broker_url, result_backend = build_urls()
-    concurrency = int(
-        get_configs(
-            "CELERY_WORKER_CONCURRENCY",
-            default_value=str(_DEFAULT_CONCURRENCY[broker_type]),
-        )
+    cleanup_schedule = _parse_cron("CELERY_CLEANUP_CRON", celery.cleanup_cron)
+    token_cleanup_schedule = _parse_cron(
+        "CELERY_TOKEN_CLEANUP_CRON", celery.token_cleanup_cron
     )
-    schedule_path = get_configs(
-        "CELERY_BEAT_SCHEDULE_PATH", default_value="data/celerybeat-schedule"
-    )
-    _ensure_db_dir(schedule_path)
-
-    cleanup_schedule = _parse_cron("CELERY_CLEANUP_CRON", "0 */3 * * *")
-    token_cleanup_schedule = _parse_cron("CELERY_TOKEN_CLEANUP_CRON", "0 3 * * *")
 
     beat_schedule = {
         "cleanup-stale-payload-sessions": {
@@ -107,7 +71,7 @@ def make_celery() -> Celery:
             "schedule": cleanup_schedule,
         },
     }
-    if get_configs("UPTIME_KUMA_WORKER_PUSH_URL"):
+    if celery.worker_heartbeat_url:
         # Uptime Kuma push-monitor heartbeat, see observability/README.md
         beat_schedule["worker-heartbeat"] = {
             "task": "tasks.heartbeat_task.ping_worker_heartbeat",
@@ -130,7 +94,7 @@ def make_celery() -> Celery:
         result_serializer="json",
         accept_content=["json"],
         worker_enable_remote_control=False,
-        worker_concurrency=concurrency,
+        worker_concurrency=celery.worker_concurrency,
         worker_hijack_root_logger=False,
         task_acks_late=True,
         task_reject_on_worker_lost=True,
@@ -138,7 +102,7 @@ def make_celery() -> Celery:
         task_ignore_result=True,
         worker_log_format=_WORKER_LOG_FORMAT,
         worker_task_log_format=_WORKER_TASK_LOG_FORMAT,
-        beat_schedule_filename=schedule_path,
+        beat_schedule_filename=celery.beat_schedule_path,
         beat_schedule=beat_schedule,
     )
     return app

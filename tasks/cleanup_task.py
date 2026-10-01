@@ -1,26 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import datetime
-
 from celery.signals import worker_init
 
+from config import CleanupConfig
 from db import get_session
+from db_types import utc_now
 from logutils import get_logger
 from models.admin_session import delete_expired as delete_expired_admin_sessions
 from models.payload_session import delete_stale
 from platforms.adapter_manager import AdapterManager
 from tasks.celery_app import celery_app
 from token_cleanup import cleanup_idle_tokens as run_idle_token_cleanup
-from utils import get_configs
 
 logger = get_logger(__name__)
-
-PAYLOAD_SESSION_MAX_AGE_HOURS = int(
-    get_configs("PAYLOAD_SESSION_MAX_AGE_HOURS", default_value="3")
-)
-TOKEN_IDLE_MAX_AGE_DAYS = int(
-    get_configs("TOKEN_IDLE_MAX_AGE_DAYS", default_value="90")
-)
+cleanup_config = CleanupConfig.get()
 
 _adapter_manager: AdapterManager | None = None
 
@@ -41,9 +34,7 @@ def _get_adapter_manager() -> AdapterManager:
 @celery_app.task(name="tasks.cleanup_task.cleanup_stale_payload_sessions")
 def cleanup_stale_payload_sessions() -> None:
     """Delete payload sessions left incomplete for longer than the max age."""
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
-        hours=PAYLOAD_SESSION_MAX_AGE_HOURS
-    )
+    cutoff = utc_now() - cleanup_config.payload_session_max_age
     with get_session() as db:
         deleted = delete_stale(older_than=cutoff, session=db)
 
@@ -56,9 +47,7 @@ def cleanup_stale_payload_sessions() -> None:
 @celery_app.task(name="tasks.cleanup_task.cleanup_idle_tokens")
 def cleanup_idle_tokens() -> None:
     """Delete tokens (and their keys) idle past the configured max age."""
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
-        days=TOKEN_IDLE_MAX_AGE_DAYS
-    )
+    cutoff = utc_now() - cleanup_config.token_idle_max_age
     with get_session() as db:
         counts = run_idle_token_cleanup(
             older_than=cutoff, session=db, adapter_manager=_get_adapter_manager()

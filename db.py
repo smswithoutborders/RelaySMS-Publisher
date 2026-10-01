@@ -11,8 +11,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool, StaticPool
 
+from config import DatabaseConfig, LoggingConfig, ServerDatabaseConfig
 from logutils import get_logger
-from utils import get_config_bool, get_configs
 
 logger = get_logger(__name__)
 Base = declarative_base()
@@ -21,21 +21,14 @@ _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker] = None
 
 
-def _build_sqlite_url() -> str:
-    """Build SQLite connection URL."""
-    db_path = get_configs("SQLITE_DATABASE_PATH", default_value="data/relaysms.db")
-    safe_db_path = quote(db_path, safe="/")
-    return f"sqlite:///{safe_db_path}"
-
-
-def _make_sqlcipher3_creator(db_path: str, key: str):
-    """Return a SQLAlchemy creator function that opens an encrypted SQLCipher3 database."""
+def _make_sqlcipher3_creator(db_path: str, key: bytes):
+    """Return a function that opens the encrypted SQLCipher database."""
     import sqlcipher3
 
     def connect():
         conn = sqlcipher3.connect(db_path, check_same_thread=False, timeout=30)
         conn.execute("PRAGMA cipher_compatibility = 4;")
-        conn.execute(f"PRAGMA key = \"x'{key}'\";")
+        conn.execute(f"PRAGMA key = \"x'{key.hex()}'\";")
 
         try:
             conn.execute("SELECT count(*) FROM sqlite_master;")
@@ -48,204 +41,138 @@ def _make_sqlcipher3_creator(db_path: str, key: str):
     return connect
 
 
-def _get_sqlcipher3_config():
-    """Validate and return (db_path, key) for an encrypted SQLite database."""
-    db_path = get_configs("SQLITE_DATABASE_PATH", default_value="data/relaysms.db")
-    key = get_configs("DATABASE_ENCRYPTION_KEY")
-    if not key:
-        raise ValueError(
-            "DATABASE_ENCRYPTION_ENABLED=true but DATABASE_ENCRYPTION_KEY is not set"
-        )
-
-    try:
-        key_bytes = bytes.fromhex(key)
-    except ValueError:
-        raise ValueError("DATABASE_ENCRYPTION_KEY must be a valid hex string")
-
-    if len(key_bytes) != 32:
-        raise ValueError(
-            f"DATABASE_ENCRYPTION_KEY must be 32 bytes (64 hex chars), got {len(key_bytes)}"
-        )
-
-    logger.info("Using SQLCipher3 encryption for SQLite")
-    return db_path, key
-
-
-def _ensure_sqlite_parent_dir() -> None:
-    """Create the SQLite database parent directory if needed."""
-    db_path = get_configs("SQLITE_DATABASE_PATH", default_value="data/relaysms.db")
-    if not db_path or db_path == ":memory:":
+def _ensure_sqlite_parent_dir(db_path: str) -> None:
+    if db_path == ":memory:":
         return
 
     parent = Path(db_path).expanduser().resolve().parent
     parent.mkdir(parents=True, exist_ok=True)
 
 
-def _build_mysql_url() -> str:
-    """Build MySQL connection URL."""
-    host = get_configs("MYSQL_HOST", default_value="localhost")
-    port = get_configs("MYSQL_PORT", default_value="3306")
-    user = get_configs("MYSQL_USER")
-    password = get_configs("MYSQL_PASSWORD")
-    database = get_configs("MYSQL_DATABASE")
-
-    if get_config_bool("DATABASE_ENCRYPTION_ENABLED"):
-        logger.info(
-            "Database encryption enabled - ensure TDE is configured on MySQL/MariaDB server"
-        )
-
-    safe_user = quote_plus(user) if user else ""
-    safe_password = quote_plus(password) if password else ""
-    safe_database = quote_plus(database) if database else ""
-
-    return f"mysql+pymysql://{safe_user}:{safe_password}@{host}:{port}/{safe_database}"
+def _server_url(driver: str, server: ServerDatabaseConfig) -> str:
+    safe_user = quote_plus(server.user or "")
+    safe_password = quote_plus(server.password or "")
+    safe_database = quote_plus(server.database or "")
+    return (
+        f"{driver}://{safe_user}:{safe_password}@{server.host}:{server.port}"
+        f"/{safe_database}"
+    )
 
 
-def _ensure_mysql_database() -> None:
-    """Create MySQL database if it doesn't exist."""
+def build_url(database: DatabaseConfig) -> str:
+    """Return the connection URL for the configured dialect."""
+    if database.dialect == "mysql":
+        return _server_url("mysql+pymysql", database.mysql)
+    if database.dialect == "postgres":
+        return _server_url("postgresql+psycopg2", database.postgres)
+    return f"sqlite:///{quote(database.sqlite_path, safe='/')}"
+
+
+def _ensure_mysql_database(server: ServerDatabaseConfig) -> None:
     import pymysql
 
-    host = get_configs("MYSQL_HOST", default_value="localhost")
-    port = int(get_configs("MYSQL_PORT", default_value="3306"))
-    user = get_configs("MYSQL_USER")
-    password = get_configs("MYSQL_PASSWORD")
-    database = get_configs("MYSQL_DATABASE")
-
-    safe_db = database.replace("`", "``") if database else database
+    safe_db = server.database.replace("`", "``")
 
     try:
-        conn = pymysql.connect(host=host, port=port, user=user, password=password)
+        conn = pymysql.connect(
+            host=server.host,
+            port=server.port,
+            user=server.user,
+            password=server.password,
+        )
         with conn.cursor() as cursor:
             cursor.execute(
                 f"CREATE DATABASE IF NOT EXISTS `{safe_db}` "
                 "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
             )
         conn.close()
-        logger.debug(f"Database '{database}' ready")
+        logger.debug("Database '%s' ready", server.database)
     except Exception as e:
-        logger.error(f"Failed to create database '{database}': {e}")
+        logger.error("Failed to create database '%s': %s", server.database, e)
         raise
 
 
-def _has_mysql_config() -> bool:
-    """Check if MySQL configuration is complete."""
-    required = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE"]
-    return all(get_configs(key) for key in required)
-
-
-def _build_postgres_url() -> str:
-    """Build PostgreSQL connection URL."""
-    host = get_configs("POSTGRES_HOST", default_value="localhost")
-    port = get_configs("POSTGRES_PORT", default_value="5432")
-    user = get_configs("POSTGRES_USER")
-    password = get_configs("POSTGRES_PASSWORD")
-    database = get_configs("POSTGRES_DATABASE")
-
-    if get_config_bool("DATABASE_ENCRYPTION_ENABLED"):
-        logger.info(
-            "Database encryption enabled - Postgres has no built-in TDE, "
-            "use disk-level encryption on the server"
-        )
-
-    safe_user = quote_plus(user) if user else ""
-    safe_password = quote_plus(password) if password else ""
-    safe_database = quote_plus(database) if database else ""
-
-    return f"postgresql+psycopg2://{safe_user}:{safe_password}@{host}:{port}/{safe_database}"
-
-
-def _ensure_postgres_database() -> None:
-    """Create PostgreSQL database if it doesn't exist."""
+def _ensure_postgres_database(server: ServerDatabaseConfig) -> None:
     import psycopg2
     from psycopg2 import sql
 
-    host = get_configs("POSTGRES_HOST", default_value="localhost")
-    port = int(get_configs("POSTGRES_PORT", default_value="5432"))
-    user = get_configs("POSTGRES_USER")
-    password = get_configs("POSTGRES_PASSWORD")
-    database = get_configs("POSTGRES_DATABASE")
-
     try:
         conn = psycopg2.connect(
-            host=host, port=port, user=user, password=password, dbname="postgres"
+            host=server.host,
+            port=server.port,
+            user=server.user,
+            password=server.password,
+            dbname="postgres",
         )
         conn.autocommit = True
         with conn.cursor() as cursor:
-            cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (database,))
+            cursor.execute(
+                "SELECT 1 FROM pg_database WHERE datname = %s", (server.database,)
+            )
             if cursor.fetchone() is None:
                 cursor.execute(
-                    sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database))
+                    sql.SQL("CREATE DATABASE {}").format(
+                        sql.Identifier(server.database)
+                    )
                 )
         conn.close()
-        logger.debug(f"Database '{database}' ready")
+        logger.debug("Database '%s' ready", server.database)
     except Exception as e:
-        logger.error(f"Failed to create database '{database}': {e}")
+        logger.error("Failed to create database '%s': %s", server.database, e)
         raise
 
 
-def _has_postgres_config() -> bool:
-    """Check if PostgreSQL configuration is complete."""
-    required = [
-        "POSTGRES_HOST",
-        "POSTGRES_USER",
-        "POSTGRES_PASSWORD",
-        "POSTGRES_DATABASE",
-    ]
-    return all(get_configs(key) for key in required)
-
-
-def _sql_echo_enabled() -> bool:
-    return get_configs("LOG_LEVEL", default_value="info").lower() == "debug"
-
-
 def _create_engine() -> Engine:
-    """Create and configure database engine."""
-    mode = get_configs("MODE", default_value="development")
-    engine_type = get_configs("DATABASE_DIALECT", default_value="sqlite")
+    # Read when the engine is built, since many processes import db but never use it.
+    database = DatabaseConfig.get()
 
-    if mode == "testing":
-        logger.debug("Using in-memory SQLite for testing")
+    if database.dialect == "sqlite" and database.sqlite_path == ":memory:":
+        # One shared connection, so every session sees the same in-memory database.
         return create_engine(
             "sqlite:///:memory:",
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
         )
 
-    if mode == "development" and engine_type.lower() == "mysql":
-        if not _has_mysql_config():
-            logger.warning("MySQL config incomplete, falling back to SQLite")
-            engine_type = "sqlite"
+    sql_echo = LoggingConfig.get().log_level == "DEBUG"
 
-    if mode == "development" and engine_type.lower() == "postgres":
-        if not _has_postgres_config():
-            logger.warning("Postgres config incomplete, falling back to SQLite")
-            engine_type = "sqlite"
+    if database.dialect == "mysql":
+        if database.encryption_enabled:
+            logger.info(
+                "Database encryption enabled - ensure TDE is configured on "
+                "MySQL/MariaDB server"
+            )
+        _ensure_mysql_database(database.mysql)
+    elif database.dialect == "postgres":
+        if database.encryption_enabled:
+            logger.info(
+                "Database encryption enabled - Postgres has no built-in TDE, "
+                "use disk-level encryption on the server"
+            )
+        _ensure_postgres_database(database.postgres)
 
-    if engine_type.lower() == "mysql":
-        _ensure_mysql_database()
-        url = _build_mysql_url()
-        engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
-    elif engine_type.lower() == "postgres":
-        _ensure_postgres_database()
-        url = _build_postgres_url()
-        engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
+    if database.dialect != "sqlite":
+        engine = create_engine(
+            build_url(database), pool_pre_ping=True, pool_recycle=3600
+        )
     else:
-        _ensure_sqlite_parent_dir()
-        if get_config_bool("DATABASE_ENCRYPTION_ENABLED"):
-            db_path, key = _get_sqlcipher3_config()
+        _ensure_sqlite_parent_dir(database.sqlite_path)
+        if database.encryption_enabled:
+            logger.info("Using SQLCipher3 encryption for SQLite")
             engine = create_engine(
                 "sqlite://",
-                creator=_make_sqlcipher3_creator(db_path, key),
-                echo=_sql_echo_enabled(),
+                creator=_make_sqlcipher3_creator(
+                    database.sqlite_path, database.encryption_key
+                ),
+                echo=sql_echo,
                 poolclass=QueuePool,
                 pool_size=5,
                 pool_pre_ping=True,
             )
         else:
-            url = _build_sqlite_url()
             engine = create_engine(
-                url,
-                echo=_sql_echo_enabled(),
+                build_url(database),
+                echo=sql_echo,
                 connect_args={"check_same_thread": False, "timeout": 30},
                 poolclass=QueuePool,
                 pool_size=5,
@@ -262,12 +189,11 @@ def _create_engine() -> Engine:
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
 
-    logger.info(f"Connected to {engine_type} database")
+    logger.info("Connected to %s database", database.dialect)
     return engine
 
 
 def get_engine() -> Engine:
-    """Get database engine."""
     global _engine
     if _engine is None:
         _engine = _create_engine()
@@ -275,7 +201,6 @@ def get_engine() -> Engine:
 
 
 def dispose_engine() -> None:
-    """Dispose database engine and cleanup connections."""
     global _engine, _session_factory
     if _engine is not None:
         _engine.dispose()
@@ -285,7 +210,6 @@ def dispose_engine() -> None:
 
 
 def get_session_factory() -> sessionmaker:
-    """Get session factory."""
     global _session_factory
     if _session_factory is None:
         _session_factory = sessionmaker(bind=get_engine(), expire_on_commit=False)
@@ -294,7 +218,7 @@ def get_session_factory() -> sessionmaker:
 
 @contextmanager
 def get_session() -> Generator[Session, None, None]:
-    """Context manager for database sessions."""
+    """Yield a session that commits on success and rolls back on error."""
     session = get_session_factory()()
     try:
         yield session

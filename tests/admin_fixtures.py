@@ -1,15 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import base64
-import dataclasses
-import datetime
 
 import pytest
 from argon2 import PasswordHasher
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import admin_auth_config
 import app as app_module
 import db
 import models  # noqa: F401  (registers every table on Base.metadata)
@@ -21,8 +18,7 @@ ADMIN_EMAIL = "admin@example.org"
 
 
 @pytest.fixture(autouse=True)
-def use_test_db(monkeypatch):
-    monkeypatch.setenv("MODE", "testing")
+def use_test_db():
     db.dispose_engine()
     Base.metadata.create_all(db.get_engine())
     yield
@@ -40,21 +36,6 @@ def fast_hasher(monkeypatch):
     admin_users._dummy_hash.cache_clear()
     yield
     admin_users._dummy_hash.cache_clear()
-
-
-@pytest.fixture(autouse=True)
-def default_admin_settings(monkeypatch):
-    monkeypatch.setattr(
-        admin_auth_config,
-        "settings",
-        dataclasses.replace(
-            admin_auth_config.settings,
-            web_origins=[],
-            cookie_secure=True,
-            idle_timeout=datetime.timedelta(minutes=30),
-            max_age=datetime.timedelta(hours=12),
-        ),
-    )
 
 
 @pytest.fixture

@@ -9,12 +9,11 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator
 from twilio.twiml.messaging_response import MessagingResponse
 
-import admin_auth_config
+from config import AdminAuthConfig, TwilioConfig
 from db import get_db
 from db_types import as_utc, utc_now
 from gateway_clients.gateway_client_manager import GatewayClientManager
@@ -49,14 +48,11 @@ from rest_services.v1.schemas import (
 )
 from tasks.forward_task import forward_twilio_webhook
 from tasks.publication_task import publish_message
-from utils import get_config_bool, get_configs
 
 logger = get_logger(__name__)
 
-TWILIO_SMS_TRANSPORT_ENABLED = get_config_bool("TWILIO_SMS_TRANSPORT_ENABLED")
-TWILIO_AUTH_TOKEN = get_configs(
-    "TWILIO_AUTH_TOKEN", strict=TWILIO_SMS_TRANSPORT_ENABLED
-)
+admin_config = AdminAuthConfig.get()
+twilio_config = TwilioConfig.get()
 
 router = APIRouter()
 
@@ -119,14 +115,6 @@ def stats_filters(
         country_code=country_code,
         since=since,
         until=until,
-    )
-
-
-def _stats_response(content: BaseModel) -> Response:
-    return Response(
-        content=content.model_dump_json(),
-        media_type="application/json",
-        headers={"Cache-Control": PRIVATE_CACHE_CONTROL},
     )
 
 
@@ -297,14 +285,14 @@ def create_publications(body: PublishRestContentRequest) -> PublishContentRespon
 @router.post("/twilio-sms")
 async def twilio_incoming_sms(request: Request) -> Response:
     """Ingest an inbound SMS relayed by Twilio's messaging webhook."""
-    if not TWILIO_SMS_TRANSPORT_ENABLED:
+    if not twilio_config.sms_transport_enabled:
         raise HTTPException(status_code=404, detail="Not Found")
 
     form = await request.form()
     params = dict(form)
     signature = request.headers.get("X-Twilio-Signature", "")
 
-    validator = RequestValidator(TWILIO_AUTH_TOKEN)
+    validator = RequestValidator(twilio_config.auth_token)
     if not validator.validate(str(request.url), params, signature):
         logger.warning("Rejected Twilio webhook with invalid signature.")
         raise HTTPException(status_code=403, detail="Invalid Twilio signature.")
@@ -332,43 +320,42 @@ async def twilio_incoming_sms(request: Request) -> Response:
 
 @router.get(
     "/stats/publications",
-    response_model=None,
-    responses={200: {"model": PublicationStatsPage}},
+    response_model=PublicationStatsPage,
     dependencies=[Depends(require_admin)],
 )
 def list_publication_stats(
     request: Request,
+    response: Response,
     filters: publication_stats.StatsFilters = Depends(stats_filters),
     limit: int = Query(50, ge=1, le=200, description="Page size"),
     cursor: Optional[str] = Query(
         None, max_length=512, description="Set by the next and prev links"
     ),
     db: Session = Depends(get_db),
-) -> Response:
+) -> PublicationStatsPage:
     """List publish attempts."""
     decoded_cursor = publication_stats.decode_cursor(cursor) if cursor else None
 
     page = publication_stats.list_stats(
         db, filters=filters, limit=limit, cursor=decoded_cursor
     )
-    return _stats_response(
-        PublicationStatsPage.model_validate(
-            {
-                "data": page.data,
-                "next": _page_link(request, page.next_cursor),
-                "prev": _page_link(request, page.prev_cursor),
-            }
-        )
+    response.headers["Cache-Control"] = PRIVATE_CACHE_CONTROL
+    return PublicationStatsPage.model_validate(
+        {
+            "data": page.data,
+            "next": _page_link(request, page.next_cursor),
+            "prev": _page_link(request, page.prev_cursor),
+        }
     )
 
 
 @router.get(
     "/stats/publications/summary",
-    response_model=None,
-    responses={200: {"model": PublicationStatsSummary}},
+    response_model=PublicationStatsSummary,
     dependencies=[Depends(require_admin)],
 )
 def summarize_publication_stats(
+    response: Response,
     filters: publication_stats.StatsFilters = Depends(stats_filters),
     group_by: List[StatsGroupBy] = Query(
         [StatsGroupBy.status],
@@ -378,7 +365,7 @@ def summarize_publication_stats(
         None, description="Also group by period start, in UTC. Weeks start Monday."
     ),
     db: Session = Depends(get_db),
-) -> Response:
+) -> PublicationStatsSummary:
     """Count publish attempts per group. Defaults to the last 30 days."""
     columns = list(dict.fromkeys(item.value for item in group_by))
     unit = interval.value if interval else None
@@ -393,14 +380,13 @@ def summarize_publication_stats(
         filters=dataclasses.replace(filters, since=since, until=until),
         interval=unit,
     )
-    return _stats_response(
-        PublicationStatsSummary(
-            since=since,
-            until=until,
-            interval=unit,
-            total=sum(group["count"] for group in groups),
-            groups=groups,
-        )
+    response.headers["Cache-Control"] = PRIVATE_CACHE_CONTROL
+    return PublicationStatsSummary(
+        since=since,
+        until=until,
+        interval=unit,
+        total=sum(group["count"] for group in groups),
+        groups=groups,
     )
 
 
@@ -421,7 +407,7 @@ def admin_login(
     admin_session, raw_token = admin_sessions.create(
         db,
         admin,
-        max_age=admin_auth_config.settings.max_age,
+        max_age=admin_config.max_age,
         user_agent=request.headers.get("User-Agent"),
     )
     record_login(admin)

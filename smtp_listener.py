@@ -21,6 +21,7 @@ from imap_tools import (
 )
 from pydantic import ValidationError
 
+from config import SmtpConfig
 import smtp_auth
 from logutils import get_logger
 from publications import (
@@ -30,34 +31,20 @@ from publications import (
 )
 from rest_services.v1.schemas import PublishContentRequest
 from tasks.publication_task import publish_message
-from utils import get_config_bool, get_config_list, get_configs
 
 logger = get_logger("publisher.smtp.listener")
 
-SMTP_TRANSPORT_ENABLED = get_config_bool("SMTP_TRANSPORT_ENABLED")
-
-if SMTP_TRANSPORT_ENABLED:
-    IMAP_SERVER = get_configs("SMTP_IMAP_SERVER", strict=True)
-    IMAP_PORT = int(get_configs("SMTP_IMAP_PORT", default_value="993"))
-    IMAP_USERNAME = get_configs("SMTP_IMAP_USERNAME", strict=True)
-    IMAP_PASSWORD = get_configs("SMTP_IMAP_PASSWORD", strict=True)
-    MAIL_FOLDERS = get_config_list("SMTP_IMAP_MAIL_FOLDER", default_value=["INBOX"])
-    TLS_CLIENT_CERTIFICATE = get_configs("SMTP_TLS_CLIENT_CERTIFICATE")
-    TLS_CLIENT_KEY = get_configs("SMTP_TLS_CLIENT_KEY")
-else:
-    IMAP_SERVER = IMAP_PORT = IMAP_USERNAME = IMAP_PASSWORD = MAIL_FOLDERS = None
-    TLS_CLIENT_CERTIFICATE = TLS_CLIENT_KEY = None
-
-UPTIME_KUMA_SMTP_PUSH_URL = get_configs("UPTIME_KUMA_SMTP_PUSH_URL")
+smtp_config = SmtpConfig.get()
 
 
 def _ping_heartbeat() -> None:
     """Best-effort ping to the Uptime Kuma push monitor. No-op if unset."""
-    if not UPTIME_KUMA_SMTP_PUSH_URL:
+    url = smtp_config.heartbeat_url
+    if not url:
         return
 
     try:
-        requests.get(UPTIME_KUMA_SMTP_PUSH_URL, timeout=5)
+        requests.get(url, timeout=5)
     except requests.RequestException as exc:
         logger.warning("Failed to ping SMTP listener heartbeat: %s", exc)
 
@@ -135,16 +122,17 @@ def process_incoming_email(msg: MailMessage) -> bool:
 
 def main() -> None:
     """Run the SMTP (IMAP-polling) ingestion loop."""
-    if not SMTP_TRANSPORT_ENABLED:
+    if not smtp_config.transport_enabled:
         logger.info(
             "SMTP transport disabled (SMTP_TRANSPORT_ENABLED != true). Exiting."
         )
         return
 
     ssl_context = ssl.create_default_context()
-    if TLS_CLIENT_CERTIFICATE and TLS_CLIENT_KEY:
+    if smtp_config.tls_client_certificate:
         ssl_context.load_cert_chain(
-            certfile=TLS_CLIENT_CERTIFICATE, keyfile=TLS_CLIENT_KEY
+            certfile=smtp_config.tls_client_certificate,
+            keyfile=smtp_config.tls_client_key,
         )
 
     done = False
@@ -152,11 +140,13 @@ def main() -> None:
         connection_start_time = time.monotonic()
         connection_live_time = 0.0
         try:
-            with MailBox(IMAP_SERVER, IMAP_PORT, ssl_context=ssl_context).login(
-                IMAP_USERNAME, IMAP_PASSWORD
-            ) as mailbox:
+            with MailBox(
+                smtp_config.imap_server, smtp_config.imap_port, ssl_context=ssl_context
+            ).login(smtp_config.imap_username, smtp_config.imap_password) as mailbox:
                 logger.info(
-                    "Connected to mailbox %s on %s", IMAP_SERVER, time.asctime()
+                    "Connected to mailbox %s on %s",
+                    smtp_config.imap_server,
+                    time.asctime(),
                 )
                 while connection_live_time < 29 * 60:
                     try:
@@ -164,7 +154,7 @@ def main() -> None:
                         if responses:
                             logger.debug("IMAP IDLE responses: %s", responses)
 
-                        for folder in MAIL_FOLDERS:
+                        for folder in smtp_config.mail_folders:
                             try:
                                 mailbox.folder.set(folder)
                             except MailboxFolderSelectError:

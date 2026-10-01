@@ -13,6 +13,7 @@ import requests
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
+from logutils import get_logger
 from protos.v3 import publisher_pb2, publisher_pb2_grpc
 from tests.utils import (
     b64,
@@ -28,7 +29,6 @@ from tests.utils import (
     read_attachment,
     select_token_interactively,
 )
-from utils import get_logger
 
 logger = get_logger("test_cli")
 

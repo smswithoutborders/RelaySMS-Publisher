@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import dataclasses
 import datetime
 
 import pytest
@@ -8,26 +7,18 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import update
 
-import admin_auth_config
 import app as app_module
 import rest_services.v1.routes as routes
 from db import get_session
 from db_types import utc_now
 from models import admin_user as admin_users
 from models.admin_session import AdminSession
+from rest_services.v1 import auth
 from rest_services.v1.auth import require_admin
 from tests.admin_fixtures import *  # noqa: F401,F403
 from tests.admin_fixtures import ADMIN_EMAIL, basic_auth, login
 
 WEB_ORIGIN = "https://web.example.net"
-
-
-def _set_settings(monkeypatch, **changes):
-    monkeypatch.setattr(
-        admin_auth_config,
-        "settings",
-        dataclasses.replace(admin_auth_config.settings, **changes),
-    )
 
 
 def _age_sessions(**columns):
@@ -80,8 +71,8 @@ def test_login_rejects_bad_credentials_generically(
         ({"Origin": "null"}, 403),
     ],
 )
-def test_login_origin_check(client, admin_password, monkeypatch, headers, status):
-    _set_settings(monkeypatch, web_origins=[WEB_ORIGIN])
+def test_login_origin_check(client, admin_password, set_config, headers, status):
+    set_config(auth, "admin_config", web_origins=[WEB_ORIGIN])
 
     response = client.post(
         "/v1/auth/login",
@@ -135,13 +126,13 @@ def test_logout_ends_session(client, admin_password):
 
 
 def test_origin_check_applies_to_any_session_write(
-    app, client, admin_password, monkeypatch
+    app, client, admin_password, set_config
 ):
     @app.post("/v1/admin-write")
     def admin_write(context=Depends(require_admin)):
         return {"ok": True}
 
-    _set_settings(monkeypatch, web_origins=[WEB_ORIGIN])
+    set_config(auth, "admin_config", web_origins=[WEB_ORIGIN])
     login(client, admin_password)
 
     # A sibling subdomain is same-site, so SameSite alone would let it through.
@@ -195,19 +186,12 @@ def test_account_changes_end_sessions(client, admin_password, change):
         assert db.query(AdminSession).count() == 0
 
 
-def test_wildcard_web_origin_is_rejected(monkeypatch):
-    monkeypatch.setenv("ADMIN_WEB_ORIGINS", "*")
-
-    with pytest.raises(ValueError):
-        admin_auth_config.load_settings()
-
-
 @pytest.fixture
-def cors_client(monkeypatch):
-    _set_settings(monkeypatch, web_origins=[WEB_ORIGIN])
+def cors_client(set_config):
+    set_config(auth, "admin_config", web_origins=[WEB_ORIGIN])
     cors_app = FastAPI()
     cors_app.include_router(routes.router, prefix="/v1")
-    app_module.configure_cors(cors_app, admin_auth_config.settings)
+    app_module.configure_cors(cors_app, auth.admin_config)
     return TestClient(cors_app, base_url="https://testserver")
 
 

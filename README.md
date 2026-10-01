@@ -56,7 +56,7 @@ Manage services:
 
 ```bash
 cd /opt/relaysms/relaysms-publisher
-./manage.sh {start|stop|restart|status|logs|update|nginx}
+./manage.sh {start|stop|restart|status|logs|check|update|nginx}
 ```
 
 See [INSTALL.md](INSTALL.md) for manual installation and detailed configuration.
@@ -117,14 +117,13 @@ Configure via environment variables in `.env` file:
 ### Server
 
 ```bash
-MODE=production                 # development or production
 HOST=127.0.0.1                  # REST API host
 PORT=16000                      # REST API port
 GRPC_HOST=127.0.0.1             # gRPC server host
 GRPC_PORT=6000                  # gRPC server port
-GRPC_SSL_PORT=6001              # gRPC SSL port
-SSL_CERTIFICATE=                # SSL certificate path (optional)
-SSL_KEY=                        # SSL key path (optional)
+GRPC_TLS_ENABLED=false          # off behind a TLS-terminating reverse proxy
+GRPC_TLS_CERT_FILE=             # certificate file, when TLS is on
+GRPC_TLS_KEY_FILE=              # key file, when TLS is on
 ```
 
 ### Database

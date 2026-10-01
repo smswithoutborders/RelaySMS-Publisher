@@ -9,14 +9,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-import admin_auth_config
+from config import AdminAuthConfig
 from db import dispose_engine, get_session
 from gateway_clients.gateway_client_manager import GatewayClientManager
 from keys import KeyManager
+from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from rest_services.v1 import auth as admin_auth
 from rest_services.v1.routes import router as v1_router
-from utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
     dispose_engine()
 
 
-def configure_cors(app: FastAPI, settings: admin_auth_config.AdminAuthSettings) -> None:
+def configure_cors(app: FastAPI, settings: AdminAuthConfig) -> None:
     if not settings.web_origins:
         return
     app.add_middleware(
@@ -64,7 +64,7 @@ def configure_cors(app: FastAPI, settings: admin_auth_config.AdminAuthSettings) 
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(v1_router, prefix="/v1")
-configure_cors(app, admin_auth_config.settings)
+configure_cors(app, AdminAuthConfig.get())
 
 
 @app.middleware("http")

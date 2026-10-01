@@ -8,36 +8,24 @@ from typing import Optional
 import authres
 import dkim
 
+from config import SmtpConfig
 from logutils import get_logger
-from utils import get_config_bool, get_config_list, get_configs
 
 logger = get_logger(__name__)
+
+smtp_config = SmtpConfig.get()
 
 _FOLD_RE = re.compile(r"\r?\n[ \t]+")
 
 
-def _load_allowed_senders() -> set[str]:
-    return {
-        entry.lower().lstrip("@") for entry in get_config_list("SMTP_ALLOWED_SENDERS")
-    }
-
-
-SMTP_ALLOWED_SENDERS = _load_allowed_senders()
-SMTP_TRUSTED_AUTHSERV_ID = get_configs("SMTP_TRUSTED_AUTHSERV_ID")
-SMTP_REQUIRE_DKIM = get_config_bool("SMTP_REQUIRE_DKIM", True)
-SMTP_REQUIRE_SPF = get_config_bool("SMTP_REQUIRE_SPF", True)
-SMTP_VERIFY_DKIM_INDEPENDENTLY = get_config_bool(
-    "SMTP_VERIFY_DKIM_INDEPENDENTLY", False
-)
-
-
 def is_sender_allowed(email_address: str) -> bool:
     """Check a From address against SMTP_ALLOWED_SENDERS."""
+    allowed = smtp_config.allowed_senders
     address = (email_address or "").strip().lower()
-    if not SMTP_ALLOWED_SENDERS or "@" not in address:
+    if not allowed or "@" not in address:
         return False
     domain = address.rsplit("@", 1)[1]
-    return address in SMTP_ALLOWED_SENDERS or domain in SMTP_ALLOWED_SENDERS
+    return address in allowed or domain in allowed
 
 
 def _trusted_result(msg: Message) -> Optional[authres.AuthenticationResultsHeader]:
@@ -46,7 +34,8 @@ def _trusted_result(msg: Message) -> Optional[authres.AuthenticationResultsHeade
     Headers from any other (or missing) authserv-id are ignored, since a
     sender can put arbitrary text of their own in this header.
     """
-    if not SMTP_TRUSTED_AUTHSERV_ID:
+    trusted_id = smtp_config.trusted_authserv_id
+    if not trusted_id:
         return None
     for raw_value in msg.get_all("Authentication-Results") or []:
         try:
@@ -56,27 +45,27 @@ def _trusted_result(msg: Message) -> Optional[authres.AuthenticationResultsHeade
         except Exception as exc:  # authres raises plain Exception subclasses
             logger.debug("Failed to parse Authentication-Results header: %s", exc)
             continue
-        if header.authserv_id == SMTP_TRUSTED_AUTHSERV_ID:
+        if header.authserv_id == trusted_id:
             return header
     return None
 
 
 def evaluate_authentication(msg: Message) -> tuple[bool, str]:
     """Check SPF/DKIM verdicts from a trusted Authentication-Results header."""
-    if not SMTP_TRUSTED_AUTHSERV_ID:
+    if not smtp_config.trusted_authserv_id:
         return False, "SMTP_TRUSTED_AUTHSERV_ID not configured; rejecting all mail"
 
     header = _trusted_result(msg)
     if header is None:
         return False, (
             f"No Authentication-Results header from trusted authserv-id "
-            f"{SMTP_TRUSTED_AUTHSERV_ID!r}"
+            f"{smtp_config.trusted_authserv_id!r}"
         )
 
     results = {result.method: result.result for result in header.results}
-    if SMTP_REQUIRE_DKIM and results.get("dkim") != "pass":
+    if smtp_config.require_dkim and results.get("dkim") != "pass":
         return False, "DKIM verdict is not 'pass'"
-    if SMTP_REQUIRE_SPF and results.get("spf") != "pass":
+    if smtp_config.require_spf and results.get("spf") != "pass":
         return False, "SPF verdict is not 'pass'"
     return True, "Authentication-Results verdicts satisfied"
 
@@ -109,6 +98,6 @@ def verify_dkim_independently(raw_bytes: bytes, from_email: str) -> tuple[bool, 
 def evaluate(msg: Message, raw_bytes: bytes, from_email: str) -> tuple[bool, str]:
     """Run all configured authentication checks for an incoming email."""
     passed, reason = evaluate_authentication(msg)
-    if passed and SMTP_VERIFY_DKIM_INDEPENDENTLY:
+    if passed and smtp_config.verify_dkim_independently:
         passed, reason = verify_dkim_independently(raw_bytes, from_email)
     return passed, reason

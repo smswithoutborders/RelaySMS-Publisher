@@ -13,30 +13,11 @@ import msgspec
 from git import RemoteProgress, Repo
 from tqdm import tqdm
 
+from config import PlatformsConfig
 from logutils import get_logger
-from utils import get_configs
 
-BASE_DIR = Path(__file__).resolve().parent
-adapters_dir = Path(
-    get_configs("PLATFORMS_ADAPTERS_DIR", default_value=str(BASE_DIR / "adapters"))
-)
-adapters_venv_dir = Path(
-    get_configs(
-        "PLATFORMS_ADAPTERS_VENV_DIR", default_value=str(BASE_DIR / "adapters_venv")
-    )
-)
-adapters_assets_dir = Path(
-    get_configs(
-        "PLATFORMS_ADAPTERS_ASSETS_DIR", default_value=str(BASE_DIR / "adapters_assets")
-    )
-)
-
-REGISTRY_FILE = Path(
-    get_configs(
-        "PLATFORMS_REGISTRY_FILE", default_value=str(BASE_DIR / "registry.json")
-    )
-)
 logger = get_logger(__name__)
+platforms_config = PlatformsConfig.get()
 
 
 class PlatformManifest(msgspec.Struct, forbid_unknown_fields=False):
@@ -79,12 +60,8 @@ class CloneProgress(RemoteProgress):
 class AdapterManager:
     """Manages adapter lifecycle operations using a JSON registry."""
 
-    _adapters_dir: Path = adapters_dir
-    _adapters_venv_dir: Path = adapters_venv_dir
-    _adapters_assets_dir: Path = adapters_assets_dir
-
-    def __init__(self, registry_file: Path = REGISTRY_FILE):
-        self.registry_file = registry_file
+    def __init__(self, registry_file: Path | None = None):
+        self.registry_file = registry_file or platforms_config.registry_file
         self._app_registry: Dict[str, PlatformManifest] = {}
         self._last_modified: float = 0.0
 
@@ -175,7 +152,7 @@ class AdapterManager:
 
     @classmethod
     def _install_dependencies(cls, requirements_path: Path, venv_path: Path):
-        if not cls._is_safe_path(cls._adapters_venv_dir, venv_path):
+        if not cls._is_safe_path(platforms_config.adapters_venv_dir, venv_path):
             raise ValueError("Invalid virtual environment path localization.")
 
         try:
@@ -280,11 +257,11 @@ class AdapterManager:
 
     def add_adapter_from_github(self, url: str):
         """Clone a repository and register its manifest."""
-        self._adapters_dir.mkdir(parents=True, exist_ok=True)
+        platforms_config.adapters_dir.mkdir(parents=True, exist_ok=True)
         adapter_id = self._generate_id(url)
-        dest_path = self._adapters_dir / adapter_id
+        dest_path = platforms_config.adapters_dir / adapter_id
 
-        if not self._is_safe_path(self._adapters_dir, dest_path):
+        if not self._is_safe_path(platforms_config.adapters_dir, dest_path):
             raise ValueError("Invalid target folder destination.")
 
         registry = self._load_registry()
@@ -316,7 +293,7 @@ class AdapterManager:
                 "Manifest incomplete: missing one or more of name, cat_id, proto_id."
             )
 
-        venv_path = self._adapters_venv_dir / adapter_id
+        venv_path = platforms_config.adapters_venv_dir / adapter_id
         requirements_path = dest_path / "requirements.txt"
 
         if requirements_path.is_file():
@@ -334,7 +311,7 @@ class AdapterManager:
             name="",
             path=str(dest_path),
             venv_path=str(venv_path),
-            assets_path=str(self._adapters_assets_dir / adapter_id),
+            assets_path=str(platforms_config.adapters_assets_dir / adapter_id),
             cat_id=0,
             proto_id=0,
         )
@@ -361,8 +338,8 @@ class AdapterManager:
         v_target = Path(manifest.venv_path)
 
         if not self._is_safe_path(
-            self._adapters_dir, p_target
-        ) or not self._is_safe_path(self._adapters_venv_dir, v_target):
+            platforms_config.adapters_dir, p_target
+        ) or not self._is_safe_path(platforms_config.adapters_venv_dir, v_target):
             raise ValueError("Deletion paths run outside system target roots.")
 
         self._rollback_directory(p_target)
@@ -387,7 +364,7 @@ class AdapterManager:
                 continue
 
             adapter_path = Path(manifest.path)
-            if not self._is_safe_path(self._adapters_dir, adapter_path):
+            if not self._is_safe_path(platforms_config.adapters_dir, adapter_path):
                 logger.error("Skipping update: invalid path for %s", target_id)
                 continue
 
@@ -431,14 +408,16 @@ class AdapterManager:
 
     def recover_registry(self):
         """Attempt to repopulate the registry from existing adapter directories."""
-        if not self._adapters_dir.is_dir():
-            logger.error("Adapters directory not found: %s", self._adapters_dir)
+        if not platforms_config.adapters_dir.is_dir():
+            logger.error(
+                "Adapters directory not found: %s", platforms_config.adapters_dir
+            )
             return
 
         registry = self._load_registry()
         recovered = 0
 
-        for adapter_path in self._adapters_dir.iterdir():
+        for adapter_path in platforms_config.adapters_dir.iterdir():
             if not adapter_path.is_dir():
                 continue
 
@@ -459,14 +438,14 @@ class AdapterManager:
                 logger.warning("Skipping incomplete manifest in: %s", adapter_path)
                 continue
 
-            venv_path = self._adapters_venv_dir / adapter_id
+            venv_path = platforms_config.adapters_venv_dir / adapter_id
             stub = PlatformManifest(
                 id=adapter_id,
                 display_name="",
                 name="",
                 path=str(adapter_path),
                 venv_path=str(venv_path),
-                assets_path=str(self._adapters_assets_dir / adapter_id),
+                assets_path=str(platforms_config.adapters_assets_dir / adapter_id),
                 cat_id=0,
                 proto_id=0,
             )

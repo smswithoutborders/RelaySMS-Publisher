@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-import admin_auth_config as config
+from config import AdminAuthConfig
 from db import get_db
 from models import admin_session as admin_sessions
 from models.admin_session import AdminSession
@@ -24,6 +24,8 @@ BASIC_REALM = "relaysms-admin"
 BASIC_LOGIN_RECORD_INTERVAL_SECONDS = 300
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
+admin_config = AdminAuthConfig.get()
+
 
 @dataclass(frozen=True)
 class AdminContext:
@@ -35,9 +37,9 @@ def set_session_cookie(response: Response, raw_token: str) -> None:
     response.set_cookie(
         SESSION_COOKIE_NAME,
         raw_token,
-        max_age=int(config.settings.max_age.total_seconds()),
+        max_age=int(admin_config.max_age.total_seconds()),
         path=SESSION_COOKIE_PATH,
-        secure=config.settings.cookie_secure,
+        secure=admin_config.cookie_secure,
         httponly=True,
         samesite=SESSION_COOKIE_SAMESITE,
     )
@@ -47,7 +49,7 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(
         SESSION_COOKIE_NAME,
         path=SESSION_COOKIE_PATH,
-        secure=config.settings.cookie_secure,
+        secure=admin_config.cookie_secure,
         httponly=True,
         samesite=SESSION_COOKIE_SAMESITE,
     )
@@ -99,13 +101,11 @@ def check_origin(request: Request) -> None:
     if origin is None:
         return
     own_origin = f"{request.url.scheme}://{request.url.netloc}"
-    if origin != own_origin and origin not in config.settings.web_origins:
+    if origin != own_origin and origin not in admin_config.web_origins:
         raise HTTPException(status_code=403, detail="Origin not allowed.")
 
 
-def optional_admin(
-    request: Request, db: Session = Depends(get_db)
-) -> Optional[AdminContext]:
+def require_admin(request: Request, db: Session = Depends(get_db)) -> AdminContext:
     raw_token = request.cookies.get(SESSION_COOKIE_NAME)
     if raw_token:
         admin_session = admin_sessions.get_active(db, raw_token)
@@ -128,13 +128,5 @@ def optional_admin(
         record_login(admin, min_interval_seconds=BASIC_LOGIN_RECORD_INTERVAL_SECONDS)
         return AdminContext(admin=admin)
 
-    return None
-
-
-def require_admin(
-    context: Optional[AdminContext] = Depends(optional_admin),
-) -> AdminContext:
-    if context is None:
-        # No Basic challenge: browsers would show their own login dialog.
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    return context
+    # No Basic challenge, because browsers would show their own login dialog.
+    raise HTTPException(status_code=401, detail="Authentication required.")

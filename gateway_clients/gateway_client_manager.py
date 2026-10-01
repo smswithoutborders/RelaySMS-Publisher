@@ -8,18 +8,12 @@ import msgspec
 import phonenumbers
 from phonenumbers import carrier, geocoder
 
+from config import GatewayClientsConfig
 from gateway_clients import mcc_mnc
 from logutils import get_logger
-from utils import get_configs
 
-BASE_DIR = Path(__file__).resolve().parent
-
-REGISTRY_FILE = Path(
-    get_configs(
-        "GATEWAY_CLIENTS_REGISTRY_FILE", default_value=str(BASE_DIR / "registry.json")
-    )
-)
 logger = get_logger(__name__)
+gateway_clients_config = GatewayClientsConfig.get()
 
 
 class GatewayClientManifest(msgspec.Struct, forbid_unknown_fields=False):
@@ -33,8 +27,8 @@ class GatewayClientManifest(msgspec.Struct, forbid_unknown_fields=False):
 class GatewayClientManager:
     """Manages gateway client lifecycle operations using a JSON registry."""
 
-    def __init__(self, registry_file: Path = REGISTRY_FILE):
-        self.registry_file = registry_file
+    def __init__(self, registry_file: Path | None = None):
+        self.registry_file = registry_file or gateway_clients_config.registry_file
         self._registry: Dict[str, GatewayClientManifest] = {}
         self._last_modified: float = 0.0
 

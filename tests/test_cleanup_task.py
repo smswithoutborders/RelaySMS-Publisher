@@ -21,8 +21,7 @@ PNBA = 1
 
 
 @pytest.fixture(autouse=True)
-def _in_memory_db(monkeypatch):
-    monkeypatch.setenv("MODE", "testing")
+def _in_memory_db():
     db_module.dispose_engine()
     db_module.Base.metadata.create_all(db_module.get_engine())
     yield
