@@ -103,6 +103,8 @@ cmd_stop() {
 
 cmd_restart() {
   check_sudo
+  # Pick up unit files edited since the last reload.
+  systemctl daemon-reload
   local svc
   for svc in "${SERVICE_UNITS[@]}"; do
     systemctl restart "$svc"
