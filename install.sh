@@ -1033,7 +1033,7 @@ main() {
   log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|check|update|nginx}"
   log "  Platforms : $INSTALL_DIR/platforms.sh {add|remove|update|list|recover|env|shell}"
   log "  Gateway Clients : $INSTALL_DIR/gateway-clients.sh {create|list|update|delete|env|shell}"
-  log "  Admin Users : $INSTALL_DIR/admin-users.sh {create|list|reset-password|disable|enable|delete|revoke-sessions|env|shell}"
+  log "  Credentials : $INSTALL_DIR/creds.sh {scopes|create|list|set-scopes|reset-password|disable|enable|delete|revoke-sessions|env|shell}"
 }
 
 main "$@"

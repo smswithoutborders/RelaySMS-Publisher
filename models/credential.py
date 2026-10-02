@@ -1,0 +1,368 @@
+# SPDX-License-Identifier: GPL-3.0-only
+"""Credential model, scopes and related functions."""
+
+import datetime
+import re
+import secrets
+import uuid
+from enum import StrEnum
+from functools import lru_cache
+from typing import TYPE_CHECKING, Iterable, List, Optional
+
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
+from sqlalchemy import ForeignKey, Index, String, Uuid, select
+from sqlalchemy import update as sql_update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm.attributes import set_committed_value
+
+from db import Base
+from db_types import UTCDateTime, utc_now
+from models.credential_session import revoke_all
+
+if TYPE_CHECKING:
+    from models import CredentialSession
+
+MAX_USERNAME_LENGTH = 32
+_USERNAME_PATTERN = re.compile(rf"^[a-z0-9][a-z0-9._-]{{2,{MAX_USERNAME_LENGTH - 1}}}$")
+
+password_hasher = PasswordHasher()
+
+
+class Scope(StrEnum):
+    STATS_PUBLICATIONS_READ = "stats:publications:read"
+    STATS_PUBLICATIONS_REASONS = "stats:publications:reasons"
+    GC_READ = "gc:read"
+    GC_WRITE = "gc:write"
+    PLATFORMS_READ = "platforms:read"
+    PLATFORMS_WRITE = "platforms:write"
+    CREDS_READ = "creds:read"
+    CREDS_WRITE = "creds:write"
+
+
+ALL_SCOPES = frozenset(Scope)
+
+SCOPE_DESCRIPTIONS = {
+    Scope.STATS_PUBLICATIONS_READ: "Read publication stats, without failure reasons",
+    Scope.STATS_PUBLICATIONS_REASONS: "See failure reasons in publication stats",
+    Scope.GC_READ: "List gateway clients",
+    Scope.GC_WRITE: "Add, change and remove gateway clients",
+    Scope.PLATFORMS_READ: "List platform adapters",
+    Scope.PLATFORMS_WRITE: "Change and remove platform adapters",
+    Scope.CREDS_READ: "List credentials",
+    Scope.CREDS_WRITE: "Add, change and remove credentials",
+}
+
+# Each scope here can only be granted with the scope it maps to.
+_REQUIRES = {
+    Scope.STATS_PUBLICATIONS_REASONS: Scope.STATS_PUBLICATIONS_READ,
+    Scope.GC_WRITE: Scope.GC_READ,
+    Scope.PLATFORMS_WRITE: Scope.PLATFORMS_READ,
+    Scope.CREDS_WRITE: Scope.CREDS_READ,
+}
+
+
+class CredentialScope(Base):
+    __tablename__ = "credential_scopes"
+
+    credential_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("credentials.id", ondelete="CASCADE"), primary_key=True
+    )
+    scope: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class Credential(Base):
+    __tablename__ = "credentials"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    username: Mapped[str] = mapped_column(String(MAX_USERNAME_LENGTH))
+    password_hash: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(UTCDateTime, default=utc_now)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        UTCDateTime, default=utc_now, onupdate=utc_now
+    )
+    last_login_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        UTCDateTime, default=None
+    )
+    # Bumped on every change to detect concurrent changes.
+    version: Mapped[int] = mapped_column(default=1)
+    # Bumping this ends every session of the credential.
+    session_version: Mapped[int] = mapped_column(default=1)
+
+    sessions: Mapped[List["CredentialSession"]] = relationship(
+        "CredentialSession", back_populates="credential", cascade="all, delete-orphan"
+    )
+    scope_rows: Mapped[List[CredentialScope]] = relationship(
+        CredentialScope, cascade="all, delete-orphan", lazy="selectin"
+    )
+
+    __table_args__ = (Index("uq_credentials_username", "username", unique=True),)
+
+    @property
+    def scopes(self) -> frozenset[Scope]:
+        return frozenset(
+            Scope(row.scope) for row in self.scope_rows if row.scope in ALL_SCOPES
+        )
+
+    @property
+    def is_administrator(self) -> bool:
+        return ALL_SCOPES <= self.scopes
+
+
+class CredentialExistsError(ValueError):
+    pass
+
+
+class CredentialNotFoundError(ValueError):
+    pass
+
+
+class CredentialPermissionError(PermissionError):
+    pass
+
+
+class CredentialConflictError(ValueError):
+    pass
+
+
+def _normalize_username(username: str) -> str:
+    normalized = username.strip().lower()
+    if not _USERNAME_PATTERN.match(normalized):
+        raise ValueError(
+            f"Invalid username {username!r}: use 3-32 of a-z, 0-9, '.', '_' or '-', "
+            "starting with a letter or digit"
+        )
+    return normalized
+
+
+def parse_scopes(values: Iterable[str]) -> frozenset[Scope]:
+    scopes = set()
+    for value in values:
+        if value not in ALL_SCOPES:
+            raise ValueError(f"Unknown scope {value!r}")
+        scopes.add(Scope(value))
+    for scope in scopes:
+        required = _REQUIRES.get(scope)
+        if required and required not in scopes:
+            raise ValueError(f"Scope {scope} requires {required}")
+    return frozenset(scopes)
+
+
+def _set_scope_rows(credential: Credential, scopes: frozenset[Scope]) -> None:
+    credential.scope_rows = [
+        row for row in credential.scope_rows if row.scope in scopes
+    ] + [
+        CredentialScope(scope=scope.value)
+        for scope in sorted(scopes - credential.scopes)
+    ]
+
+
+def _generate_password() -> str:
+    return secrets.token_urlsafe(24)
+
+
+@lru_cache(maxsize=1)
+def _dummy_hash() -> str:
+    return password_hasher.hash(_generate_password())
+
+
+def _claim(session: Session, credential: Credential) -> None:
+    """Bump the version, failing if the credential changed since it was read."""
+    result = session.execute(
+        sql_update(Credential)
+        .where(Credential.id == credential.id, Credential.version == credential.version)
+        .values(version=Credential.version + 1)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        raise CredentialConflictError(
+            f"Credential {credential.username!r} was changed concurrently; retry"
+        )
+    set_committed_value(credential, "version", credential.version + 1)
+
+
+def _end_sessions(session: Session, credential: Credential) -> int:
+    session.execute(
+        sql_update(Credential)
+        .where(Credential.id == credential.id)
+        .values(session_version=Credential.session_version + 1)
+        .execution_options(synchronize_session=False)
+    )
+    set_committed_value(credential, "session_version", credential.session_version + 1)
+    return revoke_all(session, credential.id)
+
+
+def _authorize_change(
+    session: Session,
+    actor: Optional[Credential],
+    target: Optional[Credential],
+    scopes: Iterable[Scope] = (),
+) -> None:
+    # No actor means the CLI, which is trusted.
+    if actor is not None:
+        check_can_manage(actor, target, scopes)
+        # Fails if the actor itself changed after it was authenticated.
+        _claim(session, actor)
+    if target is not None:
+        _claim(session, target)
+
+
+def get_by_username(session: Session, username: str) -> Optional[Credential]:
+    return session.scalars(
+        select(Credential).filter_by(username=username.strip().lower())
+    ).first()
+
+
+def get_or_raise(session: Session, username: str) -> Credential:
+    credential = get_by_username(session, username)
+    if credential is None:
+        raise CredentialNotFoundError(f"No credential with username {username!r}")
+    return credential
+
+
+def list_credentials(session: Session) -> List[Credential]:
+    return list(session.scalars(select(Credential).order_by(Credential.username)))
+
+
+def check_can_manage(
+    actor: Credential,
+    target: Optional[Credential] = None,
+    scopes: Iterable[Scope] = (),
+) -> None:
+    """Check that actor may change target and grant scopes.
+
+    Raises:
+        CredentialPermissionError: When the change goes beyond the actor's scopes.
+    """
+    if Scope.CREDS_WRITE not in actor.scopes:
+        raise CredentialPermissionError(f"Requires scope {Scope.CREDS_WRITE}")
+    if target is not None:
+        if target.id == actor.id:
+            raise CredentialPermissionError("A credential can't change itself")
+        if not target.scopes <= actor.scopes:
+            raise CredentialPermissionError(
+                "Can't change a credential with scopes you don't hold"
+            )
+    missing = set(scopes) - actor.scopes
+    if missing:
+        raise CredentialPermissionError(
+            f"Can't grant scopes you don't hold: {', '.join(sorted(missing))}"
+        )
+
+
+def create(
+    session: Session,
+    username: str,
+    scopes: Iterable[str],
+    actor: Optional[Credential] = None,
+) -> tuple[Credential, str]:
+    username = _normalize_username(username)
+    scopes = parse_scopes(scopes)
+    _authorize_change(session, actor, None, scopes)
+
+    password = _generate_password()
+    credential = Credential(
+        username=username, password_hash=password_hasher.hash(password)
+    )
+    _set_scope_rows(credential, scopes)
+    session.add(credential)
+    try:
+        session.flush()
+    except IntegrityError:
+        raise CredentialExistsError(f"Credential {username!r} already exists") from None
+    return credential, password
+
+
+def update(
+    session: Session,
+    credential: Credential,
+    *,
+    scopes: Optional[Iterable[str]] = None,
+    active: Optional[bool] = None,
+    actor: Optional[Credential] = None,
+) -> None:
+    new_scopes = parse_scopes(scopes) if scopes is not None else None
+    _authorize_change(session, actor, credential, new_scopes or ())
+    if new_scopes is not None:
+        _set_scope_rows(credential, new_scopes)
+    if active is not None:
+        credential.is_active = active
+        if not active:
+            _end_sessions(session, credential)
+    session.flush()
+
+
+def reset_password(
+    session: Session, credential: Credential, actor: Optional[Credential] = None
+) -> str:
+    _authorize_change(session, actor, credential)
+    password = _generate_password()
+    credential.password_hash = password_hasher.hash(password)
+    _end_sessions(session, credential)
+    return password
+
+
+def revoke_sessions(
+    session: Session, credential: Credential, actor: Optional[Credential] = None
+) -> int:
+    _authorize_change(session, actor, credential)
+    return _end_sessions(session, credential)
+
+
+def delete(
+    session: Session, credential: Credential, actor: Optional[Credential] = None
+) -> None:
+    _authorize_change(session, actor, credential)
+    session.delete(credential)
+    session.flush()
+
+
+def authenticate(
+    session: Session, username: str, password: str
+) -> Optional[Credential]:
+    credential = get_by_username(session, username)
+    if credential is None:
+        # Hash anyway so response timing doesn't reveal which usernames exist.
+        try:
+            password_hasher.verify(_dummy_hash(), password)
+        except VerificationError:
+            pass
+        return None
+
+    try:
+        password_hasher.verify(credential.password_hash, password)
+    except (VerificationError, InvalidHashError):
+        return None
+
+    if not credential.is_active:
+        return None
+
+    if password_hasher.check_needs_rehash(credential.password_hash):
+        # Upgrades the hash only if it's still the one just verified.
+        session.execute(
+            sql_update(Credential)
+            .where(
+                Credential.id == credential.id,
+                Credential.password_hash == credential.password_hash,
+            )
+            .values(password_hash=password_hasher.hash(password))
+            .execution_options(synchronize_session=False)
+        )
+    return credential
+
+
+def record_login(
+    session: Session, credential: Credential, *, min_interval_seconds: int = 0
+) -> None:
+    now = utc_now()
+    last = credential.last_login_at
+    if last is None or (now - last).total_seconds() >= min_interval_seconds:
+        session.execute(
+            sql_update(Credential)
+            .where(Credential.id == credential.id)
+            .values(last_login_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        set_committed_value(credential, "last_login_at", now)

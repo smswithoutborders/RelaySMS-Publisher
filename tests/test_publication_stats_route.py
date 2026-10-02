@@ -7,8 +7,8 @@ import pytest
 from db import get_session
 from db_types import utc_now
 from models.publication_stats import PublicationStats, encode_cursor
-from tests.admin_fixtures import *  # noqa: F401,F403
-from tests.admin_fixtures import ADMIN_EMAIL, basic_auth, login
+from tests.creds_fixtures import *  # noqa: F401,F403
+from tests.creds_fixtures import USERNAME, basic_auth, create_credential, login
 
 BASE_TIME = datetime.datetime(2026, 9, 1, 12, 0, 0)
 
@@ -49,8 +49,8 @@ def _follow(client, url, direction, **kwargs):
 
 
 @pytest.fixture
-def admin_client(client, admin_password):
-    client.headers.update(basic_auth(ADMIN_EMAIL, admin_password))
+def authed_client(client, password):
+    client.headers.update(basic_auth(USERNAME, password))
     return client
 
 
@@ -65,12 +65,12 @@ def test_stats_require_auth(client, seeded, url):
 
 
 @pytest.mark.parametrize("auth", ["basic", "session"])
-def test_admin_list_includes_failure_reason(client, seeded, admin_password, auth):
+def test_list_includes_failure_reason(client, seeded, password, auth):
     headers = {}
     if auth == "basic":
-        headers = basic_auth(ADMIN_EMAIL, admin_password)
+        headers = basic_auth(USERNAME, password)
     else:
-        login(client, admin_password)
+        login(client, password)
 
     response = client.get(
         "/v1/stats/publications", params={"status": "failed"}, headers=headers
@@ -84,8 +84,12 @@ def test_admin_list_includes_failure_reason(client, seeded, admin_password, auth
 
 @pytest.mark.parametrize(
     "headers",
-    [basic_auth(ADMIN_EMAIL, "wrong-password"), {"Authorization": "Bearer abc"}],
-    ids=["wrong-password", "bearer"],
+    [
+        basic_auth(USERNAME, "wrong-password"),
+        {"Authorization": "Bearer abc"},
+        {"Authorization": "Basic not-base64!"},
+    ],
+    ids=["wrong-password", "bearer", "malformed-basic"],
 )
 def test_bad_credentials_are_rejected(client, seeded, headers):
     response = client.get("/v1/stats/publications", headers=headers)
@@ -96,15 +100,71 @@ def test_bad_credentials_are_rejected(client, seeded, headers):
 
 def test_invalid_session_cookie_is_rejected_and_cleared(client, seeded):
     response = client.get(
-        "/v1/stats/publications", headers={"Cookie": "relaysms_admin_session=bogus"}
+        "/v1/stats/publications", headers={"Cookie": "relaysms_session=bogus"}
     )
 
     assert response.status_code == 401
-    assert "relaysms_admin_session=" in response.headers["set-cookie"]
+    assert "relaysms_session=" in response.headers["set-cookie"]
 
 
-def test_forward_paging_visits_every_row_once_in_order(admin_client, seeded):
-    pages = _follow(admin_client, "/v1/stats/publications?limit=4", "next")
+def _scoped_headers(*scopes):
+    return basic_auth("scoped", create_credential("scoped", scopes))
+
+
+def test_stats_without_reasons_scope_hides_failure_reason(client, seeded):
+    response = client.get(
+        "/v1/stats/publications",
+        params={"status": "failed"},
+        headers=_scoped_headers("stats:publications:read"),
+    )
+
+    assert response.status_code == 200
+    items = response.json()["data"]
+    assert items and all(item["failure_reason"] is None for item in items)
+
+
+def test_summary_by_failure_reason_needs_reasons_scope(client, seeded):
+    headers = _scoped_headers("stats:publications:read")
+    url = "/v1/stats/publications/summary"
+
+    denied = client.get(url, params={"group_by": "failure_reason"}, headers=headers)
+    allowed = client.get(url, params={"group_by": "status"}, headers=headers)
+
+    assert denied.status_code == 403
+    assert denied.json()["error"] == "Missing scope: stats:publications:reasons."
+    assert allowed.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "url", ["/v1/stats/publications", "/v1/stats/publications/summary"]
+)
+def test_stats_need_read_scope(client, seeded, url):
+    response = client.get(url, headers=_scoped_headers("gc:read"))
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "Missing scope: stats:publications:read."
+
+
+def test_scope_changes_apply_to_existing_sessions(client, seeded):
+    from models import credential as credentials
+
+    login(
+        client,
+        create_credential("scoped", ["stats:publications:read"]),
+        username="scoped",
+    )
+    assert client.get("/v1/stats/publications").status_code == 200
+
+    with get_session() as db:
+        credentials.update(
+            db, credentials.get_or_raise(db, "scoped"), scopes=["gc:read"]
+        )
+
+    assert client.get("/v1/stats/publications").status_code == 403
+
+
+def test_forward_paging_visits_every_row_once_in_order(authed_client, seeded):
+    pages = _follow(authed_client, "/v1/stats/publications?limit=4", "next")
 
     ids = [item["id"] for page in pages for item in page["data"]]
     assert len(ids) == len(seeded) == len(set(ids))
@@ -114,18 +174,18 @@ def test_forward_paging_visits_every_row_once_in_order(admin_client, seeded):
     assert pages[-1]["next"] is None
 
 
-def test_backward_paging_returns_the_same_pages(admin_client, seeded):
-    forward = _follow(admin_client, "/v1/stats/publications?limit=4", "next")
-    backward = _follow(admin_client, forward[-1]["prev"], "prev")
+def test_backward_paging_returns_the_same_pages(authed_client, seeded):
+    forward = _follow(authed_client, "/v1/stats/publications?limit=4", "next")
+    backward = _follow(authed_client, forward[-1]["prev"], "prev")
 
     as_ids = lambda pages: [[item["id"] for item in p["data"]] for p in pages]
     assert as_ids(reversed(backward)) == as_ids(forward[:-1])
     assert all(page["next"] for page in backward)
 
 
-def test_links_keep_filters_and_limit(admin_client, seeded):
+def test_links_keep_filters_and_limit(authed_client, seeded):
     url = "/v1/stats/publications?status=failed&platform_name=telegram&limit=2"
-    pages = _follow(admin_client, url, "next")
+    pages = _follow(authed_client, url, "next")
 
     assert len(pages) > 1
     assert all(len(page["data"]) <= 2 for page in pages)
@@ -137,8 +197,8 @@ def test_links_keep_filters_and_limit(admin_client, seeded):
     assert pages[0]["next"].startswith("https://testserver/v1/stats/publications?")
 
 
-def test_filters_and_time_range(admin_client, seeded):
-    response = admin_client.get(
+def test_filters_and_time_range(authed_client, seeded):
+    response = authed_client.get(
         "/v1/stats/publications",
         params={
             "platform_name": "gmail",
@@ -172,14 +232,14 @@ def test_filters_and_time_range(admin_client, seeded):
         ({"since": "2026-09-02T00:00:00Z", "until": "2026-09-01T00:00:00Z"}, 400),
     ],
 )
-def test_invalid_params(admin_client, seeded, params, status):
+def test_invalid_params(authed_client, seeded, params, status):
     assert (
-        admin_client.get("/v1/stats/publications", params=params).status_code == status
+        authed_client.get("/v1/stats/publications", params=params).status_code == status
     )
 
 
-def test_summary_counts_by_status(admin_client, seeded):
-    response = admin_client.get(
+def test_summary_counts_by_status(authed_client, seeded):
+    response = authed_client.get(
         "/v1/stats/publications/summary",
         params={"since": "2026-09-01T00:00:00Z", "until": "2026-09-02T00:00:00Z"},
     )
@@ -196,8 +256,8 @@ def test_summary_counts_by_status(admin_client, seeded):
     assert all("period" not in group for group in body["groups"])
 
 
-def test_summary_groups_by_failure_reason(admin_client, seeded):
-    response = admin_client.get(
+def test_summary_groups_by_failure_reason(authed_client, seeded):
+    response = authed_client.get(
         "/v1/stats/publications/summary",
         params={
             "group_by": "failure_reason",
@@ -213,7 +273,7 @@ def test_summary_groups_by_failure_reason(admin_client, seeded):
     }
 
 
-def test_summary_defaults_to_last_30_days(admin_client):
+def test_summary_defaults_to_last_30_days(authed_client):
     now = utc_now()
     _seed(
         [
@@ -222,7 +282,7 @@ def test_summary_defaults_to_last_30_days(admin_client):
         ],
     )
 
-    body = admin_client.get("/v1/stats/publications/summary").json()
+    body = authed_client.get("/v1/stats/publications/summary").json()
 
     assert body["total"] == 1
     since = datetime.datetime.fromisoformat(body["since"])
@@ -230,7 +290,7 @@ def test_summary_defaults_to_last_30_days(admin_client):
     assert until - since == datetime.timedelta(days=30)
 
 
-def test_summary_interval_buckets_by_week(admin_client):
+def test_summary_interval_buckets_by_week(authed_client):
     _seed(
         [
             dict(status="published", created_at=datetime.datetime(2026, 9, 6, 23)),
@@ -240,7 +300,7 @@ def test_summary_interval_buckets_by_week(admin_client):
         ]
     )
 
-    response = admin_client.get(
+    response = authed_client.get(
         "/v1/stats/publications/summary",
         params={
             "interval": "week",
@@ -260,7 +320,7 @@ def test_summary_interval_buckets_by_week(admin_client):
     ]
 
 
-def test_summary_interval_with_multiple_group_by(admin_client):
+def test_summary_interval_with_multiple_group_by(authed_client):
     _seed(
         [
             dict(
@@ -281,7 +341,7 @@ def test_summary_interval_with_multiple_group_by(admin_client):
         ]
     )
 
-    response = admin_client.get(
+    response = authed_client.get(
         "/v1/stats/publications/summary",
         params={
             "interval": "month",

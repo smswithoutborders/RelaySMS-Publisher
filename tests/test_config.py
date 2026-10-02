@@ -5,12 +5,12 @@ import pytest
 import config
 import db
 from config import (
-    AdminAuthConfig,
+    AuthConfig,
     CeleryConfig,
     DatabaseConfig,
+    GatewayClientsConfig,
     GrpcConfig,
     LoggingConfig,
-    GatewayClientsConfig,
     OfflinePublishConfig,
     PlatformsConfig,
     SmtpConfig,
@@ -108,7 +108,14 @@ def test_smtp_tls_client_certificate_needs_key():
 
 
 def test_wildcard_web_origin_is_rejected():
-    assert "ADMIN_WEB_ORIGINS" in errors(ADMIN_WEB_ORIGINS="*")
+    assert "AUTH_WEB_ORIGINS" in errors(AUTH_WEB_ORIGINS="*")
+
+
+def test_platforms_github_orgs_are_normalized_and_checked():
+    platforms = load(PlatformsConfig, PLATFORMS_GITHUB_ORGS="SMSWithoutBorders, acme")
+
+    assert platforms.github_orgs == ["smswithoutborders", "acme"]
+    assert "PLATFORMS_GITHUB_ORGS" in errors(PLATFORMS_GITHUB_ORGS="evil/org")
 
 
 def test_allowed_senders_are_normalized():
@@ -194,8 +201,8 @@ def test_registry_paths_default_to_package_dirs():
     )
 
 
-def test_admin_session_defaults():
-    admin = load(AdminAuthConfig)
+def test_auth_session_defaults():
+    auth = load(AuthConfig)
 
-    assert admin.web_origins == []
-    assert admin.cookie_secure
+    assert auth.web_origins == []
+    assert auth.cookie_secure

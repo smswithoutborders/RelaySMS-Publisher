@@ -8,9 +8,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from config import DatabaseConfig
 from db import Base, build_url, get_engine
 from models import (
-    AdminSession,
-    AdminUser,
     ClientEphemeralKey,
+    Credential,
+    CredentialScope,
+    CredentialSession,
     PayloadSegment,
     PayloadSession,
     PublicationStats,

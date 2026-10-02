@@ -8,6 +8,7 @@ checked once per process. Run python -m config to check every section.
 import datetime
 import logging
 import os
+import re
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -23,6 +24,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent
 DATABASE_DIALECTS = ("sqlite", "mysql", "postgres")
 CELERY_BROKERS = ("sqlite", "redis", "rabbitmq")
+GITHUB_ORG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$")
 
 # Fill unset variables from .env. Values already in the environment win.
 # Tests turn this off with LOAD_DOTENV.
@@ -448,10 +450,15 @@ class PlatformsConfig(Section):
     adapters_venv_dir: Path
     adapters_assets_dir: Path
     registry_file: Path
+    github_orgs: list[str]
 
     @classmethod
     def load(cls, read: _Reader) -> Self:
         base = ROOT / "platforms"
+        github_orgs = [org.lower() for org in read.get_list("PLATFORMS_GITHUB_ORGS")]
+        for org in github_orgs:
+            if not GITHUB_ORG_PATTERN.match(org):
+                read.fail("PLATFORMS_GITHUB_ORGS", f"invalid GitHub org {org!r}")
         return cls(
             adapters_dir=read.get_path("PLATFORMS_ADAPTERS_DIR", base / "adapters"),
             adapters_venv_dir=read.get_path(
@@ -463,6 +470,7 @@ class PlatformsConfig(Section):
             registry_file=read.get_path(
                 "PLATFORMS_REGISTRY_FILE", base / "registry.json"
             ),
+            github_orgs=github_orgs,
         )
 
 
@@ -481,7 +489,7 @@ class GatewayClientsConfig(Section):
 
 
 @dataclass(frozen=True)
-class AdminAuthConfig(Section):
+class AuthConfig(Section):
     idle_timeout: datetime.timedelta
     max_age: datetime.timedelta
     web_origins: list[str]
@@ -490,23 +498,32 @@ class AdminAuthConfig(Section):
     @classmethod
     def load(cls, read: _Reader) -> Self:
         web_origins = [
-            origin.rstrip("/") for origin in read.get_list("ADMIN_WEB_ORIGINS")
+            origin.rstrip("/") for origin in read.get_list("AUTH_WEB_ORIGINS")
         ]
         if "*" in web_origins:
             read.fail(
-                "ADMIN_WEB_ORIGINS",
+                "AUTH_WEB_ORIGINS",
                 "must list exact origins; '*' can't carry credentials",
             )
         return cls(
             idle_timeout=datetime.timedelta(
-                minutes=read.get_int("ADMIN_SESSION_IDLE_MINUTES", 30, minimum=1)
+                minutes=read.get_int("AUTH_SESSION_IDLE_MINUTES", 30, minimum=1)
             ),
             max_age=datetime.timedelta(
-                hours=read.get_int("ADMIN_SESSION_MAX_HOURS", 12, minimum=1)
+                hours=read.get_int("AUTH_SESSION_MAX_HOURS", 12, minimum=1)
             ),
             web_origins=web_origins,
-            cookie_secure=read.get_bool("ADMIN_SESSION_COOKIE_SECURE", True),
+            cookie_secure=read.get_bool("AUTH_SESSION_COOKIE_SECURE", True),
         )
+
+
+@dataclass(frozen=True)
+class ApiDocsConfig(Section):
+    enabled: bool
+
+    @classmethod
+    def load(cls, read: _Reader) -> Self:
+        return cls(enabled=read.get_bool("API_DOCS_ENABLED", False))
 
 
 def check(env: Mapping[str, str] | None = None) -> list[str]:

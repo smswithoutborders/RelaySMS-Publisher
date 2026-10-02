@@ -9,7 +9,7 @@ Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS w
 - [Configuration](#configuration)
 - [Platform Adapters](#platform-adapters)
 - [Gateway Clients](#gateway-clients)
-- [Admin Users](#admin-users)
+- [Credentials](#credentials)
 - [Documentation](#documentation)
 - [Testing](#testing)
 - [License](#license)
@@ -81,6 +81,13 @@ make migrate-up
 
 # Start gRPC, REST API, Celery worker, and Celery beat together
 ./scripts/run.sh
+```
+
+Seed random data:
+
+```bash
+python3 -m seed stats --count 5000 --days 90   # publication stats
+python3 -m seed creds --count 5                # non-administrator credentials, prints passwords
 ```
 
 ### Docker
@@ -162,6 +169,7 @@ Whole-database encryption (`DATABASE_ENCRYPTION_ENABLED`) is SQLCipher for SQLit
 PLATFORMS_ADAPTERS_DIR=platforms/adapters
 PLATFORMS_ADAPTERS_VENV_DIR=platforms/adapters_venv
 PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets
+PLATFORMS_GITHUB_ORGS=                # Orgs administrators may install adapters from over the API
 ```
 
 ### Offline Publishing
@@ -177,16 +185,22 @@ Offline payloads are tagged with the protocol they came in on: `https` for [REST
 
 If `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads submitted over `https` must also carry a matching `tag` value in the request body (`PublishContentRequest.tag`).
 
-### Admin Auth
+### Auth
 
 ```bash
-ADMIN_WEB_ORIGINS=                    # Web client origins, comma-separated. Empty if same origin.
-ADMIN_SESSION_COOKIE_SECURE=true      # false only for local http
-ADMIN_SESSION_IDLE_MINUTES=30
-ADMIN_SESSION_MAX_HOURS=12
+AUTH_WEB_ORIGINS=                     # Web client origins, comma-separated. Empty if same origin.
+AUTH_SESSION_COOKIE_SECURE=true       # false only for local http
+AUTH_SESSION_IDLE_MINUTES=30
+AUTH_SESSION_MAX_HOURS=12
 ```
 
-See [Admin Authentication](docs/rest.md#admin-authentication).
+See [Authentication](docs/rest.md#authentication).
+
+### API Docs
+
+```bash
+API_DOCS_ENABLED=false                # true on dev servers to serve /docs
+```
 
 ### Logging & Observability
 
@@ -222,18 +236,21 @@ Registered gateway clients can be retrieved via the REST API: `/v1/gateway-clien
 > [!TIP]
 > See [Gateway Clients Documentation](gateway_clients/README.md) for managing the registry.
 
-## Admin Users
+## Credentials
 
-Only admins can read [publication stats](docs/rest.md#10-list-publication-stats).
+Logins for the REST API, each with scopes. One holding every scope is an administrator. Also manageable over the [REST API](docs/rest.md#15-list-credentials).
 
 ```bash
-./admin-users.sh create --email admin@example.org          # shows the password once
-./admin-users.sh list
-./admin-users.sh reset-password --email admin@example.org
-./admin-users.sh disable --email admin@example.org
-./admin-users.sh enable --email admin@example.org
-./admin-users.sh revoke-sessions --email admin@example.org
-./admin-users.sh delete --email admin@example.org
+./creds.sh scopes                                          # list scopes
+./creds.sh create --username ops --administrator           # prints the password once
+./creds.sh create --username analyst --scope stats:publications:read
+./creds.sh set-scopes --username analyst --scope stats:publications:read --scope stats:publications:reasons
+./creds.sh list
+./creds.sh reset-password --username analyst
+./creds.sh disable --username analyst
+./creds.sh enable --username analyst
+./creds.sh revoke-sessions --username analyst
+./creds.sh delete --username analyst
 ```
 
 ## Documentation

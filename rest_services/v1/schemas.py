@@ -7,6 +7,7 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from db_types import DATE_BUCKET_UNITS
+from models.credential import MAX_USERNAME_LENGTH
 from models.publication_stats import GROUPABLE_COLUMNS
 
 
@@ -62,10 +63,7 @@ class PublishContentRequest(BaseModel):
 class PublishRestContentRequest(PublishContentRequest):
     tag: Optional[str] = Field(
         None,
-        description=(
-            "Shared secret required to publish offline payloads "
-            "over https when OFFLINE_PUBLISH_SHARED_SECRET is configured."
-        ),
+        description="Shared secret for offline payloads, if the server sets one.",
     )
 
 
@@ -118,13 +116,41 @@ class PublicationStatsSummary(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(..., max_length=254)
+    username: str = Field(..., max_length=MAX_USERNAME_LENGTH)
     password: str = Field(..., max_length=256)
 
 
-class AdminMe(BaseModel):
-    email: str
+class CurrentCredential(BaseModel):
+    username: str
+    scopes: List[str]
+    administrator: bool = Field(..., description="Holds every scope.")
     auth_method: Literal["session", "basic"]
     expires_at: Optional[datetime.datetime] = Field(
         None, description="Session expiry (session auth only)."
     )
+
+
+class CredentialCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(..., max_length=MAX_USERNAME_LENGTH)
+    scopes: List[str] = Field(..., min_length=1, max_length=32)
+
+
+class CredentialUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scopes: Optional[List[str]] = Field(None, min_length=1, max_length=32)
+    active: Optional[bool] = None
+
+
+class CredentialInfo(BaseModel):
+    username: str
+    active: bool
+    scopes: List[str]
+    administrator: bool = Field(..., description="Holds every scope.")
+    created_at: datetime.datetime
+    last_login_at: Optional[datetime.datetime] = None
+    active_sessions: int
+
+
+class CredentialWithPassword(CredentialInfo):
+    password: str = Field(..., description="Shown only in this response.")

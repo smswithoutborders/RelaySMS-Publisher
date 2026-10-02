@@ -247,7 +247,7 @@ List publish attempts.
 
 **URL:** `/stats/publications`
 **Method:** `GET`
-**Auth:** Admin
+**Auth:** Scope `stats:publications:read`. `failure_reason` is `null` without `stats:publications:reasons`.
 
 **Query Parameters:**
 
@@ -292,7 +292,7 @@ Count publish attempts per group over a time window.
 
 **URL:** `/stats/publications/summary`
 **Method:** `GET`
-**Auth:** Admin
+**Auth:** Scope `stats:publications:read`. Grouping by `failure_reason` also needs `stats:publications:reasons`.
 
 **Query Parameters:**
 
@@ -325,7 +325,7 @@ Groups are sorted by `period`, then `count` descending.
 
 If `interval` isn't set, it's `null` in the response and groups have no `period`. Periods with no rows are omitted; treat them as `0` when charting.
 
-### 12. Admin Login
+### 12. Login
 
 Start a web session. Sets an `HttpOnly`, `SameSite=Strict` session cookie.
 
@@ -335,22 +335,24 @@ Start a web session. Sets an `HttpOnly`, `SameSite=Strict` session cookie.
 **Request Body:**
 
 ```json
-{ "email": "admin@example.org", "password": "<password>" }
+{ "username": "analyst", "password": "<password>" }
 ```
 
-**Response Body:** `AdminMe`
+**Response Body:** `CurrentCredential`
 
 ```json
 {
-  "email": "admin@example.org",
+  "username": "analyst",
+  "scopes": ["stats:publications:read", "stats:publications:reasons"],
+  "administrator": false,
   "auth_method": "session",
   "expires_at": "2026-09-24T22:00:00Z"
 }
 ```
 
-Bad credentials and disabled accounts return the same `401`. An `Origin` other than this API or `ADMIN_WEB_ORIGINS` returns `403`.
+Bad credentials and disabled accounts return the same `401`. An `Origin` other than this API or `AUTH_WEB_ORIGINS` returns `403`.
 
-### 13. Admin Logout
+### 13. Logout
 
 End the current session and clear the cookie.
 
@@ -360,34 +362,125 @@ End the current session and clear the cookie.
 
 **Response:** `204 No Content`
 
-### 14. Current Admin
+### 14. Current Credential
 
-Return the authenticated admin. Call it on page load to check the session.
+Return the authenticated credential and its scopes. Call it on page load to check the session and decide what to show.
 
 **URL:** `/auth/me`
 **Method:** `GET`
 **Auth:** Session cookie or Basic
 
-**Response Body:** `AdminMe`. `expires_at` is `null` for Basic auth.
+**Response Body:** `CurrentCredential`. `expires_at` is `null` for Basic auth.
 
-## Admin Authentication
+### 15. List Credentials
 
-Admins are managed with [`./admin-users.sh`](../README.md#admin-users).
+**URL:** `/creds`
+**Method:** `GET`
+**Auth:** Scope `creds:read`
 
-* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). `POST`s with the cookie must come from this API's origin or `ADMIN_WEB_ORIGINS`. Sessions end after 30 minutes idle or 12 hours.
-* **HTTP Basic:** email and password on every request, e.g. `curl -u admin@example.org:<password> .../v1/stats/publications`. HTTPS only.
+**Response Body:** list of `CredentialInfo`
+
+```json
+[
+  {
+    "username": "analyst",
+    "active": true,
+    "scopes": ["stats:publications:read"],
+    "administrator": false,
+    "created_at": "2026-10-02T10:00:00Z",
+    "last_login_at": null,
+    "active_sessions": 0
+  }
+]
+```
+
+### 16. Get Credential
+
+**URL:** `/creds/{username}`
+**Method:** `GET`
+**Auth:** Scope `creds:read`
+
+**Response Body:** `CredentialInfo`, with an opaque `ETag` header. Send it back unchanged as `If-Match` to change the credential. Responses that change a credential return its new `ETag`.
+
+### 17. Create Credential
+
+**URL:** `/creds`
+**Method:** `POST`
+**Auth:** Scope `creds:write`
+
+**Request Body:**
+
+```json
+{ "username": "analyst", "scopes": ["stats:publications:read"] }
+```
+
+**Response:** `201 Created` with `CredentialWithPassword`: `CredentialInfo` plus a generated `password`, returned only this once.
+
+### 18. Update Credential
+
+**URL:** `/creds/{username}`
+**Method:** `PATCH`
+**Auth:** Scope `creds:write`, `If-Match` required
+
+**Request Body:** either or both fields
+
+```json
+{ "scopes": ["stats:publications:read", "stats:publications:reasons"], "active": false }
+```
+
+`scopes` replaces the current scopes. `"active": false` also ends the credential's sessions.
+
+**Response Body:** `CredentialInfo` with the new `ETag`.
+
+### 19. Reset Credential Password
+
+**URL:** `/creds/{username}/reset-password`
+**Method:** `POST`
+**Auth:** Scope `creds:write`, `If-Match` required
+
+**Response Body:** `CredentialWithPassword`. The credential's sessions end.
+
+### 20. Revoke Credential Sessions
+
+**URL:** `/creds/{username}/revoke-sessions`
+**Method:** `POST`
+**Auth:** Scope `creds:write`
+
+**Response:** `204 No Content`
+
+### 21. Delete Credential
+
+**URL:** `/creds/{username}`
+**Method:** `DELETE`
+**Auth:** Scope `creds:write`, `If-Match` required
+
+**Response:** `204 No Content`
+
+A credential can only grant scopes it holds, can't change itself, and can't change a credential holding scopes it lacks. These return `403`.
+
+## Authentication
+
+Credentials and their scopes are managed with [`./creds.sh`](../README.md#credentials).
+
+* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after 30 minutes idle or 12 hours.
+* **HTTP Basic:** username and password on every request, e.g. `curl -u analyst:<password> .../v1/stats/publications`. HTTPS only.
+
+Scope changes apply on the credential's next request.
 
 ## Error Handling
 
-The API uses standard HTTP status codes. Error bodies are `{"error": "<message>"}`:
+The API uses standard HTTP status codes. Error bodies are `{"error": "<message>"}`, where the message is meant to be shown to users; the server logs more detail:
 
 | Status | Meaning |
 | :--- | :--- |
 | `200 OK` | Request successful |
 | `400 Bad Request` | Invalid request parameters or payload, invalid cursor, or invalid time window |
-| `401 Unauthorized` | Missing or invalid admin credentials |
-| `403 Forbidden` | Origin not allowed |
-| `404 Not Found` | Platform or key not found |
+| `401 Unauthorized` | Missing or invalid credentials |
+| `403 Forbidden` | Origin not allowed, or the credential lacks a required scope |
+| `404 Not Found` | Platform, key or credential not found |
+| `409 Conflict` | Username taken, or the credential changed during the request; retry |
+| `412 Precondition Failed` | `If-Match` doesn't match the current `ETag`; reload and retry |
 | `422 Unprocessable Entity` | Unsupported payload type or validation error |
+| `428 Precondition Required` | `If-Match` header missing |
 | `429 Too Many Requests` | Rate limited (login and Basic-auth requests) |
 | `500 Internal Server Error` | Unexpected server-side error |

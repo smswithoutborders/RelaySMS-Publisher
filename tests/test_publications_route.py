@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import rest_services.v1.publications as publications_routes
 import rest_services.v1.routes as routes
 from publications import PayloadMalformedError
 
@@ -19,9 +20,11 @@ def client():
 
 @pytest.fixture(autouse=True)
 def _stub_publish(monkeypatch):
-    monkeypatch.setattr(routes, "publish_message", MagicMock())
+    monkeypatch.setattr(publications_routes, "publish_message", MagicMock())
     monkeypatch.setattr(
-        routes.PublicationService, "validate", staticmethod(lambda text: None)
+        publications_routes.PublicationService,
+        "validate",
+        staticmethod(lambda text: None),
     )
 
 
@@ -32,7 +35,7 @@ def test_valid_payload_queues_publication(client):
     )
 
     assert response.status_code == 200
-    routes.publish_message.delay.assert_called_once_with(
+    publications_routes.publish_message.delay.assert_called_once_with(
         "cGF5bG9hZA==", "+12025550123", "https", None
     )
 
@@ -48,7 +51,7 @@ def test_tag_is_forwarded_when_present(client):
     )
 
     assert response.status_code == 200
-    routes.publish_message.delay.assert_called_once_with(
+    publications_routes.publish_message.delay.assert_called_once_with(
         "cGF5bG9hZA==", "+12025550123", "https", "s3cret-tag"
     )
 
@@ -57,7 +60,9 @@ def test_malformed_payload_rejected(client, monkeypatch):
     def _raise(text):
         raise PayloadMalformedError("bad payload")
 
-    monkeypatch.setattr(routes.PublicationService, "validate", staticmethod(_raise))
+    monkeypatch.setattr(
+        publications_routes.PublicationService, "validate", staticmethod(_raise)
+    )
 
     response = client.post(
         "/v1/publications",
@@ -65,4 +70,4 @@ def test_malformed_payload_rejected(client, monkeypatch):
     )
 
     assert response.status_code == 400
-    routes.publish_message.delay.assert_not_called()
+    publications_routes.publish_message.delay.assert_not_called()

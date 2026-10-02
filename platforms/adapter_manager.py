@@ -2,12 +2,14 @@
 
 import configparser
 import os
+import re
 import shutil
 import subprocess
 import sys
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import msgspec
 from git import RemoteProgress, Repo
@@ -18,6 +20,26 @@ from logutils import get_logger
 
 logger = get_logger(__name__)
 platforms_config = PlatformsConfig.get()
+
+_GITHUB_REPO_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def is_allowed_github_url(url: str) -> bool:
+    """Whether url is a GitHub repo of an org in PLATFORMS_GITHUB_ORGS."""
+    parts = urlsplit(url.strip())
+    if parts.scheme != "https" or parts.netloc.lower() != "github.com":
+        return False
+    if parts.query or parts.fragment:
+        return False
+    segments = parts.path.strip("/").split("/")
+    if len(segments) != 2:
+        return False
+    org, repo = segments
+    return (
+        org.lower() in platforms_config.github_orgs
+        and repo not in (".", "..")
+        and _GITHUB_REPO_PATTERN.match(repo) is not None
+    )
 
 
 class PlatformManifest(msgspec.Struct, forbid_unknown_fields=False):

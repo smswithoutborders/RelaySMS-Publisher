@@ -66,8 +66,8 @@ def make_celery() -> Celery:
             "task": "tasks.cleanup_task.cleanup_idle_tokens",
             "schedule": token_cleanup_schedule,
         },
-        "cleanup-expired-admin-sessions": {
-            "task": "tasks.cleanup_task.cleanup_expired_admin_sessions",
+        "cleanup-expired-credential-sessions": {
+            "task": "tasks.cleanup_task.cleanup_expired_credential_sessions",
             "schedule": cleanup_schedule,
         },
     }

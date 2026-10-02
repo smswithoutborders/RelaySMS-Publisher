@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from config import AdminAuthConfig
+from config import ApiDocsConfig, AuthConfig
 from db import dispose_engine, get_session
 from gateway_clients.gateway_client_manager import GatewayClientManager
 from keys import KeyManager
 from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
-from rest_services.v1 import auth as admin_auth
 from rest_services.v1.routes import router as v1_router
 
 logger = get_logger(__name__)
@@ -23,6 +23,13 @@ logger = get_logger(__name__)
 # Query and path values are already in the URL; body values can be secrets.
 ECHOED_INPUT_LOCATIONS = frozenset({"query", "path"})
 MAX_ECHOED_INPUT_LENGTH = 50
+
+API_DOCS_PAGE = Path(__file__).parent / "docs" / "api.html"
+API_DOCS_CSP = (
+    "default-src 'none'; script-src https://cdn.jsdelivr.net; "
+    "style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; "
+    "connect-src 'self'"
+)
 
 
 def _validation_message(error: dict) -> str:
@@ -49,37 +56,54 @@ async def lifespan(app: FastAPI):
     dispose_engine()
 
 
-def configure_cors(app: FastAPI, settings: AdminAuthConfig) -> None:
+def configure_cors(app: FastAPI, settings: AuthConfig) -> None:
     if not settings.web_origins:
         return
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.web_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "If-Match"],
+        expose_headers=["ETag", "Location"],
         max_age=600,
     )
 
 
-app = FastAPI(lifespan=lifespan)
+api_docs_enabled = ApiDocsConfig.get().enabled
+app = FastAPI(
+    title="RelaySMS Publisher",
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if api_docs_enabled else None,
+)
 app.include_router(v1_router, prefix="/v1")
-configure_cors(app, AdminAuthConfig.get())
+configure_cors(app, AuthConfig.get())
 
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     """Apply baseline security headers to every response."""
     response = await call_next(request)
-    response.headers["Content-Security-Policy"] = "default-src 'none'"
+    response.headers.setdefault("Content-Security-Policy", "default-src 'none'")
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     return response
 
 
-@app.get("/health")
+if api_docs_enabled:
+
+    @app.get("/docs", include_in_schema=False)
+    def api_docs():
+        return FileResponse(
+            API_DOCS_PAGE, headers={"Content-Security-Policy": API_DOCS_CSP}
+        )
+
+
+@app.get("/health", tags=["Health"], summary="Health check")
 def health():
-    """Liveness/readiness check for uptime monitoring."""
+    """Liveness and readiness for uptime monitoring."""
     with get_session() as db:
         db.execute(text("SELECT 1"))
     return {"status": "ok"}
@@ -96,7 +120,13 @@ app.add_exception_handler(NotImplementedError, _bad_request_handler)
 
 @app.exception_handler(StarletteHTTPException)
 def http_error_handler(request: Request, exc: StarletteHTTPException):
-    logger.error("request: %s, error: %s", request.url.path, exc.detail)
+    log = getattr(exc, "log", None)
+    logger.error(
+        "request: %s, error: %s%s",
+        request.url.path,
+        exc.detail,
+        f" ({log})" if log else "",
+    )
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.detail},

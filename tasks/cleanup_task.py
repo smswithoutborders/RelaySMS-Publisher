@@ -6,7 +6,9 @@ from config import CleanupConfig
 from db import get_session
 from db_types import utc_now
 from logutils import get_logger
-from models.admin_session import delete_expired as delete_expired_admin_sessions
+from models.credential_session import (
+    delete_expired as delete_expired_credential_sessions,
+)
 from models.payload_session import delete_stale
 from platforms.adapter_manager import AdapterManager
 from tasks.celery_app import celery_app
@@ -59,13 +61,13 @@ def cleanup_idle_tokens() -> None:
         logger.debug("No idle tokens to clean up")
 
 
-@celery_app.task(name="tasks.cleanup_task.cleanup_expired_admin_sessions")
-def cleanup_expired_admin_sessions() -> None:
-    """Delete admin sessions past their expiry or idle timeout."""
+@celery_app.task(name="tasks.cleanup_task.cleanup_expired_credential_sessions")
+def cleanup_expired_credential_sessions() -> None:
+    """Delete credential sessions past their expiry or idle timeout."""
     with get_session() as db:
-        deleted = delete_expired_admin_sessions(db)
+        deleted = delete_expired_credential_sessions(db)
 
     if deleted:
-        logger.info("Cleaned up %d expired admin session(s)", deleted)
+        logger.info("Cleaned up %d expired credential session(s)", deleted)
     else:
-        logger.debug("No expired admin sessions to clean up")
+        logger.debug("No expired credential sessions to clean up")
