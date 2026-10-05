@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-
-import base64
-from collections.abc import Iterable
+"""Shared fixtures, loaded by conftest.py once the test environment is set."""
 
 import pytest
 from argon2 import PasswordHasher
@@ -13,20 +11,19 @@ from publisher import credentials, db
 from publisher.api.rest import app as app_module
 from publisher.api.rest.v1 import routes
 from publisher.db import Base
-from publisher.models.credential import ALL_SCOPES, Scope
-
-USERNAME = "ops"
+from tests.helpers import USERNAME, create_credential
 
 
-@pytest.fixture(autouse=True)
-def use_test_db():
+@pytest.fixture
+def test_db():
+    """A fresh in-memory database with every table."""
     db.dispose_engine()
     Base.metadata.create_all(db.get_engine())
     yield
     db.dispose_engine()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def fast_hasher(monkeypatch):
     # Default Argon2 cost is too slow for tests.
     monkeypatch.setattr(
@@ -54,31 +51,7 @@ def client(app):
     return TestClient(app, base_url="https://testserver")
 
 
-def create_credential(username: str, scopes: Iterable[str] = ALL_SCOPES) -> str:
-    with db.get_session() as session:
-        _, password = credentials.create(
-            session, username, frozenset(Scope(s) for s in scopes)
-        )
-    return password
-
-
 @pytest.fixture
 def password():
     """Password of USERNAME, an administrator."""
     return create_credential(USERNAME)
-
-
-def basic_auth(username: str, password: str) -> dict[str, str]:
-    token = base64.b64encode(f"{username}:{password}".encode()).decode()
-    return {"Authorization": f"Basic {token}"}
-
-
-def login(client: TestClient, password: str, username: str = USERNAME):
-    return client.post(
-        "/v1/auth/login", json={"username": username, "password": password}
-    )
-
-
-def can_log_in(username: str, password: str) -> bool:
-    with db.get_session() as session:
-        return credentials.authenticate(session, username, password) is not None

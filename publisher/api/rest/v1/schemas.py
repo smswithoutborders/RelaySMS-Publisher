@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from publisher.models.credential import MAX_USERNAME_LENGTH
+from publisher.publications import PublishContentRequest
 
 
 class PlatformManifest(BaseModel):
@@ -44,18 +45,6 @@ class OAuthClientMetadata(BaseModel):
 class ServerStaticPublicKey(BaseModel):
     key_id: int
     public_key: str
-
-
-class PublishContentRequest(BaseModel):
-    address: str = Field(
-        ...,
-        description="Sender phone number in E.164 format",
-        examples=["+12025550123"],
-    )
-    text: str = Field(
-        ...,
-        description="Base64-encoded SMS payload",
-    )
 
 
 class PublishRestContentRequest(PublishContentRequest):

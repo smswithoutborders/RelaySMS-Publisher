@@ -12,8 +12,9 @@ from publisher.models.publication_stats import (
     PublicationStats,
     encode_cursor,
 )
-from tests.creds_fixtures import *  # noqa: F403
-from tests.creds_fixtures import USERNAME, basic_auth, create_credential, login
+from tests.helpers import USERNAME, basic_auth, create_credential, login
+
+pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
 
 BASE_TIME = datetime.datetime(2026, 9, 1, 12, 0, 0)
 

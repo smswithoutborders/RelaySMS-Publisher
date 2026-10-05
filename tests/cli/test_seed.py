@@ -2,13 +2,15 @@
 
 import datetime
 
+import pytest
 from click.testing import CliRunner
 
 from publisher import credentials
 from publisher.cli import seed
 from publisher.db import get_session
 from publisher.models.publication_stats import PublicationStats
-from tests.creds_fixtures import *  # noqa: F403
+
+pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
 
 
 def test_stats_adds_realistic_rows_in_batches(monkeypatch):

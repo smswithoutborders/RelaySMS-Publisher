@@ -9,7 +9,7 @@ from twilio.request_validator import RequestValidator
 
 from publisher.api.rest.v1 import publications as publications_routes
 from publisher.api.rest.v1 import routes
-from publisher.publications import PayloadMalformedError
+from publisher.publications import validate as real_validate
 
 AUTH_TOKEN = "test-auth-token"
 WEBHOOK_URL = "http://testserver/v1/twilio-sms"
@@ -83,10 +83,7 @@ def test_missing_body_field_rejected(client):
 
 
 def test_malformed_payload_rejected(client, monkeypatch):
-    def _raise(text):
-        raise PayloadMalformedError("bad payload")
-
-    monkeypatch.setattr(publications_routes.publications, "validate", _raise)
+    monkeypatch.setattr(publications_routes.publications, "validate", real_validate)
 
     params = {"From": "+237123456789", "Body": "not-base64"}
     response = _signed_post(client, params)

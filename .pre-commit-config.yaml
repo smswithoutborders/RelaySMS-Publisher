@@ -42,6 +42,12 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: import-linter
+        name: import-linter
+        entry: venv/bin/lint-imports
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: pytest
         name: pytest
         entry: venv/bin/python -m pytest -q

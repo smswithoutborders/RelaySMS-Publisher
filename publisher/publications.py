@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 import magic
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
@@ -31,6 +32,20 @@ logger = logging.getLogger(__name__)
 offline_config = OfflinePublishConfig.get()
 
 OFFLINE_CONTENT_PLATFORM = "rmail"
+
+
+class PublishContentRequest(BaseModel):
+    """A payload as REST and SMTP receive it."""
+
+    address: str = Field(
+        ...,
+        description="Sender phone number in E.164 format",
+        examples=["+12025550123"],
+    )
+    text: str = Field(
+        ...,
+        description="Base64-encoded SMS payload",
+    )
 
 
 class PublicationError(PublisherError):

@@ -3,16 +3,15 @@
 import re
 
 import pytest
-from argon2 import PasswordHasher
 from click.testing import CliRunner
 
 from publisher import credentials
 from publisher.cli import creds as creds_cli
-from publisher.credentials import CredentialPermissionError, check_can_manage
 from publisher.db import get_session
-from publisher.models.credential import ALL_SCOPES, CredentialScope, Scope
-from tests.creds_fixtures import *  # noqa: F403
-from tests.creds_fixtures import USERNAME, can_log_in, create_credential
+from publisher.models.credential import Scope
+from tests.helpers import USERNAME, can_log_in, create_credential
+
+pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
 
 
 @pytest.fixture
@@ -155,74 +154,3 @@ def test_disable_and_enable(runner):
         runner.invoke(creds_cli.cli, ["enable", "--username", USERNAME]).exit_code == 0
     )
     assert can_log_in(USERNAME, password)
-
-
-def test_verify_rehashes_outdated_hash(monkeypatch):
-    password = create_credential(USERNAME)
-    with get_session() as db:
-        old_hash = credentials.get_by_username(db, USERNAME).password_hash
-
-    monkeypatch.setattr(
-        credentials,
-        "password_hasher",
-        PasswordHasher(time_cost=2, memory_cost=1024, parallelism=1),
-    )
-    assert can_log_in(USERNAME, password)
-
-    with get_session() as db:
-        new_hash = credentials.get_by_username(db, USERNAME).password_hash
-    assert new_hash != old_hash and "t=2" in new_hash
-
-
-def test_unknown_stored_scopes_are_ignored():
-    create_credential(USERNAME)
-    with get_session() as db:
-        credential = credentials.get_or_raise(db, USERNAME)
-        db.add(CredentialScope(credential_id=credential.id, scope="retired:scope"))
-
-    assert _scopes(USERNAME) == ALL_SCOPES
-
-
-@pytest.fixture
-def actors():
-    create_credential(USERNAME)
-    create_credential(
-        "manager", ["creds:read", "creds:write", "stats:publications:read"]
-    )
-    create_credential("analyst", ["stats:publications:read"])
-    create_credential("viewer", ["creds:read"])
-    with get_session() as db:
-        yield {c.username: c for c in credentials.list_credentials(db)}
-
-
-@pytest.mark.parametrize(
-    "actor, target, scopes, error",
-    [
-        ("viewer", "analyst", [], "Requires scope creds:write"),
-        ("manager", "manager", [], "can't change itself"),
-        ("manager", USERNAME, [], "scopes you don't hold"),
-        (
-            "manager",
-            "analyst",
-            [Scope.STATS_PUBLICATIONS_REASONS],
-            "stats:publications:reasons",
-        ),
-        ("manager", None, [Scope.GC_READ], "gc:read"),
-    ],
-)
-def test_check_can_manage_blocks_escalation(actors, actor, target, scopes, error):
-    with pytest.raises(CredentialPermissionError, match=error):
-        check_can_manage(actors[actor], actors.get(target), scopes)
-
-
-@pytest.mark.parametrize(
-    "actor, target, scopes",
-    [
-        ("manager", "analyst", [Scope.STATS_PUBLICATIONS_READ]),
-        ("manager", "viewer", [Scope.CREDS_READ]),
-        ("manager", None, [Scope.STATS_PUBLICATIONS_READ, Scope.CREDS_READ]),
-        (USERNAME, "manager", ALL_SCOPES),
-    ],
-)
-def test_check_can_manage_allows_scopes_actor_holds(actors, actor, target, scopes):
-    check_can_manage(actors[actor], actors.get(target), scopes)

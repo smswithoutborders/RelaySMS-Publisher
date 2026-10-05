@@ -1,4 +1,5 @@
 -r requirements.txt
+import-linter==2.15
 pre-commit==4.6.2
 pyright==1.1.414
 pytest==9.1.1

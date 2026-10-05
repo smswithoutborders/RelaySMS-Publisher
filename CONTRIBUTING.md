@@ -15,12 +15,13 @@ make build
 
 | Path | Holds |
 | --- | --- |
-| `publisher/api/rest`, `api/grpc`, `smtp`, `tasks`, `cli` | Entry points: they parse input, open the session and call the domain code |
+| `publisher/api/rest`, `api/grpc`, `smtp`, `cli` | Entry points: they parse input, open the session and call the domain code |
+| `publisher/tasks` | Celery tasks, queued by the entry points and run by the worker |
 | `publisher/keys.py`, `publications.py`, `tokens.py`, `credentials.py`, `platforms/`, `gateway_clients/` | Domain logic |
 | `publisher/config.py`, `db/`, `models/`, `log.py`, `errors.py`, `crypto.py` | Infrastructure |
 | `deploy/`, `scripts/`, `migrations/`, `protos/`, `tools/` | systemd and nginx templates, install and ops scripts, Alembic, gRPC protos, the reference client |
 
-Entry points import domain code, and domain code imports infrastructure, never the other way round.
+Each code row may import only the rows below it, never the other way round, and entry points don't import each other. import-linter checks this in `make check`. Tests mirror the package under `tests/`.
 
 ## Code conventions
 

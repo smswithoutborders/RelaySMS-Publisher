@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from publisher.keys import TokenVerificationError
 from publisher.publications import (
     AdapterIntegrationError,
     OfflineTagInvalidError,
@@ -28,25 +29,23 @@ def _patch_infra(monkeypatch):
     monkeypatch.setattr(publication_task, "record_publication", MagicMock())
 
 
-def _stub_service(monkeypatch, *, publish_return=None, publish_side_effect=None):
-    fake_service = MagicMock()
-    fake_service.validate.return_value = (b"raw", b"seg", object())
+def _stub_publications(monkeypatch, *, publish_return=None, publish_side_effect=None):
+    stub = MagicMock()
+    stub.validate.return_value = (b"raw", b"seg", object())
     if publish_side_effect is not None:
-        fake_service.publish.side_effect = publish_side_effect
+        stub.publish.side_effect = publish_side_effect
     else:
-        fake_service.publish.return_value = publish_return
+        stub.publish.return_value = publish_return
 
-    monkeypatch.setattr(
-        publication_task.publications, "validate", fake_service.validate
-    )
-    monkeypatch.setattr(publication_task.publications, "publish", fake_service.publish)
-    return fake_service
+    monkeypatch.setattr(publication_task.publications, "validate", stub.validate)
+    monkeypatch.setattr(publication_task.publications, "publish", stub.publish)
+    return stub
 
 
 def _run_with_publish_error(monkeypatch, error):
-    fake_service = _stub_service(monkeypatch, publish_side_effect=error)
+    stub = _stub_publications(monkeypatch, publish_side_effect=error)
     publication_task.publish_message("text", "+12025550123", "https")
-    return fake_service
+    return stub
 
 
 @pytest.mark.parametrize(
@@ -57,22 +56,25 @@ def _run_with_publish_error(monkeypatch, error):
         ProtocolNotAllowedError("protocol not allowed"),
         OfflineTagMissingError("missing tag"),
         OfflineTagInvalidError("invalid tag"),
+        TokenVerificationError("unknown key"),
     ],
 )
 def test_pipeline_errors_are_caught_and_logged(monkeypatch, caplog, error):
     """The task must swallow these, not raise; the REST caller already got its 200."""
-    fake_service = _run_with_publish_error(monkeypatch, error)
+    stub = _run_with_publish_error(monkeypatch, error)
 
-    fake_service.publish.assert_called_once()
+    stub.publish.assert_called_once()
     assert "Failed to process payload" in caplog.text
     publication_task.record_publication.assert_called_once()
-    assert publication_task.record_publication.call_args.kwargs["status"] == "failed"
+    kwargs = publication_task.record_publication.call_args.kwargs
+    assert kwargs["status"] == "failed"
+    assert kwargs["failure_reason"] == str(error)
 
 
 def test_adapter_integration_error_is_caught_and_logged(monkeypatch, caplog):
-    fake_service = _run_with_publish_error(monkeypatch, AdapterIntegrationError("boom"))
+    stub = _run_with_publish_error(monkeypatch, AdapterIntegrationError("boom"))
 
-    fake_service.publish.assert_called_once()
+    stub.publish.assert_called_once()
     assert "Failed to publish message" in caplog.text
     publication_task.record_publication.assert_called_once()
     assert publication_task.record_publication.call_args.kwargs["status"] == "failed"
@@ -80,9 +82,9 @@ def test_adapter_integration_error_is_caught_and_logged(monkeypatch, caplog):
 
 def test_unexpected_error_is_caught_logged_and_recorded(monkeypatch, caplog):
     """A bare, unanticipated exception must not crash the worker."""
-    fake_service = _run_with_publish_error(monkeypatch, RuntimeError("boom"))
+    stub = _run_with_publish_error(monkeypatch, RuntimeError("boom"))
 
-    fake_service.publish.assert_called_once()
+    stub.publish.assert_called_once()
     assert "unexpected error" in caplog.text.lower()
     publication_task.record_publication.assert_called_once()
     kwargs = publication_task.record_publication.call_args.kwargs
@@ -91,11 +93,11 @@ def test_unexpected_error_is_caught_logged_and_recorded(monkeypatch, caplog):
 
 
 def test_success_records_published_stat(monkeypatch):
-    fake_service = _stub_service(monkeypatch, publish_return="gmail")
+    stub = _stub_publications(monkeypatch, publish_return="gmail")
 
     publication_task.publish_message("text", "+12025550123", "https")
 
-    fake_service.publish.assert_called_once()
+    stub.publish.assert_called_once()
     publication_task.record_publication.assert_called_once()
     kwargs = publication_task.record_publication.call_args.kwargs
     assert kwargs["status"] == "published"
@@ -104,7 +106,7 @@ def test_success_records_published_stat(monkeypatch):
 
 def test_incomplete_segment_session_skips_recording(monkeypatch):
     """Return early without recording an outcome while awaiting more segments."""
-    _stub_service(monkeypatch, publish_return=None)
+    _stub_publications(monkeypatch, publish_return=None)
 
     publication_task.publish_message("text", "+12025550123", "smtp")
 
@@ -112,8 +114,8 @@ def test_incomplete_segment_session_skips_recording(monkeypatch):
 
 
 def test_tag_is_forwarded_to_service_publish(monkeypatch):
-    fake_service = _stub_service(monkeypatch, publish_return="rmail")
+    stub = _stub_publications(monkeypatch, publish_return="rmail")
 
     publication_task.publish_message("text", "+12025550123", "https", "s3cret-tag")
 
-    assert fake_service.publish.call_args.kwargs["tag"] == "s3cret-tag"
+    assert stub.publish.call_args.kwargs["tag"] == "s3cret-tag"

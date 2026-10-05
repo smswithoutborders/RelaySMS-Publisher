@@ -22,11 +22,11 @@ from imap_tools import (
 from pydantic import ValidationError
 
 from publisher import publications
-from publisher.api.rest.v1.schemas import PublishContentRequest
 from publisher.config import SmtpConfig
 from publisher.publications import (
     PayloadMalformedError,
     PayloadNotSupportedError,
+    PublishContentRequest,
 )
 from publisher.smtp import auth as smtp_auth
 from publisher.tasks.publication_task import publish_message

@@ -3,8 +3,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.creds_fixtures import *  # noqa: F403
-from tests.creds_fixtures import USERNAME, basic_auth, create_credential, login
+from tests.helpers import USERNAME, basic_auth, create_credential, login
+
+pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
 
 
 @pytest.fixture

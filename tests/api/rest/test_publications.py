@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from publisher.api.rest.v1 import publications as publications_routes
 from publisher.api.rest.v1 import routes
-from publisher.publications import PayloadMalformedError
+from publisher.publications import validate as real_validate
 
 
 @pytest.fixture
@@ -57,10 +57,7 @@ def test_tag_is_forwarded_when_present(client):
 
 
 def test_malformed_payload_rejected(client, monkeypatch):
-    def _raise(text):
-        raise PayloadMalformedError("bad payload")
-
-    monkeypatch.setattr(publications_routes.publications, "validate", _raise)
+    monkeypatch.setattr(publications_routes.publications, "validate", real_validate)
 
     response = client.post(
         "/v1/publications",

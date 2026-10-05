@@ -13,6 +13,8 @@ os.environ.update(
     DATA_ENCRYPTION_KEY="11" * 32,
 )
 
+pytest_plugins = ["tests.fixtures"]
+
 
 @pytest.fixture
 def set_config(monkeypatch):

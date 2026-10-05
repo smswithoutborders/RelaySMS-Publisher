@@ -15,8 +15,9 @@ from publisher.db import get_session
 from publisher.db.types import utc_now
 from publisher.models.credential import Scope
 from publisher.models.credential_session import CredentialSession
-from tests.creds_fixtures import *  # noqa: F403
-from tests.creds_fixtures import USERNAME, basic_auth, login
+from tests.helpers import USERNAME, basic_auth, login
+
+pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
 
 WEB_ORIGIN = "https://web.example.net"
 
