@@ -264,7 +264,7 @@ Logins for the REST API, each with scopes. One holding every scope is an adminis
 - [Gateway Clients](gateway_clients/README.md) - Managing the gateway client registry
 - [Observability](observability/README.md) - Tracing, metrics, logs, uptime monitoring
 - [Reference Client](tools/README.md) - Exercising the gRPC and REST flows by hand
-- [Contributing](CONTRIBUTING.md) - Setup and code conventions
+- [Contributing](CONTRIBUTING.md) - Setup, workflow, conventions and testing
 
 ## Testing
 
