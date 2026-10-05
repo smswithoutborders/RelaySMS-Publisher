@@ -13,8 +13,8 @@ from typing import Any, Literal
 from sqlalchemy import Index, String, and_, func, or_, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from db import Base
-from db_types import UTCDateTime, as_utc, date_bucket, utc_now
+from publisher.db import Base
+from publisher.db.types import UTCDateTime, as_utc, date_bucket, utc_now
 
 Direction = Literal["next", "prev"]
 

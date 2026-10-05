@@ -8,9 +8,9 @@ from typing import Any
 from sqlalchemy import BigInteger, SmallInteger, String, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
-from db import Base
-from db_types import EncryptedJSON
-from models.token_hash import TokenHash
+from publisher.db import Base
+from publisher.db.types import EncryptedJSON
+from publisher.models.token_hash import TokenHash
 
 
 def _generate_uint32_token() -> int:

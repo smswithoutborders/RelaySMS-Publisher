@@ -3,7 +3,7 @@
 
 from fastapi import APIRouter, HTTPException, Path
 
-from models.server_identity_key import get_public_key, get_public_keys
+from publisher.models.server_identity_key import get_public_key, get_public_keys
 from rest_services.v1.schemas import ServerStaticPublicKey
 
 router = APIRouter(prefix="/server-keys", tags=["Server Keys"])

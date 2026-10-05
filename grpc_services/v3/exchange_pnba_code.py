@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """ExchangePNBACodeAndStore handler."""
 
-from db import get_session
 from grpc_services.utils import (
     call_adapter,
     require_fields,
     validate_client_ephemeral_public_keys,
 )
 from keys import KeyManager
-from models.token import create as create_token
 from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2
+from publisher.db import get_session
+from publisher.models.token import create as create_token
 
 
 def exchange_pnba_code_and_store(

@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
-from db import Base
+from publisher.db import Base
 
 if TYPE_CHECKING:
-    from models import PayloadSegment
+    from publisher.models import PayloadSegment
 
 
 def _utc_now() -> datetime.datetime:

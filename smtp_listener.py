@@ -6,6 +6,7 @@ Polls a relay mailbox over IMAP and hands each message to the publication pipeli
 
 import imaplib
 import json
+import logging
 import socket
 import ssl
 import time
@@ -24,17 +25,17 @@ from imap_tools import (
 from pydantic import ValidationError
 
 import smtp_auth
-from config import SmtpConfig
-from logutils import get_logger
 from publications import (
     PayloadMalformedError,
     PayloadNotSupportedError,
     PublicationService,
 )
+from publisher.config import SmtpConfig
+from publisher.log import setup_logging
 from rest_services.v1.schemas import PublishContentRequest
 from tasks.publication_task import publish_message
 
-logger = get_logger("publisher.smtp.listener")
+logger = logging.getLogger(__name__)
 
 smtp_config = SmtpConfig.get()
 
@@ -209,4 +210,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

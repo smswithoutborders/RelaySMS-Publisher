@@ -11,11 +11,8 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import FunctionElement, literal_column
 from sqlalchemy.sql.visitors import InternalTraversal
 
-from config import DatabaseConfig
-from crypto import get_encryption_algorithm
-from logutils import get_logger
-
-logger = get_logger(__name__)
+from publisher import crypto
+from publisher.config import DatabaseConfig
 
 DATE_BUCKET_UNITS = ("day", "week", "month", "year")
 
@@ -117,10 +114,6 @@ class EncryptedJSON(TypeDecorator):
     impl = Text
     cache_ok = True
 
-    def __init__(self, algorithm: str = "aes-256-gcm"):
-        super().__init__()
-        self._encrypt_func, self._decrypt_func = get_encryption_algorithm(algorithm)
-
     @staticmethod
     def _key() -> bytes | None:
         # Read on each use, so importing models does not need the database settings.
@@ -137,7 +130,7 @@ class EncryptedJSON(TypeDecorator):
         key = self._key()
         if key is None:
             return json_str
-        return self._encrypt_func(key, json_str.encode()).hex()
+        return crypto.encrypt(key, json_str.encode()).hex()
 
     def process_result_value(self, value, dialect):
         if value is None:
@@ -146,7 +139,7 @@ class EncryptedJSON(TypeDecorator):
         key = self._key()
         if key is None:
             return json.loads(value)
-        plaintext = self._decrypt_func(key, bytes.fromhex(value))
+        plaintext = crypto.decrypt(key, bytes.fromhex(value))
         return json.loads(plaintext.decode())
 
 
@@ -156,16 +149,12 @@ class PrivateEncryptedBinary(TypeDecorator):
     impl = LargeBinary
     cache_ok = True
 
-    def __init__(self, algorithm: str = "aes-256-gcm"):
-        super().__init__()
-        self._encrypt_func, self._decrypt_func = get_encryption_algorithm(algorithm)
-
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
-        return self._encrypt_func(DatabaseConfig.get().data_encryption_key, value)
+        return crypto.encrypt(DatabaseConfig.get().data_encryption_key, value)
 
     def process_result_value(self, value, dialect):
         if value is None:
             return None
-        return self._decrypt_func(DatabaseConfig.get().data_encryption_key, value)
+        return crypto.decrypt(DatabaseConfig.get().data_encryption_key, value)

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Interceptors for the Publisher gRPC server."""
 
+import logging
 import threading
 import time
 from contextvars import ContextVar
@@ -16,12 +17,11 @@ from grpc_interceptor.exceptions import (
 )
 from opentelemetry import trace as otel_trace
 
-from db import get_session
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
-from logutils import get_logger
-from models.server_identity_key import get_private_key
+from publisher.db import get_session
+from publisher.models.server_identity_key import get_private_key
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 INTERNAL_ERROR = "Oops! Something went wrong. Please try again later."
 REQUIRED_HEADERS = (

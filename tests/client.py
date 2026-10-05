@@ -3,6 +3,7 @@
 """CLI tool for testing gRPC flows."""
 
 import json
+import logging
 import random
 import secrets
 import sys
@@ -13,8 +14,8 @@ import requests
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
-from logutils import get_logger
 from protos.v3 import publisher_pb2, publisher_pb2_grpc
+from publisher.log import setup_logging
 from tests.utils import (
     b64,
     b64d,
@@ -30,7 +31,7 @@ from tests.utils import (
     select_token_interactively,
 )
 
-logger = get_logger("test_cli")
+logger = logging.getLogger(__name__)
 
 
 def shared_options(f):
@@ -944,4 +945,5 @@ def cmd_send(
 
 
 if __name__ == "__main__":
+    setup_logging()
     cli()

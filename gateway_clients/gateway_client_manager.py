@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import logging
 import os
 from pathlib import Path
 
@@ -7,11 +8,10 @@ import msgspec
 import phonenumbers
 from phonenumbers import carrier, geocoder
 
-from config import GatewayClientsConfig
 from gateway_clients import mcc_mnc
-from logutils import get_logger
+from publisher.config import GatewayClientsConfig
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 gateway_clients_config = GatewayClientsConfig.get()
 
 

@@ -8,9 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from logutils import get_logger
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # Adapter subprocesses format their own stderr lines as
 # "<asctime> - <logger name> - <LEVEL> - <message>" (see each adapter's

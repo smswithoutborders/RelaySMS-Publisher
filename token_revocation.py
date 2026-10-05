@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-from models.token import Token
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from platforms.adapter_manager import AdapterManager
+from publisher.models.token import Token
 
 
 def revoke_oauth2_token_upstream(

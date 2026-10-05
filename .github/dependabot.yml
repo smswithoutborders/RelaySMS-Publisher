@@ -28,6 +28,14 @@ updates:
     labels:
       - "dependencies"
 
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "staging"

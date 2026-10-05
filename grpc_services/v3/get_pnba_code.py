@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """GetPNBACode handler."""
 
+import logging
 from datetime import datetime
 
 from grpc_interceptor.exceptions import InvalidArgument
 
 from grpc_services.utils import call_adapter, require_fields
-from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _to_epoch_seconds(value):

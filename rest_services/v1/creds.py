@@ -2,16 +2,16 @@
 """Credential management endpoints."""
 
 import hashlib
+import logging
 from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response, Security
 from sqlalchemy.orm import Session
 
-from db import get_db
-from logutils import get_logger
-from models import credential as credentials
-from models import credential_session as credential_sessions
-from models.credential import (
+from publisher.db import get_db
+from publisher.models import credential as credentials
+from publisher.models import credential_session as credential_sessions
+from publisher.models.credential import (
     MAX_USERNAME_LENGTH,
     Credential,
     CredentialConflictError,
@@ -28,7 +28,7 @@ from rest_services.v1.schemas import (
     CredentialWithPassword,
 )
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/creds", tags=["Credentials"])
 

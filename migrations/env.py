@@ -5,9 +5,9 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import models  # noqa: F401  (registers every table on Base.metadata)
-from config import DatabaseConfig
-from db import Base, build_url, get_engine
+import publisher.models  # noqa: F401  (registers every table on Base.metadata)
+from publisher.config import DatabaseConfig
+from publisher.db import Base, build_url, get_engine
 
 config = context.config
 target_metadata = Base.metadata

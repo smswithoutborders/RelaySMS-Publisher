@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import logging
+
 import phonenumbers
 from celery.signals import worker_init, worker_shutdown
 
-from db import dispose_engine, get_session
 from keys import KeyManagerError
-from logutils import get_logger
-from models.publication_stats import record as record_publication
 from platforms.adapter_manager import AdapterManager
 from publications import (
     AdapterIntegrationError,
@@ -16,9 +15,11 @@ from publications import (
     ProtocolNotAllowedError,
     PublicationService,
 )
+from publisher.db import dispose_engine, get_session
+from publisher.models.publication_stats import record as record_publication
 from tasks.celery_app import celery_app
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 _adapter_manager: AdapterManager | None = None
 
 _FAILURE_REASON_MAX_LEN = 255

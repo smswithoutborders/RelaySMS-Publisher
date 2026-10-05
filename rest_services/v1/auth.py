@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Session cookie and HTTP Basic auth, scope checks, and the /auth endpoints."""
 
+import logging
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -13,12 +14,11 @@ from fastapi.security import (
 )
 from sqlalchemy.orm import Session
 
-from config import AuthConfig
-from db import get_db
-from logutils import get_logger
-from models import credential_session as credential_sessions
-from models.credential import Credential, authenticate, record_login
-from models.credential_session import CredentialSession
+from publisher.config import AuthConfig
+from publisher.db import get_db
+from publisher.models import credential_session as credential_sessions
+from publisher.models.credential import Credential, authenticate, record_login
+from publisher.models.credential_session import CredentialSession
 from rest_services.v1.errors import ApiError
 from rest_services.v1.schemas import CurrentCredential, LoginRequest
 
@@ -31,7 +31,7 @@ BASIC_LOGIN_RECORD_INTERVAL_SECONDS = 300
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 PRIVATE_CACHE_CONTROL = "private, no-store"
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 auth_config = AuthConfig.get()
 

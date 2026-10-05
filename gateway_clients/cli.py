@@ -4,6 +4,7 @@ import click
 
 from gateway_clients import mcc_mnc
 from gateway_clients.gateway_client_manager import GatewayClientManager
+from publisher.log import setup_logging
 
 manager = GatewayClientManager()
 
@@ -211,4 +212,5 @@ def mcc_mnc_remove_override(mcc, mnc):
 
 
 if __name__ == "__main__":
+    setup_logging()
     cli()

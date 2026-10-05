@@ -39,7 +39,7 @@ jobs:
           venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
 
       - name: Build protos and payload specs
-        run: make build-setup python=venv/bin/python
+        run: make build PYTHON=venv/bin/python
 
       - uses: actions/cache@v6
         with:

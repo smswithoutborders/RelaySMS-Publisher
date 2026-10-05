@@ -2,16 +2,16 @@
 """Idle token cleanup."""
 
 import datetime
+import logging
 
 from sqlalchemy.orm import Session
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
-from logutils import get_logger
-from models.token import Token, get_idle
 from platforms.adapter_manager import AdapterManager
+from publisher.models.token import Token, get_idle
 from token_revocation import revoke_oauth2_token_upstream, revoke_pnba_token_upstream
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _revoke_upstream(token: Token, adapter_manager: AdapterManager) -> None:

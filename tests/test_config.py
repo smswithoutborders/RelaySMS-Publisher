@@ -2,9 +2,8 @@
 
 import pytest
 
-import config
-import db
-from config import (
+from publisher import config, db
+from publisher.config import (
     AuthConfig,
     CeleryConfig,
     DatabaseConfig,

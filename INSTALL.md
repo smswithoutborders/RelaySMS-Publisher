@@ -74,10 +74,10 @@ venv/bin/pip install -r requirements.txt
 ### Build
 
 ```bash
-make build-setup
+make build
 ```
 
-Downloads and compiles the gRPC protos and payload-specs library.
+Generates the gRPC code and builds the pinned payload-specs library.
 
 ### Configure
 
@@ -117,7 +117,7 @@ If you changed any of the following path variables in `.env`, create the parent 
 ### Run Migrations
 
 ```bash
-make migrate-up
+make migrate
 ```
 
 ### Install Services

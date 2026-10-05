@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from models.credential import MAX_USERNAME_LENGTH
+from publisher.models.credential import MAX_USERNAME_LENGTH
 
 
 class PlatformManifest(BaseModel):

@@ -12,22 +12,22 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from sqlalchemy import func, select
 
-import db
-import models  # noqa: F401  (registers every table on Base.metadata)
+import publisher.models  # noqa: F401  (registers every table on Base.metadata)
 import tests.utils as client_utils
-from db import Base, get_session
 from grpc_server import V3_SERVICE, interceptors
 from grpc_services.interceptors import V1AuthInterceptor
 from grpc_services.v3 import revoke_oauth2_token
 from grpc_services.v3.servicer import PublisherServicerV3
 from keys import KeyManager
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
-from models.server_ephemeral_key import ServerEphemeralKey
-from models.server_identity_key import get_public_key
-from models.token import Token
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from platforms.adapter_manager import PlatformManifest
 from protos.v3 import publisher_pb2, publisher_pb2_grpc
+from publisher import db
+from publisher.db import Base, get_session
+from publisher.models.server_ephemeral_key import ServerEphemeralKey
+from publisher.models.server_identity_key import get_public_key
+from publisher.models.token import Token
 
 OAUTH2_ADAPTER = PlatformManifest(
     id="gmail-adapter",

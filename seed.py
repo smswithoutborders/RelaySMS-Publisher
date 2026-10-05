@@ -8,11 +8,12 @@ import secrets
 import click
 from sqlalchemy import insert
 
-from db import get_session
-from db_types import utc_now
-from models import credential as credentials
-from models.credential import ALL_SCOPES, Scope, parse_scopes
-from models.publication_stats import PublicationStats
+from publisher.db import get_session
+from publisher.db.types import utc_now
+from publisher.log import setup_logging
+from publisher.models import credential as credentials
+from publisher.models.credential import ALL_SCOPES, Scope, parse_scopes
+from publisher.models.publication_stats import PublicationStats
 
 PLATFORMS = ("gmail", "twitter", "telegram", "slack", "bluesky", "mastodon")
 PROTOCOLS = ("https", "smtp", "sms")
@@ -99,4 +100,5 @@ def creds(count):
 
 
 if __name__ == "__main__":
+    setup_logging()
     cli()

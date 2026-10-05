@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,15 +11,15 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from config import ApiDocsConfig, AuthConfig
-from db import dispose_engine, get_session
 from gateway_clients.gateway_client_manager import GatewayClientManager
 from keys import KeyManager
-from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
+from publisher.config import ApiDocsConfig, AuthConfig
+from publisher.db import dispose_engine, get_session
+from publisher.log import setup_logging
 from rest_services.v1.routes import router as v1_router
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # Query and path values are already in the URL; body values can be secrets.
 ECHOED_INPUT_LOCATIONS = frozenset({"query", "path"})
@@ -70,6 +71,7 @@ def configure_cors(app: FastAPI, settings: AuthConfig) -> None:
     )
 
 
+setup_logging()
 api_docs_enabled = ApiDocsConfig.get().enabled
 app = FastAPI(
     title="RelaySMS Publisher",

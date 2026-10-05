@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, Index, LargeBinary
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
-from db import Base
+from publisher.db import Base
 
 if TYPE_CHECKING:
-    from models import ClientEphemeralKey, ServerEphemeralKey, Token
+    from publisher.models import ClientEphemeralKey, ServerEphemeralKey, Token
 
 
 def _utc_now() -> datetime.datetime:

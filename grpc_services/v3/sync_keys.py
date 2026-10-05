@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """SyncKeys handler."""
 
+import logging
+
 from grpc_interceptor.exceptions import InvalidArgument, Unauthenticated
 
-from db import get_session
 from grpc_services.utils import require_fields, validate_client_ephemeral_public_keys
 from keys import KeyManager, KeyManagerError
-from logutils import get_logger
-from models.token_hash import update_last_used as mark_token_hash_used
 from protos.v3 import publisher_pb2
+from publisher.db import get_session
+from publisher.models.token_hash import update_last_used as mark_token_hash_used
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def sync_keys(request, payload: bytes) -> publisher_pb2.SyncKeysResponse:

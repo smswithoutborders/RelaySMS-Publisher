@@ -75,10 +75,10 @@ cp template.env .env
 # Edit .env as needed
 
 # Build
-make build-setup
+make build
 
 # Run database migrations
-make migrate-up
+make migrate
 
 # Start gRPC, REST API, Celery worker, and Celery beat together
 ./scripts/run.sh

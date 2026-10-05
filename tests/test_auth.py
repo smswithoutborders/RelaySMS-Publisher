@@ -9,11 +9,11 @@ from sqlalchemy import update
 
 import app as app_module
 import rest_services.v1.routes as routes
-from db import get_session
-from db_types import utc_now
-from models import credential as credentials
-from models.credential import Scope
-from models.credential_session import CredentialSession
+from publisher.db import get_session
+from publisher.db.types import utc_now
+from publisher.models import credential as credentials
+from publisher.models.credential import Scope
+from publisher.models.credential_session import CredentialSession
 from rest_services.v1 import auth
 from rest_services.v1.auth import authenticate_request
 from tests.creds_fixtures import *  # noqa: F403
@@ -203,7 +203,7 @@ def test_cors_allows_configured_origin_with_credentials(cors_client):
 
 
 def test_cleanup_deletes_only_expired_sessions(client, password):
-    from models import credential_session as credential_sessions
+    from publisher.models import credential_session as credential_sessions
 
     for _ in range(3):
         login(client, password)

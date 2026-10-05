@@ -2,17 +2,17 @@
 
 import html
 import json
+import logging
 from pathlib import Path as PathLib
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse
 
-from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from rest_services.v1.params import NAME_PATTERN, filter_query
 from rest_services.v1.schemas import OAuthClientMetadata, PlatformManifest
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/platforms", tags=["Platforms"])
 

@@ -57,7 +57,7 @@ Set `SMTP_VERIFY_DKIM_INDEPENDENTLY=true` to additionally re-verify the DKIM sig
 ## Running
 
 ```sh
-make smtp-listener-start
+python3 -u smtp_listener.py
 ```
 
 `scripts/run.sh` and the `relaysms-publisher-smtp.service` systemd unit also start it, conditionally on `SMTP_TRANSPORT_ENABLED`.

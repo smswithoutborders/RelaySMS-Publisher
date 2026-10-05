@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Shared helpers for gRPC service handlers."""
 
+import logging
+
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
 from grpc_interceptor.exceptions import Internal, InvalidArgument
 
 from grpc_services.interceptors import INTERNAL_ERROR
-from logutils import get_logger
 from platforms.adapter_ipc_handler import AdapterIPCHandler
 from platforms.adapter_manager import PlatformManifest
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def require_fields(request, *fields: str) -> None:

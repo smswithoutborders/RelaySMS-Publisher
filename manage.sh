@@ -60,7 +60,7 @@ sync_app_directories() {
 run_migrations() {
   local service_user
   service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m config"
+  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher.config"
 
   log "Running database migrations"
   (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m alembic upgrade head)
@@ -69,11 +69,11 @@ run_migrations() {
 run_config_check() {
   local service_user
   service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m config"
+  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher.config"
 
   log "Checking configuration"
   # config reads .env itself the same way systemd does, so it is not sourced here.
-  (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m config)
+  (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m publisher.config)
 }
 
 cmd_check() {
@@ -249,7 +249,7 @@ cmd_update() {
 
   cd "$INSTALL_DIR"
   git pull
-  git submodule update --init --recursive --remote --merge
+  git submodule update --init --recursive
 
   venv/bin/pip install --quiet --upgrade pip
   venv/bin/pip install --quiet -r requirements.txt
@@ -259,7 +259,7 @@ cmd_update() {
   fi
 
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
-  make build-setup
+  make build
 
   sync_app_directories
 

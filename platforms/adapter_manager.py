@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import configparser
+import logging
 import os
 import re
 import shutil
@@ -15,10 +16,9 @@ import msgspec
 from git import RemoteProgress, Repo
 from tqdm import tqdm
 
-from config import PlatformsConfig
-from logutils import get_logger
+from publisher.config import PlatformsConfig
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 platforms_config = PlatformsConfig.get()
 
 _GITHUB_REPO_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")

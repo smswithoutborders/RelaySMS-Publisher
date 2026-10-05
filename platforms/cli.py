@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from platforms.adapter_manager import AdapterManager
+from publisher.log import setup_logging
 
 manager = AdapterManager()
 
@@ -193,4 +194,5 @@ def recover():
 
 
 if __name__ == "__main__":
+    setup_logging()
     cli()

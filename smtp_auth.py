@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Sender authentication for the SMTP transport."""
 
+import logging
 import re
 from email.message import Message
 
@@ -8,10 +9,9 @@ import authres
 import authres.core
 import dkim
 
-from config import SmtpConfig
-from logutils import get_logger
+from publisher.config import SmtpConfig
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 smtp_config = SmtpConfig.get()
 

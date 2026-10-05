@@ -20,12 +20,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, Session, joinedload, mapped_column, relationship
 
-from config import AuthConfig
-from db import Base
-from db_types import UTCDateTime, utc_now
+from publisher.config import AuthConfig
+from publisher.db import Base
+from publisher.db.types import UTCDateTime, utc_now
 
 if TYPE_CHECKING:
-    from models import Credential
+    from publisher.models import Credential
 
 # Limits last_seen_at writes to one per interval.
 _TOUCH_INTERVAL = datetime.timedelta(seconds=60)

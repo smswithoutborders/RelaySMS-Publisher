@@ -3,15 +3,15 @@
 """Fan out inbound Twilio SMS webhooks to additional configured URLs."""
 
 import concurrent.futures
+import logging
 from datetime import UTC, datetime
 
 import requests
 
-from config import TwilioForwardConfig
-from logutils import get_logger
+from publisher.config import TwilioForwardConfig
 from tasks.celery_app import celery_app
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 forward_config = TwilioForwardConfig.get()
 
 _session = requests.Session()

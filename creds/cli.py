@@ -4,10 +4,11 @@ from contextlib import contextmanager
 
 import click
 
-from db import get_session
-from models import credential as credentials
-from models import credential_session as credential_sessions
-from models.credential import ALL_SCOPES, SCOPE_DESCRIPTIONS, Scope
+from publisher.db import get_session
+from publisher.log import setup_logging
+from publisher.models import credential as credentials
+from publisher.models import credential_session as credential_sessions
+from publisher.models.credential import ALL_SCOPES, SCOPE_DESCRIPTIONS, Scope
 
 
 @contextmanager
@@ -209,4 +210,5 @@ def revoke_sessions(username):
 
 
 if __name__ == "__main__":
+    setup_logging()
     cli()

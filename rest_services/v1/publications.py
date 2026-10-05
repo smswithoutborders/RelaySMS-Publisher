@@ -1,17 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Request, Response
 from twilio.request_validator import RequestValidator
 from twilio.twiml.messaging_response import MessagingResponse
 
-from config import TwilioConfig
-from logutils import get_logger
 from publications import PayloadMalformedError, PublicationService
+from publisher.config import TwilioConfig
 from rest_services.v1.schemas import PublishContentResponse, PublishRestContentRequest
 from tasks.forward_task import forward_twilio_webhook
 from tasks.publication_task import publish_message
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 twilio_config = TwilioConfig.get()
 

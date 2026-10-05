@@ -6,7 +6,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql, postgresql
 
-from db_types import DATE_BUCKET_UNITS, UTCDateTime, date_bucket
+from publisher.db.types import DATE_BUCKET_UNITS, UTCDateTime, date_bucket
 
 CREATED_AT = sa.table("t", sa.column("created_at", UTCDateTime())).c.created_at
 

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Database connection and session management."""
 
+import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,10 +12,9 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool, StaticPool
 
-from config import DatabaseConfig, LoggingConfig, ServerDatabaseConfig
-from logutils import get_logger
+from publisher.config import DatabaseConfig, LoggingConfig, ServerDatabaseConfig
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 Base = declarative_base()
 
 _engine: Engine | None = None

@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import logging
+
 import requests
 
-from config import CeleryConfig
-from logutils import get_logger
+from publisher.config import CeleryConfig
 from tasks.celery_app import celery_app
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 celery_config = CeleryConfig.get()
 
 

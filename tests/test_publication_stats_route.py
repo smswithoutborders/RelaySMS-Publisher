@@ -4,9 +4,9 @@ import datetime
 
 import pytest
 
-from db import get_session
-from db_types import DATE_BUCKET_UNITS, utc_now
-from models.publication_stats import (
+from publisher.db import get_session
+from publisher.db.types import DATE_BUCKET_UNITS, utc_now
+from publisher.models.publication_stats import (
     GROUPABLE_COLUMNS,
     PublicationStats,
     encode_cursor,
@@ -151,7 +151,7 @@ def test_stats_need_read_scope(client, seeded, url):
 
 
 def test_scope_changes_apply_to_existing_sessions(client, seeded):
-    from models import credential as credentials
+    from publisher.models import credential as credentials
 
     login(
         client,

@@ -6,11 +6,15 @@ import datetime
 import pytest
 from argon2 import PasswordHasher
 
-from db import get_session
-from models import credential as credentials
-from models import credential_session as credential_sessions
-from models.credential import ALL_SCOPES, CredentialConflictError, CredentialScope
-from models.credential_session import CredentialSession
+from publisher.db import get_session
+from publisher.models import credential as credentials
+from publisher.models import credential_session as credential_sessions
+from publisher.models.credential import (
+    ALL_SCOPES,
+    CredentialConflictError,
+    CredentialScope,
+)
+from publisher.models.credential_session import CredentialSession
 from tests.creds_fixtures import *  # noqa: F403
 from tests.creds_fixtures import USERNAME, can_log_in, create_credential
 

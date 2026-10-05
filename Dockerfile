@@ -29,7 +29,7 @@ ENV PATH="/venv/bin:${PATH}"
 # Submodule URL is SSH-based; rewrite to HTTPS since no SSH key is
 # available in the build environment (same fix install.sh applies).
 RUN git config --global url."https://github.com/".insteadOf "git@github.com:" \
-  && make build-setup
+  && make build
 
 
 FROM python:3.14.7-slim-bookworm

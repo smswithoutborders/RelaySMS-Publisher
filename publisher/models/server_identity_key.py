@@ -9,8 +9,8 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from sqlalchemy import CursorResult, LargeBinary, select, update
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from db import Base, get_session
-from db_types import PrivateEncryptedBinary
+from publisher.db import Base, get_session
+from publisher.db.types import PrivateEncryptedBinary
 
 
 def _utc_now() -> datetime.datetime:

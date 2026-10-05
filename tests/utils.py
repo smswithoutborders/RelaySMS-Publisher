@@ -3,6 +3,7 @@
 
 import base64
 import json
+import logging
 import secrets
 import sys
 from contextlib import contextmanager
@@ -13,9 +14,8 @@ import requests
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
-from logutils import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path("tests/db.json")
 

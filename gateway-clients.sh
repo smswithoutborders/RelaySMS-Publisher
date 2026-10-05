@@ -16,7 +16,7 @@ ENV_FILE="$INSTALL_DIR/.env"
 
 VENV_DIR="$INSTALL_DIR/venv"
 [ -x "$VENV_DIR/bin/python3" ] ||
-  error "Virtualenv not found at $VENV_DIR. Run install.sh or 'make build-setup' first."
+  error "Virtualenv not found at $VENV_DIR. Run install.sh, or see Development in README.md."
 
 INSTANCE_NAME="$(read_instance_name)"
 SERVICE_USER="$(detect_service_user)"

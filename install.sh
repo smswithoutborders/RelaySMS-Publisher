@@ -583,7 +583,7 @@ build_application() {
   log "Building application"
   cd "$INSTALL_DIR"
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
-  make build-setup
+  make build
 }
 
 setup_env() {
@@ -662,7 +662,7 @@ create_app_directories() {
 run_config_check() {
   log "Checking configuration"
   # config reads .env itself the same way systemd does, so it is not sourced here.
-  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m config)
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher.config)
 }
 
 run_migrations() {

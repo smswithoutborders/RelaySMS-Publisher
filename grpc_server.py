@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Publisher gRPC server."""
 
+import logging
 import os
 import signal
 import sys
@@ -10,8 +11,6 @@ from pathlib import Path
 import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
-from config import GrpcConfig
-from db import dispose_engine, get_session
 from grpc_services.interceptors import (
     ErrorInterceptor,
     LoggingInterceptor,
@@ -19,11 +18,13 @@ from grpc_services.interceptors import (
 )
 from grpc_services.v3.servicer import PublisherServicerV3
 from keys import KeyManager
-from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2_grpc as v3_grpc
+from publisher.config import GrpcConfig
+from publisher.db import dispose_engine, get_session
+from publisher.log import setup_logging
 
-logger = get_logger("publisher.grpc.server")
+logger = logging.getLogger(__name__)
 grpc_config = GrpcConfig.get()
 
 V3_SERVICE = "publisher.v3.Publisher"
@@ -125,4 +126,5 @@ def serve() -> None:
 
 
 if __name__ == "__main__":
+    setup_logging()
     serve()

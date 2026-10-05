@@ -19,12 +19,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 from sqlalchemy.orm.attributes import set_committed_value
 
-from db import Base
-from db_types import UTCDateTime, utc_now
-from models.credential_session import revoke_all
+from publisher.db import Base
+from publisher.db.types import UTCDateTime, utc_now
+from publisher.models.credential_session import revoke_all
 
 if TYPE_CHECKING:
-    from models import CredentialSession
+    from publisher.models import CredentialSession
 
 MAX_USERNAME_LENGTH = 32
 _USERNAME_PATTERN = re.compile(rf"^[a-z0-9][a-z0-9._-]{{2,{MAX_USERNAME_LENGTH - 1}}}$")

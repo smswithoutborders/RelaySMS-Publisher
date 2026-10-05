@@ -7,9 +7,9 @@ from argon2 import PasswordHasher
 from click.testing import CliRunner
 
 import creds.cli as creds_cli
-from db import get_session
-from models import credential as credentials
-from models.credential import (
+from publisher.db import get_session
+from publisher.models import credential as credentials
+from publisher.models.credential import (
     ALL_SCOPES,
     CredentialPermissionError,
     CredentialScope,

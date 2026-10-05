@@ -2,19 +2,19 @@
 """Payload segment model and related functions."""
 
 import datetime
+import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, LargeBinary, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
-from db import Base
-from logutils import get_logger
+from publisher.db import Base
 
 if TYPE_CHECKING:
-    from models import PayloadSession
+    from publisher.models import PayloadSession
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime.datetime:

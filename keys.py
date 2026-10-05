@@ -2,6 +2,7 @@
 """Key management module."""
 
 import hashlib
+import logging
 import secrets
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
@@ -10,17 +11,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
-from logutils import get_logger
-from models.client_ephemeral_key import ClientEphemeralKey
-from models.server_ephemeral_key import ServerEphemeralKey
-from models.server_identity_key import ServerIdentityKey, get_private_key
-from models.server_identity_key import mark_key_used as mark_ss_kid_used
-from models.token import Token
-from models.token_hash import TokenHash
-from models.token_hash import create as create_token_hash
-from utils import PlatformAwareError
+from publisher.errors import PlatformAwareError
+from publisher.models.client_ephemeral_key import ClientEphemeralKey
+from publisher.models.server_ephemeral_key import ServerEphemeralKey
+from publisher.models.server_identity_key import ServerIdentityKey, get_private_key
+from publisher.models.server_identity_key import mark_key_used as mark_ss_kid_used
+from publisher.models.token import Token
+from publisher.models.token_hash import TokenHash
+from publisher.models.token_hash import create as create_token_hash
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class KeyManagerError(PlatformAwareError):

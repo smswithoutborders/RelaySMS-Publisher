@@ -7,7 +7,7 @@ from pathlib import Path
 from celery import Celery
 from celery.schedules import crontab
 
-from config import CeleryConfig
+from publisher.config import CeleryConfig
 
 _UNDER_JOURNALD = bool(os.getenv("JOURNAL_STREAM")) and not sys.stderr.isatty()
 _WORKER_LOG_FORMAT = (

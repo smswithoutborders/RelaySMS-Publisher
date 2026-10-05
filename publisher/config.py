@@ -2,7 +2,7 @@
 """Settings read from the environment and checked before they are used.
 
 Each module calls get on the section class it needs. A section is loaded and
-checked once per process. Run python -m config to check every section.
+checked once per process. Run python -m publisher.config to check every section.
 """
 
 import datetime
@@ -19,9 +19,7 @@ from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
-# logutils imports this module, so importing logutils here would be circular.
-
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 DATABASE_DIALECTS = ("sqlite", "mysql", "postgres")
 CELERY_BROKERS = ("sqlite", "redis", "rabbitmq")
 GITHUB_ORG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$")

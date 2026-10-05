@@ -1,17 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """RevokePNBAToken handler."""
 
+import logging
+
 from grpc_interceptor.exceptions import InvalidArgument, Unauthenticated
 
-from db import get_session
 from grpc_services.utils import require_fields
 from keys import KeyManager, KeyManagerError
-from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2
+from publisher.db import get_session
 from token_revocation import revoke_pnba_token_upstream
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def revoke_pnba_token(

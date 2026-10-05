@@ -13,10 +13,10 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from db import get_db
-from db_types import as_utc, utc_now
-from models import publication_stats
-from models.credential import Scope
+from publisher.db import get_db
+from publisher.db.types import as_utc, utc_now
+from publisher.models import publication_stats
+from publisher.models.credential import Scope
 from rest_services.v1.auth import AuthContext, authorize, require_scopes
 from rest_services.v1.params import filter_query
 from rest_services.v1.schemas import (
