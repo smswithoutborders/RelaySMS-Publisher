@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""GetPNBACode gRPC service handler."""
+"""GetPNBACode handler."""
 
 from datetime import datetime
 
-import grpc
+from grpc_interceptor.exceptions import InvalidArgument
 
+from grpc_services.utils import call_adapter, require_fields
 from logutils import get_logger
-from platforms.adapter_ipc_handler import AdapterIPCHandler
+from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2
 
 logger = get_logger(__name__)
@@ -26,79 +27,29 @@ def _to_epoch_seconds(value):
         return None
 
 
-def GetPNBACode(self, request, context):
-    """Handles GetPNBACode."""
+def get_pnba_code(
+    request, adapter_manager: AdapterManager
+) -> publisher_pb2.GetPNBACodeResponse:
+    require_fields(request, "phone_number", "platform")
 
-    response = publisher_pb2.GetPNBACodeResponse
-
-    _, auth_error = self.handle_v1_request_auth(context, response)
-    if auth_error:
-        return auth_error
-
-    invalid = self.handle_request_field_validation(
-        context, request, response, ["phone_number", "platform"]
+    adapter = adapter_manager.get_pnba_adapter(request.platform)
+    result = call_adapter(
+        adapter,
+        "send_authorization_code",
+        {
+            "phone_number": request.phone_number,
+            "base_path": adapter.assets_path,
+            "request_identifier": request.request_identifier or None,
+            "channel": request.channel or None,
+        },
     )
-    if invalid:
-        return invalid
+    if not result.get("success"):
+        raise InvalidArgument(result.get("message"))
 
-    try:
-        adapter = self.adapter_manager.get_pnba_adapter(request.platform)
-
-        pipe = AdapterIPCHandler.invoke(
-            adapter_path=adapter.path,
-            venv_path=adapter.venv_path,
-            method="send_authorization_code",
-            params={
-                "phone_number": request.phone_number,
-                "base_path": adapter.assets_path,
-                "request_identifier": request.request_identifier or None,
-                "channel": request.channel or None,
-            },
-        )
-
-        if pipe.get("error"):
-            logger.error(
-                "Adapter error for platform %r: %s", request.platform, pipe["error"]
-            )
-            return self.handle_create_grpc_error_response(
-                context,
-                response,
-                pipe["error"],
-                grpc.StatusCode.INTERNAL,
-                user_msg="Oops! Something went wrong. Please try again later.",
-                error_type="UNKNOWN",
-            )
-
-        result = pipe["result"]
-
-        if not result.get("success"):
-            return self.handle_create_grpc_error_response(
-                context,
-                response,
-                result.get("message"),
-                grpc.StatusCode.INVALID_ARGUMENT,
-            )
-
-        expires_at = _to_epoch_seconds(result.get("expires_at"))
-        message = response(success=True, message=result.get("message"))
-        if expires_at is not None:
-            message.expires_at = expires_at
-        return message
-
-    except NotImplementedError as exc:
-        return self.handle_create_grpc_error_response(
-            context,
-            response,
-            exc,
-            grpc.StatusCode.UNIMPLEMENTED,
-        )
-
-    except Exception as exc:
-        return self.handle_create_grpc_error_response(
-            context,
-            response,
-            exc,
-            grpc.StatusCode.INTERNAL,
-            user_msg="Oops! Something went wrong. Please try again later.",
-            error_type="UNKNOWN",
-        )
+    response = publisher_pb2.GetPNBACodeResponse(
+        success=True, message=result.get("message")
+    )
+    expires_at = _to_epoch_seconds(result.get("expires_at"))
+    if expires_at is not None:
+        response.expires_at = expires_at
+    return response

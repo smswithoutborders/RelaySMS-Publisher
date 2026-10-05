@@ -16,8 +16,10 @@ import db
 import models  # noqa: F401  (registers every table on Base.metadata)
 import tests.utils as client_utils
 from db import Base, get_session
-from grpc_server import LoggingInterceptor
-from grpc_services.v3.service import PublisherServiceV3
+from grpc_server import V3_SERVICE, interceptors
+from grpc_services.interceptors import V1AuthInterceptor
+from grpc_services.v3 import revoke_oauth2_token
+from grpc_services.v3.servicer import PublisherServicerV3
 from keys import KeyManager
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from models.server_ephemeral_key import ServerEphemeralKey
@@ -102,14 +104,14 @@ def stub():
 
         return lookup
 
-    service = PublisherServiceV3()
-    service.adapter_manager = MagicMock(
-        get_oauth2_adapter=find(OAUTH2_ADAPTER, "oauth2"),
-        get_pnba_adapter=find(PNBA_ADAPTER, "pnba"),
+    service = PublisherServicerV3(
+        adapter_manager=MagicMock(
+            get_oauth2_adapter=find(OAUTH2_ADAPTER, "oauth2"),
+            get_pnba_adapter=find(PNBA_ADAPTER, "pnba"),
+        )
     )
-    # LoggingInterceptor sets context.method_name, which request auth checks.
     server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=4), interceptors=[LoggingInterceptor()]
+        futures.ThreadPoolExecutor(max_workers=4), interceptors=interceptors()
     )
     publisher_pb2_grpc.add_PublisherServicer_to_server(service, server)
     port = server.add_insecure_port("127.0.0.1:0")
@@ -189,6 +191,19 @@ def stored_token(token_id):
             data=token.token_data,
             hash=token.token_hash.token_hash,
             hash_id=token.token_hash.id,
+        )
+
+
+def server_key_exists(token_id, key_id):
+    with get_session() as s:
+        return (
+            s.scalar(
+                select(ServerEphemeralKey.id).where(
+                    ServerEphemeralKey.token_hash_id == stored_token(token_id).hash_id,
+                    ServerEphemeralKey.key_index == key_id,
+                )
+            )
+            is not None
         )
 
 
@@ -285,6 +300,28 @@ def test_adapter_error_is_reported_as_internal(stub, adapter):
     assert error.details().startswith("Oops! Something went wrong")
 
 
+def test_unexpected_error_hides_details(stub, monkeypatch):
+    def invoke(**_kwargs):
+        raise RuntimeError("internal detail")
+
+    monkeypatch.setattr(AdapterIPCHandler, "invoke", staticmethod(invoke))
+
+    error = rpc_error(stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST)
+
+    assert error.code() == grpc.StatusCode.INTERNAL
+    assert "internal detail" not in error.details()
+
+
+def test_other_services_skip_request_auth():
+    interceptor = V1AuthInterceptor(services=[V3_SERVICE], nonce_ttl_seconds=60)
+
+    result = interceptor.intercept(
+        lambda request, context: "served", None, None, "/grpc.health.v1.Health/Check"
+    )
+
+    assert result == "served"
+
+
 def test_get_oauth2_authorization_url(stub, adapter):
     adapter.results["get_authorization_url"] = {
         "result": {
@@ -372,6 +409,28 @@ def test_revoke_oauth2_token_with_wrong_token_is_rejected(stub, adapter):
     assert error.code() == grpc.StatusCode.UNAUTHENTICATED
     assert "revocation failed" in error.details()
     assert stored_token(exchanged.token_id) is not None
+    assert server_key_exists(exchanged.token_id, key_id)
+
+
+def test_revoke_keeps_slot_when_a_later_step_fails(stub, adapter, monkeypatch):
+    exchanged, keypairs = exchange_oauth2(stub, adapter)
+    key_id, payload = encrypt_token(
+        exchanged, keypairs, decrypt_token(exchanged, keypairs)
+    )
+    request = publisher_pb2.RevokeOAuth2TokenRequest(
+        token_id=exchanged.token_id, key_id=key_id
+    )
+
+    def crash(*_args):
+        raise RuntimeError("upstream down")
+
+    monkeypatch.setattr(revoke_oauth2_token, "revoke_oauth2_token_upstream", crash)
+
+    error = rpc_error(stub, "RevokeOAuth2Token", request, payload=payload)
+
+    assert error.code() == grpc.StatusCode.INTERNAL
+    assert stored_token(exchanged.token_id) is not None
+    assert server_key_exists(exchanged.token_id, key_id)
 
 
 def test_get_pnba_code(stub, adapter):

@@ -13,7 +13,12 @@ from grpc_interceptor import ServerInterceptor
 
 from config import GrpcConfig
 from db import dispose_engine, get_session
-from grpc_services.v3.service import PublisherServiceV3
+from grpc_services.interceptors import (
+    ErrorInterceptor,
+    LoggingInterceptor,
+    V1AuthInterceptor,
+)
+from grpc_services.v3.servicer import PublisherServicerV3
 from keys import KeyManager
 from logutils import get_logger
 from platforms.adapter_manager import AdapterManager
@@ -22,25 +27,19 @@ from protos.v3 import publisher_pb2_grpc as v3_grpc
 logger = get_logger("publisher.grpc.server")
 grpc_config = GrpcConfig.get()
 
+V3_SERVICE = "publisher.v3.Publisher"
 
-class LoggingInterceptor(ServerInterceptor):
-    server_protocol = "HTTP/2.0"
 
-    def intercept(self, method, request_or_iterator, context, method_name):
-        context.method_name = method_name
-        response = method(request_or_iterator, context)
-
-        if context.details():
-            logger.error(
-                "%s %s - %s -",
-                method_name,
-                self.server_protocol,
-                str(context.code()).split(".")[1],
-            )
-        else:
-            logger.info("%s %s - OK -", method_name, self.server_protocol)
-
-        return response
+def interceptors() -> list[ServerInterceptor]:
+    """Outermost first: logging wraps error mapping, which wraps auth."""
+    return [
+        LoggingInterceptor(),
+        ErrorInterceptor(),
+        V1AuthInterceptor(
+            services=[V3_SERVICE],
+            nonce_ttl_seconds=grpc_config.nonce_ttl_seconds,
+        ),
+    ]
 
 
 def _load_ssl_credentials(cert_path: Path, key_path: Path) -> grpc.ServerCredentials:
@@ -56,22 +55,21 @@ def _load_ssl_credentials(cert_path: Path, key_path: Path) -> grpc.ServerCredent
 def _build_server(max_workers: int) -> grpc.Server:
     grpc_server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=max_workers),
-        interceptors=[LoggingInterceptor()],
+        interceptors=interceptors(),
     )
 
     with get_session() as db:
         key_manager = KeyManager(session=db)
         key_manager.initialize_server_identity_keys()
 
-    PublisherServiceV3.adapter_manager = AdapterManager()
-    v3_grpc.add_PublisherServicer_to_server(PublisherServiceV3(), grpc_server)
+    v3_grpc.add_PublisherServicer_to_server(
+        PublisherServicerV3(adapter_manager=AdapterManager()), grpc_server
+    )
 
     health_servicer = health.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, grpc_server)
     health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
-    health_servicer.set(
-        "publisher.v3.Publisher", health_pb2.HealthCheckResponse.SERVING
-    )
+    health_servicer.set(V3_SERVICE, health_pb2.HealthCheckResponse.SERVING)
 
     return grpc_server
 

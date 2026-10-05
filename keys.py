@@ -1,11 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Key management module."""
 
+import hashlib
+import secrets
+
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from logutils import get_logger
 from models.client_ephemeral_key import ClientEphemeralKey
 from models.server_ephemeral_key import ServerEphemeralKey
@@ -13,6 +17,7 @@ from models.server_identity_key import ServerIdentityKey, get_private_key
 from models.server_identity_key import mark_key_used as mark_ss_kid_used
 from models.token import Token
 from models.token_hash import TokenHash
+from models.token_hash import create as create_token_hash
 from utils import PlatformAwareError
 
 logger = get_logger(__name__)
@@ -27,6 +32,10 @@ class KeyNotFoundError(KeyManagerError):
 
 
 class KeyUnavailableError(KeyManagerError):
+    pass
+
+
+class TokenVerificationError(KeyManagerError):
     pass
 
 
@@ -63,6 +72,86 @@ class KeyManager:
         except Exception as exc:
             logger.exception("Failed to generate server identity keys")
             raise KeyManagerError("Server identity key setup failed") from exc
+
+    def create_token_pools_and_encrypt(
+        self, token_pk_id: int, client_public_keys: list
+    ) -> tuple[bytes, int, list[bytes]]:
+        """Create the token's hash and key pools, and encrypt the token to one slot.
+
+        Slots 0-15 are reserved, so the token's slot is picked from 16-255.
+        """
+        token_hash, raw_token = create_token_hash(
+            token_pk_id=token_pk_id, session=self.session
+        )
+        kid_index = secrets.randbelow(240) + 16
+        server_keypairs, server_public_keys = self._insert_pools(
+            token_hash.id, client_public_keys, skip=kid_index
+        )
+
+        token_ciphertext = rrs.v1_token_encrypt_server(
+            ss_kid=get_private_key(kid_index, self.session).private_bytes_raw(),
+            es_kid=server_keypairs[kid_index].private_bytes_raw(),
+            ec_kid_pk=client_public_keys[kid_index].public_key,
+            key_id=kid_index,
+            token=raw_token,
+        )
+        self.mark_identity_key_used(kid_index)
+        return token_ciphertext, kid_index, server_public_keys
+
+    def sync_token_pools(
+        self, token_hash: TokenHash, client_public_keys: list
+    ) -> list[bytes]:
+        """Replace the token's key pools; return the server public keys by slot."""
+        self.session.execute(
+            delete(ServerEphemeralKey).where(
+                ServerEphemeralKey.token_hash_id == token_hash.id
+            )
+        )
+        self.session.execute(
+            delete(ClientEphemeralKey).where(
+                ClientEphemeralKey.token_hash_id == token_hash.id
+            )
+        )
+        _, server_public_keys = self._insert_pools(token_hash.id, client_public_keys)
+        return server_public_keys
+
+    def _insert_pools(
+        self, token_hash_id: int, client_public_keys: list, skip: int | None = None
+    ) -> tuple[list[X25519PrivateKey], list[bytes]]:
+        """Generate 256 server key pairs and store both pools, minus slot `skip`."""
+        server_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
+        server_public_keys = [
+            kp.public_key().public_bytes_raw() for kp in server_keypairs
+        ]
+
+        self.session.execute(
+            insert(ServerEphemeralKey),
+            [
+                {
+                    "token_hash_id": token_hash_id,
+                    "key_index": i,
+                    "private_key": kp.private_bytes_raw(),
+                    "public_key": server_public_keys[i],
+                    "used": False,
+                }
+                for i, kp in enumerate(server_keypairs)
+                if i != skip
+            ],
+        )
+        self.session.execute(
+            insert(ClientEphemeralKey),
+            [
+                {
+                    "token_hash_id": token_hash_id,
+                    "key_index": k.key_id,
+                    "public_key": k.public_key,
+                    "used": False,
+                }
+                for k in client_public_keys
+                if k.key_id != skip
+            ],
+        )
+        return server_keypairs, server_public_keys
 
     def get_keys_for_decryption(
         self, token_hash_id: int, key_id: int
@@ -130,6 +219,33 @@ class KeyManager:
             exc.platform_name = token.platform
             raise
         return token, token_hash_obj, ss_kid, se_private, se_public, ce_public
+
+    def verify_token(self, token_id: int, key_id: int, ciphertext: bytes) -> Token:
+        """Pop the slot's keys, decrypt the client's token and check its hash."""
+        token, token_hash, ss_kid, es_kid, _, ec_kid_pk = (
+            self.get_token_and_keys_for_decryption(token_id=token_id, key_id=key_id)
+        )
+
+        try:
+            decrypted = rrs.v1_token_decrypt_server(
+                ss_kid=ss_kid,
+                es_kid=es_kid,
+                ec_kid_pk=ec_kid_pk,
+                key_id=key_id,
+                ciphertext=ciphertext,
+            )
+            valid = secrets.compare_digest(
+                hashlib.sha256(decrypted).digest(), token_hash.token_hash
+            )
+        except rrs.V1CryptographicError.FailedToDecrypt:
+            valid = False
+
+        if not valid:
+            logger.warning("Token verification failed: kid=%s", key_id)
+            raise TokenVerificationError(
+                "Token verification failed", platform_name=token.platform
+            )
+        return token
 
     def mark_identity_key_used(self, key_id: int) -> None:
         """Mark a server identity key as used."""
