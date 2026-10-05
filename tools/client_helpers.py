@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Shared helpers for gRPC test CLI."""
+"""Shared helpers for the reference client."""
 
 import base64
 import json
@@ -17,7 +17,8 @@ from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("tests/db.json")
+# Beside the client, so it works from any working directory.
+DB_PATH = Path(__file__).with_name("db.json")
 
 
 def db_read() -> dict:

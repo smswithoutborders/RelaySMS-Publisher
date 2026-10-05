@@ -58,3 +58,9 @@ jobs:
 
       - name: Run tests
         run: venv/bin/python -m pytest
+
+  deploy-staging:
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    uses: ./.github/workflows/deploy.staging.yml
+    secrets: inherit
