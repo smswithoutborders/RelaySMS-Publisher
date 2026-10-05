@@ -17,10 +17,10 @@ jobs:
     permissions:
       contents: read
 
-    # The oldest supported Python (Ubuntu 24.04 LTS) and the one in the Docker image.
+    # Ubuntu 24.04 LTS, Debian 13 and the Docker image.
     strategy:
       matrix:
-        python-version: ["3.12", "3.14"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v5
@@ -43,8 +43,23 @@ jobs:
           python -m venv venv
           venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
 
-      - name: Build protos and payload specs
-        run: make build PYTHON=venv/bin/python
+      - name: Get payload-specs commit
+        id: specs
+        run: echo "sha=$(git rev-parse HEAD:lib_relaysms_payload_specs)" >> "$GITHUB_OUTPUT"
+
+      # The bindings don't depend on the Python version, so every matrix job shares them.
+      - uses: actions/cache@v6
+        id: specs-cache
+        with:
+          path: lib_relaysms_payload_specs/generated
+          key: payload-specs-${{ runner.os }}-${{ steps.specs.outputs.sha }}
+
+      - name: Build payload specs
+        if: steps.specs-cache.outputs.cache-hit != 'true'
+        run: make specs PYTHON=venv/bin/python
+
+      - name: Build protos
+        run: make protos PYTHON=venv/bin/python
 
       - uses: actions/cache@v6
         if: matrix.python-version == '3.14'

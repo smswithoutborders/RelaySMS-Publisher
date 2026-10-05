@@ -28,7 +28,11 @@ COPY . .
 ENV PATH="/venv/bin:${PATH}"
 # Submodule URL is SSH-based; rewrite to HTTPS since no SSH key is
 # available in the build environment (same fix install.sh applies).
-RUN git config --global url."https://github.com/".insteadOf "git@github.com:" \
+# The cargo caches outlive the layer, so source edits don't redo the Rust build.
+RUN --mount=type=cache,sharing=locked,target=/root/.cargo/registry \
+  --mount=type=cache,sharing=locked,target=/root/.cargo/git \
+  --mount=type=cache,sharing=locked,target=/publisher/lib_relaysms_payload_specs/target \
+  git config --global url."https://github.com/".insteadOf "git@github.com:" \
   && make build
 
 

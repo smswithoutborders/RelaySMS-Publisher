@@ -250,7 +250,7 @@ pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
 
 ### Checking Python 3.12
 
-CI runs the suite on 3.12 and 3.14. To check 3.12 locally with [uv](https://docs.astral.sh/uv/):
+CI runs the suite on 3.12, 3.13 and 3.14. To check 3.12 locally with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv venv --python 3.12 .venv312
@@ -308,12 +308,12 @@ Adapters live outside this repository and are installed with `python -m publishe
 
 ## When CI fails
 
-`.github/workflows/checks.yml` runs the hooks on Python 3.14 and the tests on 3.12 and 3.14.
+`.github/workflows/checks.yml` runs the hooks on Python 3.14 and the tests on 3.12, 3.13 and 3.14.
 
 - **Hook failures:** run `make check` locally. Ruff and the whitespace hooks fix files in place, so re-add and commit the changes.
 - **Pyright:** fix the type, or narrow it with an `assert`. Use `# pyright: ignore[rule]` only with a reason.
 - **import-linter:** a lower layer imports a higher one. Move the code down a layer or pass the dependency in as an argument.
-- **Tests pass on 3.14 but fail on 3.12:** look for newer syntax or an unquoted forward reference.
+- **Tests pass on newer Pythons but fail on 3.12:** look for newer syntax or an unquoted forward reference.
 - **Requirements check:** the pinned dependencies conflict. Run `pip install --dry-run -r requirements.txt -r requirements-observability.txt` to see the conflict.
 
 ## AI-assisted contributions
