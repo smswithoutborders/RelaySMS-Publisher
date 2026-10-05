@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 
-import publications
-from publications import (
+from publisher import publications
+from publisher.publications import (
     OfflineTagInvalidError,
     OfflineTagMissingError,
     ProtocolNotAllowedError,
-    PublicationService,
 )
 
 
@@ -22,13 +21,15 @@ def _payload(t_id=None):
     return payload
 
 
+def _dispatch(payload, **kwargs):
+    return publications._dispatch(MagicMock(), MagicMock(), payload, **kwargs)
+
+
 @pytest.fixture
-def service(monkeypatch):
-    svc = PublicationService(session=MagicMock(), adapter_manager=MagicMock())
-    monkeypatch.setattr(
-        svc, "_publish_offline_content", MagicMock(return_value="rmail")
-    )
-    return svc
+def offline(monkeypatch):
+    publish_offline = MagicMock(return_value="rmail")
+    monkeypatch.setattr(publications, "_publish_offline_content", publish_offline)
+    return publish_offline
 
 
 @pytest.fixture(autouse=True)
@@ -36,47 +37,47 @@ def _reset_config(set_config):
     set_config(publications, "offline_config", allowed_protocols=[], shared_secret=None)
 
 
-def test_https_offline_rejects_wrong_tag(set_config, service):
+def test_https_offline_rejects_wrong_tag(set_config, offline):
     set_config(publications, "offline_config", shared_secret="s3cret")
 
     with pytest.raises(OfflineTagInvalidError):
-        service._dispatch(_payload(), protocol="https", tag="wrong")
+        _dispatch(_payload(), protocol="https", tag="wrong")
 
 
 @pytest.mark.parametrize("tag", [None, ""])
-def test_https_offline_rejects_missing_tag(set_config, service, tag):
+def test_https_offline_rejects_missing_tag(set_config, offline, tag):
     set_config(publications, "offline_config", shared_secret="s3cret")
 
     with pytest.raises(OfflineTagMissingError):
-        service._dispatch(_payload(), protocol="https", tag=tag)
+        _dispatch(_payload(), protocol="https", tag=tag)
 
 
-def test_https_offline_succeeds_with_correct_tag(set_config, service):
+def test_https_offline_succeeds_with_correct_tag(set_config, offline):
     set_config(publications, "offline_config", shared_secret="s3cret")
 
-    result = service._dispatch(_payload(), protocol="https", tag="s3cret")
+    result = _dispatch(_payload(), protocol="https", tag="s3cret")
 
     assert result == "rmail"
-    service._publish_offline_content.assert_called_once()
+    offline.assert_called_once()
 
 
 @pytest.mark.parametrize("protocol", ["smtp", "sms"])
-def test_non_https_offline_ignores_tag_check(set_config, service, protocol):
+def test_non_https_offline_ignores_tag_check(set_config, offline, protocol):
     set_config(publications, "offline_config", shared_secret="s3cret")
 
-    result = service._dispatch(_payload(), protocol=protocol, tag=None)
+    result = _dispatch(_payload(), protocol=protocol, tag=None)
 
     assert result == "rmail"
-    service._publish_offline_content.assert_called_once()
+    offline.assert_called_once()
 
 
-def test_https_offline_unchecked_when_secret_unset(service):
-    result = service._dispatch(_payload(), protocol="https", tag=None)
+def test_https_offline_unchecked_when_secret_unset(offline):
+    result = _dispatch(_payload(), protocol="https", tag=None)
 
     assert result == "rmail"
 
 
-def test_protocol_allowlist_is_still_enforced_before_tag_check(set_config, service):
+def test_protocol_allowlist_is_still_enforced_before_tag_check(set_config, offline):
     set_config(
         publications,
         "offline_config",
@@ -85,11 +86,11 @@ def test_protocol_allowlist_is_still_enforced_before_tag_check(set_config, servi
     )
 
     with pytest.raises(ProtocolNotAllowedError):
-        service._dispatch(_payload(), protocol="https", tag="s3cret")
+        _dispatch(_payload(), protocol="https", tag="s3cret")
 
 
 def test_online_payload_bypasses_protocol_and_tag_checks(
-    set_config, monkeypatch, service
+    set_config, monkeypatch, offline
 ):
     """Skip the offline-only allowlist and tag checks for online payloads.
 
@@ -101,13 +102,12 @@ def test_online_payload_bypasses_protocol_and_tag_checks(
         allowed_protocols=["smtp"],
         shared_secret="s3cret",
     )
-    monkeypatch.setattr(
-        service, "_publish_online_content", MagicMock(return_value="gmail")
-    )
+    publish_online = MagicMock(return_value="gmail")
+    monkeypatch.setattr(publications, "_publish_online_content", publish_online)
 
-    result = service._dispatch(_payload(t_id=42), protocol="https", tag=None)
+    result = _dispatch(_payload(t_id=42), protocol="https", tag=None)
 
     assert result == "gmail"
-    service._publish_online_content.assert_called_once_with(
-        token_id=42, key_id=1, len_att=0, content_ciphertext=b"ciphertext"
+    publish_online.assert_called_once_with(
+        ANY, ANY, token_id=42, key_id=1, len_att=0, content_ciphertext=b"ciphertext"
     )

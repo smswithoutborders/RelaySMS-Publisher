@@ -11,9 +11,8 @@ from fastapi.testclient import TestClient
 import app as app_module
 import publisher.models  # noqa: F401  (registers every table on Base.metadata)
 import rest_services.v1.routes as routes
-from publisher import db
+from publisher import credentials, db
 from publisher.db import Base
-from publisher.models import credential as credentials
 from publisher.models.credential import ALL_SCOPES, Scope
 
 USERNAME = "ops"

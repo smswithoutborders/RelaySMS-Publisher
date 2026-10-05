@@ -7,8 +7,8 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
 from grpc_interceptor.exceptions import Internal, InvalidArgument
 
 from grpc_services.interceptors import INTERNAL_ERROR
-from platforms.adapter_ipc_handler import AdapterIPCHandler
-from platforms.adapter_manager import PlatformManifest
+from publisher.platforms import ipc
+from publisher.platforms.manager import PlatformManifest
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def validate_client_ephemeral_public_keys(keys) -> None:
 
 
 def call_adapter(adapter: PlatformManifest, method: str, params: dict) -> dict:
-    pipe = AdapterIPCHandler.invoke(
+    pipe = ipc.invoke(
         adapter_path=adapter.path,
         venv_path=adapter.venv_path,
         method=method,

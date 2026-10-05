@@ -8,17 +8,16 @@ from contextlib import contextmanager
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response, Security
 from sqlalchemy.orm import Session
 
-from publisher.db import get_db
-from publisher.models import credential as credentials
-from publisher.models import credential_session as credential_sessions
-from publisher.models.credential import (
-    MAX_USERNAME_LENGTH,
-    Credential,
+from publisher import credentials
+from publisher.credentials import (
     CredentialConflictError,
+    CredentialError,
     CredentialExistsError,
     CredentialPermissionError,
-    Scope,
 )
+from publisher.db import get_db
+from publisher.models import credential_session as credential_sessions
+from publisher.models.credential import MAX_USERNAME_LENGTH, Credential, Scope
 from rest_services.v1.auth import AuthContext, authorize
 from rest_services.v1.errors import ApiError
 from rest_services.v1.schemas import (
@@ -71,7 +70,7 @@ def _model_errors(actor: Credential):
         ) from None
     except CredentialPermissionError as e:
         raise ApiError(403, f"{e}.", log=f"{by}: {e}") from None
-    except ValueError as e:
+    except CredentialError as e:
         raise ApiError(400, str(e), log=by) from None
 
 

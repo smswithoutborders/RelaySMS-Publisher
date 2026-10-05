@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import tasks.publication_task as publication_task
-from publications import (
+from publisher.publications import (
     AdapterIntegrationError,
     OfflineTagInvalidError,
     OfflineTagMissingError,
@@ -30,15 +30,16 @@ def _patch_infra(monkeypatch):
 
 def _stub_service(monkeypatch, *, publish_return=None, publish_side_effect=None):
     fake_service = MagicMock()
+    fake_service.validate.return_value = (b"raw", b"seg", object())
     if publish_side_effect is not None:
         fake_service.publish.side_effect = publish_side_effect
     else:
         fake_service.publish.return_value = publish_return
 
-    fake_cls = MagicMock()
-    fake_cls.validate.return_value = (b"raw", b"seg", object())
-    fake_cls.return_value = fake_service
-    monkeypatch.setattr(publication_task, "PublicationService", fake_cls)
+    monkeypatch.setattr(
+        publication_task.publications, "validate", fake_service.validate
+    )
+    monkeypatch.setattr(publication_task.publications, "publish", fake_service.publish)
     return fake_service
 
 

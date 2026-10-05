@@ -8,8 +8,8 @@ import msgspec
 import phonenumbers
 from phonenumbers import carrier, geocoder
 
-from gateway_clients import mcc_mnc
 from publisher.config import GatewayClientsConfig
+from publisher.gateway_clients import mcc_mnc
 
 logger = logging.getLogger(__name__)
 gateway_clients_config = GatewayClientsConfig.get()
@@ -21,6 +21,39 @@ class GatewayClientManifest(msgspec.Struct, forbid_unknown_fields=False):
     operator: str
     operator_code: str
     protocols: list[str]
+
+
+def resolve_operator_info(msisdn: str):
+    """Best-effort (country, operator, operator_code, candidates) for an MSISDN.
+
+    operator_code is only set when exactly one PLMN matches; otherwise
+    candidates lists the ambiguous options. Any field may be None.
+    """
+    try:
+        number = phonenumbers.parse(msisdn, None)
+    except phonenumbers.NumberParseException as e:
+        logger.error("Failed to parse MSISDN '%s': %s", msisdn, e)
+        return None, None, None, []
+
+    country = geocoder.description_for_number(number, "en") or None
+    country_code = str(number.country_code)
+    region = phonenumbers.region_code_for_number(number)
+    operator = carrier.name_for_number(number, "en") or None
+
+    operator_code = None
+    candidates: list[str] = []
+    if operator:
+        network = operator.split()[0].lower()
+        matches = mcc_mnc.find_matches(
+            country_code=country_code,
+            network=network,
+            iso=region.lower() if region else None,
+        )
+        candidates = sorted({f"{m['mcc']}{m['mnc']}" for m in matches})
+        if len(candidates) == 1:
+            operator_code = candidates[0]
+
+    return country, operator, operator_code, candidates
 
 
 class GatewayClientManager:
@@ -61,39 +94,6 @@ class GatewayClientManager:
         except (OSError, msgspec.ValidationError) as e:
             logger.error("Failed to write registry: %s", e)
 
-    @staticmethod
-    def resolve_operator_info(msisdn: str):
-        """Best-effort (country, operator, operator_code, candidates) for an MSISDN.
-
-        operator_code is only set when exactly one PLMN matches; otherwise
-        candidates lists the ambiguous options. Any field may be None.
-        """
-        try:
-            number = phonenumbers.parse(msisdn, None)
-        except phonenumbers.NumberParseException as e:
-            logger.error("Failed to parse MSISDN '%s': %s", msisdn, e)
-            return None, None, None, []
-
-        country = geocoder.description_for_number(number, "en") or None
-        country_code = str(number.country_code)
-        region = phonenumbers.region_code_for_number(number)
-        operator = carrier.name_for_number(number, "en") or None
-
-        operator_code = None
-        candidates: list[str] = []
-        if operator:
-            network = operator.split()[0].lower()
-            matches = mcc_mnc.find_matches(
-                country_code=country_code,
-                network=network,
-                iso=region.lower() if region else None,
-            )
-            candidates = sorted({f"{m['mcc']}{m['mnc']}" for m in matches})
-            if len(candidates) == 1:
-                operator_code = candidates[0]
-
-        return country, operator, operator_code, candidates
-
     def create_client(
         self,
         msisdn: str,
@@ -111,7 +111,7 @@ class GatewayClientManager:
             raise ValueError(f"Gateway client '{msisdn}' is already registered.")
 
         resolved_country, resolved_operator, resolved_operator_code, candidates = (
-            self.resolve_operator_info(msisdn)
+            resolve_operator_info(msisdn)
         )
         country = country or resolved_country
         operator = operator or resolved_operator

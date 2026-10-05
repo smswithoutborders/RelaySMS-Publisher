@@ -5,18 +5,18 @@ import logging
 import phonenumbers
 from celery.signals import worker_init, worker_shutdown
 
-from keys import KeyManagerError
-from platforms.adapter_manager import AdapterManager
-from publications import (
+from publisher import publications
+from publisher.db import dispose_engine, get_session
+from publisher.keys import KeyManagementError
+from publisher.models.publication_stats import record as record_publication
+from publisher.platforms.manager import AdapterManager
+from publisher.publications import (
     AdapterIntegrationError,
     OfflineTagError,
     PayloadMalformedError,
     PayloadNotSupportedError,
     ProtocolNotAllowedError,
-    PublicationService,
 )
-from publisher.db import dispose_engine, get_session
-from publisher.models.publication_stats import record as record_publication
 from tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -67,14 +67,10 @@ def publish_message(
     """Validate, assemble, and run message publication pipeline."""
     with get_session() as db:
         try:
-            payload_raw, raw_segment, payload_type = PublicationService.validate(
-                text_payload
-            )
-
-            service = PublicationService(
-                session=db, adapter_manager=_get_adapter_manager()
-            )
-            platform_name = service.publish(
+            payload_raw, raw_segment, payload_type = publications.validate(text_payload)
+            platform_name = publications.publish(
+                db,
+                _get_adapter_manager(),
                 payload_raw=payload_raw,
                 sender_address=sender_address,
                 raw_segment=raw_segment,
@@ -100,7 +96,7 @@ def publish_message(
             PayloadNotSupportedError,
             ProtocolNotAllowedError,
             OfflineTagError,
-            KeyManagerError,
+            KeyManagementError,
         ) as exc:
             record_publication(
                 db,

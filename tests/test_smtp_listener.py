@@ -7,7 +7,7 @@ import pytest
 from imap_tools import MailMessage
 
 import smtp_listener
-from publications import PayloadMalformedError
+from publisher.publications import PayloadMalformedError
 
 _next_uid = iter(range(1, 10000))
 
@@ -36,9 +36,7 @@ def _default_auth_allow(monkeypatch):
         smtp_listener.smtp_auth, "evaluate", lambda msg, raw, addr: (True, "ok")
     )
     monkeypatch.setattr(smtp_listener.publish_message, "delay", MagicMock())
-    monkeypatch.setattr(
-        smtp_listener.PublicationService, "validate", staticmethod(lambda text: None)
-    )
+    monkeypatch.setattr(smtp_listener.publications, "validate", lambda text: None)
     yield
 
 
@@ -84,9 +82,7 @@ def test_discards_when_payload_validation_fails(monkeypatch):
     def _raise(_text):
         raise PayloadMalformedError("bad payload")
 
-    monkeypatch.setattr(
-        smtp_listener.PublicationService, "validate", staticmethod(_raise)
-    )
+    monkeypatch.setattr(smtp_listener.publications, "validate", _raise)
     msg = build_email(json.dumps({"address": "+1", "text": "dGVzdA=="}))
     assert smtp_listener.process_incoming_email(msg) is True
     smtp_listener.publish_message.delay.assert_not_called()

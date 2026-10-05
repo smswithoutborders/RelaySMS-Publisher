@@ -9,9 +9,9 @@ from sqlalchemy import update
 
 import app as app_module
 import rest_services.v1.routes as routes
+from publisher import credentials
 from publisher.db import get_session
 from publisher.db.types import utc_now
-from publisher.models import credential as credentials
 from publisher.models.credential import Scope
 from publisher.models.credential_session import CredentialSession
 from rest_services.v1 import auth

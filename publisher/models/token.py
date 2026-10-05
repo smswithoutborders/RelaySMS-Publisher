@@ -9,16 +9,12 @@ from sqlalchemy import BigInteger, SmallInteger, String, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from publisher.db import Base
-from publisher.db.types import EncryptedJSON
+from publisher.db.types import EncryptedJSON, utc_now
 from publisher.models.token_hash import TokenHash
 
 
 def _generate_uint32_token() -> int:
     return secrets.randbits(32)
-
-
-def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.UTC)
 
 
 class Token(Base):
@@ -37,9 +33,9 @@ class Token(Base):
     cat_id: Mapped[int] = mapped_column(SmallInteger)
     proto_id: Mapped[int] = mapped_column(SmallInteger)
     token_data: Mapped[dict[str, Any]] = mapped_column(EncryptedJSON)
-    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        default=_utc_now, onupdate=_utc_now
+        default=utc_now, onupdate=utc_now
     )
     token_hash: Mapped[TokenHash] = relationship(
         "TokenHash", back_populates="token", cascade="all, delete-orphan", uselist=False
@@ -47,11 +43,11 @@ class Token(Base):
 
 
 def create(
+    session: Session,
     platform: str,
     cat_id: int,
     proto_id: int,
     token_data: dict[str, Any],
-    session: Session,
 ) -> Token:
     """Create and persist a new token."""
     token = Token(
@@ -63,7 +59,7 @@ def create(
 
 
 def update_token_data(
-    token: Token, new_token_data: dict[str, Any], session: Session
+    session: Session, token: Token, new_token_data: dict[str, Any]
 ) -> Token:
     """Update the token_data of an existing token."""
     token.token_data = new_token_data
@@ -71,7 +67,7 @@ def update_token_data(
     return token
 
 
-def get_idle(older_than: datetime.datetime, session: Session) -> list[Token]:
+def get_idle(session: Session, older_than: datetime.datetime) -> list[Token]:
     return list(
         session.scalars(
             select(Token)

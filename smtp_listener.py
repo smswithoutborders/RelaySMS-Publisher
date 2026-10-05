@@ -25,13 +25,13 @@ from imap_tools import (
 from pydantic import ValidationError
 
 import smtp_auth
-from publications import (
-    PayloadMalformedError,
-    PayloadNotSupportedError,
-    PublicationService,
-)
+from publisher import publications
 from publisher.config import SmtpConfig
 from publisher.log import setup_logging
+from publisher.publications import (
+    PayloadMalformedError,
+    PayloadNotSupportedError,
+)
 from rest_services.v1.schemas import PublishContentRequest
 from tasks.publication_task import publish_message
 
@@ -103,7 +103,7 @@ def process_incoming_email(msg: MailMessage) -> bool:
             return True
 
         try:
-            PublicationService.validate(request.text)
+            publications.validate(request.text)
         except (PayloadMalformedError, PayloadNotSupportedError) as exc:
             logger.warning(
                 "Discarding email %s with invalid payload: %s", email_uid, exc

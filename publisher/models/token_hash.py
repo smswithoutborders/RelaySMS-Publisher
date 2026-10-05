@@ -10,13 +10,10 @@ from sqlalchemy import ForeignKey, Index, LargeBinary
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from publisher.db import Base
+from publisher.db.types import utc_now
 
 if TYPE_CHECKING:
     from publisher.models import ClientEphemeralKey, ServerEphemeralKey, Token
-
-
-def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.UTC)
 
 
 class TokenHash(Base):
@@ -27,9 +24,9 @@ class TokenHash(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     token_hash: Mapped[bytes] = mapped_column(LargeBinary(32))
     token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"))
-    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        default=_utc_now, onupdate=_utc_now
+        default=utc_now, onupdate=utc_now
     )
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(default=None)
 
@@ -54,7 +51,7 @@ class TokenHash(Base):
     )
 
 
-def create(token_pk_id: int, session: Session) -> tuple[TokenHash, bytes]:
+def create(session: Session, token_pk_id: int) -> tuple[TokenHash, bytes]:
     """Create a new token hash."""
     raw_token = secrets.token_bytes(32)
     token_hash_bytes = hashlib.sha256(raw_token).digest()
@@ -65,8 +62,8 @@ def create(token_pk_id: int, session: Session) -> tuple[TokenHash, bytes]:
     return token_hash, raw_token
 
 
-def update_last_used(token_hash: TokenHash, session: Session) -> None:
+def update_last_used(session: Session, token_hash: TokenHash) -> None:
     """Update the last used timestamp for a token hash."""
-    token_hash.last_used_at = _utc_now()
+    token_hash.last_used_at = utc_now()
     session.add(token_hash)
     session.flush()

@@ -3,7 +3,7 @@
 
 from fastapi import APIRouter, Query, Request
 
-from gateway_clients.gateway_client_manager import GatewayClientManager
+from publisher.gateway_clients.manager import GatewayClientManager
 from rest_services.v1.schemas import GatewayClientManifest
 
 router = APIRouter(prefix="/gateway-clients", tags=["Gateway Clients"])

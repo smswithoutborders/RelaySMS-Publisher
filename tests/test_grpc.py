@@ -18,16 +18,15 @@ from grpc_server import V3_SERVICE, interceptors
 from grpc_services.interceptors import V1AuthInterceptor
 from grpc_services.v3 import revoke_oauth2_token
 from grpc_services.v3.servicer import PublisherServicerV3
-from keys import KeyManager
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
-from platforms.adapter_ipc_handler import AdapterIPCHandler
-from platforms.adapter_manager import PlatformManifest
 from protos.v3 import publisher_pb2, publisher_pb2_grpc
-from publisher import db
+from publisher import db, keys
 from publisher.db import Base, get_session
 from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.server_identity_key import get_public_key
 from publisher.models.token import Token
+from publisher.platforms import ipc
+from publisher.platforms.manager import PlatformManifest
 
 OAUTH2_ADAPTER = PlatformManifest(
     id="gmail-adapter",
@@ -63,19 +62,22 @@ PNBA_EXCHANGE = {
 }
 
 
+def _public_key(key_id):
+    with get_session() as s:
+        return base64.urlsafe_b64decode(get_public_key(s, key_id)["public_key"])
+
+
 @pytest.fixture(autouse=True)
 def server_keys(monkeypatch):
     db.dispose_engine()
     Base.metadata.create_all(db.get_engine())
     with get_session() as s:
-        KeyManager(s).initialize_server_identity_keys()
+        keys.initialize_server_identity_keys(s)
     # The client helpers fetch server public keys over REST; read them from the db.
     monkeypatch.setattr(
         client_utils,
         "fetch_server_identity_public_key",
-        lambda _url, key_id: base64.urlsafe_b64decode(
-            get_public_key(key_id)["public_key"]
-        ),
+        lambda _url, key_id: _public_key(key_id),
     )
     yield
     db.dispose_engine()
@@ -90,7 +92,7 @@ def adapter(monkeypatch):
         fake.calls.append((method, params))
         return fake.results[method]
 
-    monkeypatch.setattr(AdapterIPCHandler, "invoke", staticmethod(invoke))
+    monkeypatch.setattr(ipc, "invoke", invoke)
     return fake
 
 
@@ -304,7 +306,7 @@ def test_unexpected_error_hides_details(stub, monkeypatch):
     def invoke(**_kwargs):
         raise RuntimeError("internal detail")
 
-    monkeypatch.setattr(AdapterIPCHandler, "invoke", staticmethod(invoke))
+    monkeypatch.setattr(ipc, "invoke", invoke)
 
     error = rpc_error(stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST)
 

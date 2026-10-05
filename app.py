@@ -11,12 +11,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from gateway_clients.gateway_client_manager import GatewayClientManager
-from keys import KeyManager
-from platforms.adapter_manager import AdapterManager
+from publisher import keys
 from publisher.config import ApiDocsConfig, AuthConfig
 from publisher.db import dispose_engine, get_session
+from publisher.gateway_clients.manager import GatewayClientManager
 from publisher.log import setup_logging
+from publisher.platforms.manager import AdapterManager
 from rest_services.v1.routes import router as v1_router
 
 logger = logging.getLogger(__name__)
@@ -48,8 +48,7 @@ def _validation_message(error: dict) -> str:
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown."""
     with get_session() as db:
-        key_manager = KeyManager(session=db)
-        key_manager.initialize_server_identity_keys()
+        keys.initialize_server_identity_keys(db)
 
     app.state.adapter_manager = AdapterManager()
     app.state.gateway_client_manager = GatewayClientManager()

@@ -7,15 +7,10 @@ from argon2 import PasswordHasher
 from click.testing import CliRunner
 
 import creds.cli as creds_cli
+from publisher import credentials
+from publisher.credentials import CredentialPermissionError, check_can_manage
 from publisher.db import get_session
-from publisher.models import credential as credentials
-from publisher.models.credential import (
-    ALL_SCOPES,
-    CredentialPermissionError,
-    CredentialScope,
-    Scope,
-    check_can_manage,
-)
+from publisher.models.credential import ALL_SCOPES, CredentialScope, Scope
 from tests.creds_fixtures import *  # noqa: F403
 from tests.creds_fixtures import USERNAME, can_log_in, create_credential
 

@@ -2,8 +2,8 @@
 """GetOAuth2AuthorizationUrl handler."""
 
 from grpc_services.utils import call_adapter, require_fields
-from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2
+from publisher.platforms.manager import AdapterManager
 
 
 def get_oauth2_authorization_url(

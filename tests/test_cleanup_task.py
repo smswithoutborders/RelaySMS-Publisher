@@ -41,13 +41,13 @@ def _make_token(
     session, *, platform, proto_id, created_days_ago, last_used_days_ago=None
 ):
     token = create_token(
+        session,
         platform=platform,
         cat_id=1,
         proto_id=proto_id,
         token_data={"account_id": "user@example.com", "token": {}},
-        session=session,
     )
-    token_hash, _ = create_token_hash(token.id, session)
+    token_hash, _ = create_token_hash(session, token.id)
 
     now = datetime.datetime.now(datetime.UTC)
     token.created_at = now - created_days_ago * DAY

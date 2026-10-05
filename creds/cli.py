@@ -4,9 +4,9 @@ from contextlib import contextmanager
 
 import click
 
+from publisher import credentials
 from publisher.db import get_session
 from publisher.log import setup_logging
-from publisher.models import credential as credentials
 from publisher.models import credential_session as credential_sessions
 from publisher.models.credential import ALL_SCOPES, SCOPE_DESCRIPTIONS, Scope
 
@@ -16,7 +16,7 @@ def _db():
     try:
         with get_session() as db:
             yield db
-    except ValueError as e:
+    except credentials.CredentialError as e:
         raise click.ClickException(str(e)) from e
 
 

@@ -2,12 +2,12 @@
 
 import pytest
 
-from platforms import adapter_manager
+from publisher.platforms import manager
 
 
 @pytest.fixture(autouse=True)
 def allowed_orgs(set_config):
-    set_config(adapter_manager, "platforms_config", github_orgs=["smswithoutborders"])
+    set_config(manager, "platforms_config", github_orgs=["smswithoutborders"])
 
 
 @pytest.mark.parametrize(
@@ -19,7 +19,7 @@ def allowed_orgs(set_config):
     ],
 )
 def test_allowed_github_urls(url):
-    assert adapter_manager.is_allowed_github_url(url)
+    assert manager.is_allowed_github_url(url)
 
 
 @pytest.mark.parametrize(
@@ -39,12 +39,12 @@ def test_allowed_github_urls(url):
     ],
 )
 def test_rejected_github_urls(url):
-    assert not adapter_manager.is_allowed_github_url(url)
+    assert not manager.is_allowed_github_url(url)
 
 
 def test_empty_allowlist_rejects_everything(set_config):
-    set_config(adapter_manager, "platforms_config", github_orgs=[])
+    set_config(manager, "platforms_config", github_orgs=[])
 
-    assert not adapter_manager.is_allowed_github_url(
+    assert not manager.is_allowed_github_url(
         "https://github.com/smswithoutborders/gmail-oauth2-adapter"
     )

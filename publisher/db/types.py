@@ -3,7 +3,7 @@
 
 import datetime
 import json
-from typing import overload
+from typing import overload, override
 
 from sqlalchemy import DateTime, LargeBinary, Text, TypeDecorator, cast, func
 from sqlalchemy.exc import CompileError
@@ -40,9 +40,11 @@ class UTCDateTime(TypeDecorator):
     impl = DateTime
     cache_ok = True
 
+    @override
     def process_bind_param(self, value, dialect):
         return None if value is None else as_utc(value).replace(tzinfo=None)
 
+    @override
     def process_result_value(self, value, dialect):
         return as_utc(value)
 
@@ -108,35 +110,35 @@ def _date_bucket_sqlite(element, compiler, **kw):
     return compiler.process(bucket, **kw)
 
 
+def _field_encryption_key() -> bytes | None:
+    # Read on each use, so importing models does not need the database settings.
+    database = DatabaseConfig.get()
+    return database.field_encryption_key if database.field_encryption_enabled else None
+
+
 class EncryptedJSON(TypeDecorator):
     """JSON stored as ciphertext when field encryption is enabled."""
 
     impl = Text
     cache_ok = True
 
-    @staticmethod
-    def _key() -> bytes | None:
-        # Read on each use, so importing models does not need the database settings.
-        database = DatabaseConfig.get()
-        return (
-            database.field_encryption_key if database.field_encryption_enabled else None
-        )
-
+    @override
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
 
         json_str = json.dumps(value)
-        key = self._key()
+        key = _field_encryption_key()
         if key is None:
             return json_str
         return crypto.encrypt(key, json_str.encode()).hex()
 
+    @override
     def process_result_value(self, value, dialect):
         if value is None:
             return None
 
-        key = self._key()
+        key = _field_encryption_key()
         if key is None:
             return json.loads(value)
         plaintext = crypto.decrypt(key, bytes.fromhex(value))
@@ -149,11 +151,13 @@ class PrivateEncryptedBinary(TypeDecorator):
     impl = LargeBinary
     cache_ok = True
 
+    @override
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
         return crypto.encrypt(DatabaseConfig.get().data_encryption_key, value)
 
+    @override
     def process_result_value(self, value, dialect):
         if value is None:
             return None

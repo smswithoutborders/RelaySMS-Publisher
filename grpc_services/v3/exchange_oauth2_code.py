@@ -6,11 +6,11 @@ from grpc_services.utils import (
     require_fields,
     validate_client_ephemeral_public_keys,
 )
-from keys import KeyManager
-from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2
+from publisher import keys
 from publisher.db import get_session
 from publisher.models.token import create as create_token
+from publisher.platforms.manager import AdapterManager
 
 
 def exchange_oauth2_code_and_store(
@@ -37,17 +37,15 @@ def exchange_oauth2_code_and_store(
 
     with get_session() as s:
         token = create_token(
+            s,
             platform=request.platform.lower(),
             cat_id=adapter.cat_id,
             proto_id=adapter.proto_id,
             token_data={"account_id": account_identifier, "token": result["token"]},
-            session=s,
         )
-        key_manager = KeyManager(s)
         token_ciphertext, kid_index, server_public_keys = (
-            key_manager.create_token_pools_and_encrypt(
-                token_pk_id=token.id,
-                client_public_keys=request.client_ephemeral_public_keys,
+            keys.create_token_pools_and_encrypt(
+                s, token.id, request.client_ephemeral_public_keys
             )
         )
 

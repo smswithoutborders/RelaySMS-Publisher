@@ -10,15 +10,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from publisher.db import Base
+from publisher.db.types import utc_now
 
 if TYPE_CHECKING:
     from publisher.models import PayloadSession
 
 logger = logging.getLogger(__name__)
-
-
-def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.UTC)
 
 
 class PayloadSegment(Base):
@@ -29,9 +26,9 @@ class PayloadSegment(Base):
         ForeignKey("payload_sessions.id", ondelete="CASCADE")
     )
     data: Mapped[bytes] = mapped_column(LargeBinary)
-    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        default=_utc_now, onupdate=_utc_now
+        default=utc_now, onupdate=utc_now
     )
 
     session: Mapped[PayloadSession] = relationship(
@@ -40,7 +37,7 @@ class PayloadSegment(Base):
 
 
 def create_if_not_exists(
-    session_id: int, data: bytes, session: Session
+    session: Session, session_id: int, data: bytes
 ) -> PayloadSegment | None:
     """Insert a segment; return None on a duplicate without poisoning the session."""
     try:
@@ -54,7 +51,7 @@ def create_if_not_exists(
         return None
 
 
-def get_all_data(session_id: int, session: Session) -> list[bytes]:
+def get_all_data(session: Session, session_id: int) -> list[bytes]:
     """Return all segment data bytes for a session as a flat list."""
     return list(
         session.scalars(

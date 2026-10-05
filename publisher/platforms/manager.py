@@ -9,7 +9,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 from urllib.parse import urlsplit
 
 import msgspec
@@ -64,6 +64,7 @@ class CloneProgress(RemoteProgress):
         super().__init__()
         self.pbar = None
 
+    @override
     def update(self, op_code, cur_count, max_count=None, message=""):
         if max_count and not self.pbar:
             self.pbar = tqdm(
@@ -80,6 +81,101 @@ class CloneProgress(RemoteProgress):
         if self.pbar:
             self.pbar.close()
             self.pbar = None
+
+
+def _generate_id(url: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, url.strip().lower()))
+
+
+def _is_safe_path(base_folder: Path, target_path: Path) -> bool:
+    try:
+        return (
+            base_folder.resolve() in target_path.resolve().parents
+            or base_folder.resolve() == target_path.resolve()
+        )
+    except OSError, ValueError:
+        return False
+
+
+def _load_ini_file(path: Path, *sections: str) -> dict | None:
+    """Reads and merges specified INI sections into a flat dict."""
+    if not path.is_file():
+        logger.error("Missing file: %s", path)
+        return None
+
+    config = configparser.ConfigParser()
+    try:
+        config.read(path)
+    except Exception as e:
+        logger.error("Failed to parse INI file %s: %s", path, e)
+        return None
+
+    merged = {}
+    for section in sections:
+        if section not in config:
+            logger.error("Missing section '%s' in: %s", section, path)
+            return None
+        merged.update(dict(config[section]))
+
+    return merged
+
+
+def _rollback_directory(path: Path):
+    try:
+        if path.is_dir():
+            shutil.rmtree(path)
+            logger.info("Rolled back directory: %s", path)
+    except OSError as e:
+        logger.error("Failed to roll back %s: %s", path, e)
+
+
+def _validate_adapter_files(path: Path) -> bool:
+    required = ["manifest.ini", "main.py", "config.ini"]
+    missing = [f for f in required if not (path / f).is_file()]
+    if missing:
+        logger.warning("Missing adapter files in %s: %s", path, ", ".join(missing))
+        return False
+    return True
+
+
+def _install_dependencies(requirements_path: Path, venv_path: Path):
+    if not _is_safe_path(platforms_config.adapters_venv_dir, venv_path):
+        raise ValueError("Invalid virtual environment path localization.")
+
+    try:
+        subprocess.check_call([sys.executable, "-m", "venv", str(venv_path)])
+        subprocess.check_call(
+            [str(venv_path / "bin/pip3"), "install", "-r", str(requirements_path)]
+        )
+        logger.info("Installed dependencies: %s", venv_path)
+    except subprocess.SubprocessError as e:
+        logger.error("Failed to install dependencies: %s", e)
+        raise ValueError("Dependency installation failed.") from e
+
+
+def _build_manifest_from_ini(
+    adapter_id: str, ini_data: dict, existing: PlatformManifest
+) -> PlatformManifest:
+    try:
+        return PlatformManifest(
+            id=adapter_id,
+            display_name=ini_data["display_name"],
+            name=ini_data["name"],
+            path=existing.path,
+            venv_path=existing.venv_path,
+            assets_path=existing.assets_path,
+            cat_id=int(ini_data["cat_id"]),
+            proto_id=int(ini_data["proto_id"]),
+            auth_provider=ini_data.get("auth_provider"),
+            supports_offline_first=ini_data.get("supports_offline_first", "")
+            .strip()
+            .lower()
+            == "true",
+            icon_svg=ini_data.get("icon_svg"),
+            icon_png=ini_data.get("icon_png"),
+        )
+    except KeyError as e:
+        raise ValueError(f"Missing required manifest field: {e}") from e
 
 
 class AdapterManager:
@@ -119,100 +215,6 @@ class AdapterManager:
             self._app_registry = data
         except (OSError, msgspec.ValidationError) as e:
             logger.error("Failed to write registry: %s", e)
-
-    @classmethod
-    def _generate_id(cls, url: str) -> str:
-        return str(uuid.uuid5(uuid.NAMESPACE_URL, url.strip().lower()))
-
-    @classmethod
-    def _is_safe_path(cls, base_folder: Path, target_path: Path) -> bool:
-        try:
-            return (
-                base_folder.resolve() in target_path.resolve().parents
-                or base_folder.resolve() == target_path.resolve()
-            )
-        except OSError, ValueError:
-            return False
-
-    @classmethod
-    def _load_ini_file(cls, path: Path, *sections: str) -> dict | None:
-        """Reads and merges specified INI sections into a flat dict."""
-        if not path.is_file():
-            logger.error("Missing file: %s", path)
-            return None
-
-        config = configparser.ConfigParser()
-        try:
-            config.read(path)
-        except Exception as e:
-            logger.error("Failed to parse INI file %s: %s", path, e)
-            return None
-
-        merged = {}
-        for section in sections:
-            if section not in config:
-                logger.error("Missing section '%s' in: %s", section, path)
-                return None
-            merged.update(dict(config[section]))
-
-        return merged
-
-    @staticmethod
-    def _rollback_directory(path: Path):
-        try:
-            if path.is_dir():
-                shutil.rmtree(path)
-                logger.info("Rolled back directory: %s", path)
-        except OSError as e:
-            logger.error("Failed to roll back %s: %s", path, e)
-
-    @staticmethod
-    def _validate_adapter_files(path: Path) -> bool:
-        required = ["manifest.ini", "main.py", "config.ini"]
-        missing = [f for f in required if not (path / f).is_file()]
-        if missing:
-            logger.warning("Missing adapter files in %s: %s", path, ", ".join(missing))
-            return False
-        return True
-
-    @classmethod
-    def _install_dependencies(cls, requirements_path: Path, venv_path: Path):
-        if not cls._is_safe_path(platforms_config.adapters_venv_dir, venv_path):
-            raise ValueError("Invalid virtual environment path localization.")
-
-        try:
-            subprocess.check_call([sys.executable, "-m", "venv", str(venv_path)])
-            subprocess.check_call(
-                [str(venv_path / "bin/pip3"), "install", "-r", str(requirements_path)]
-            )
-            logger.info("Installed dependencies: %s", venv_path)
-        except subprocess.SubprocessError as e:
-            logger.error("Failed to install dependencies: %s", e)
-            raise ValueError("Dependency installation failed.") from e
-
-    def _build_manifest_from_ini(
-        self, adapter_id: str, ini_data: dict, existing: PlatformManifest
-    ) -> PlatformManifest:
-        try:
-            return PlatformManifest(
-                id=adapter_id,
-                display_name=ini_data["display_name"],
-                name=ini_data["name"],
-                path=existing.path,
-                venv_path=existing.venv_path,
-                assets_path=existing.assets_path,
-                cat_id=int(ini_data["cat_id"]),
-                proto_id=int(ini_data["proto_id"]),
-                auth_provider=ini_data.get("auth_provider"),
-                supports_offline_first=ini_data.get("supports_offline_first", "")
-                .strip()
-                .lower()
-                == "true",
-                icon_svg=ini_data.get("icon_svg"),
-                icon_png=ini_data.get("icon_png"),
-            )
-        except KeyError as e:
-            raise ValueError(f"Missing required manifest field: {e}") from e
 
     def find_adapter_ids(
         self,
@@ -283,10 +285,10 @@ class AdapterManager:
     def add_adapter_from_github(self, url: str):
         """Clone a repository and register its manifest."""
         platforms_config.adapters_dir.mkdir(parents=True, exist_ok=True)
-        adapter_id = self._generate_id(url)
+        adapter_id = _generate_id(url)
         dest_path = platforms_config.adapters_dir / adapter_id
 
-        if not self._is_safe_path(platforms_config.adapters_dir, dest_path):
+        if not _is_safe_path(platforms_config.adapters_dir, dest_path):
             raise ValueError("Invalid target folder destination.")
 
         registry = self._load_registry()
@@ -300,20 +302,20 @@ class AdapterManager:
             logger.info("Cloned repository to %s", dest_path)
         except Exception as e:
             logger.error("Failed to clone repository %s: %s", url, e)
-            self._rollback_directory(dest_path)
+            _rollback_directory(dest_path)
             raise
         finally:
             progress.close()
 
-        if not self._validate_adapter_files(dest_path):
-            self._rollback_directory(dest_path)
+        if not _validate_adapter_files(dest_path):
+            _rollback_directory(dest_path)
             raise ValueError(f"Validation failed for files at: {dest_path}")
 
-        ini_data = self._load_ini_file(dest_path / "manifest.ini", "platform")
+        ini_data = _load_ini_file(dest_path / "manifest.ini", "platform")
         if not ini_data or not all(
             ini_data.get(f) for f in ("name", "display_name", "cat_id", "proto_id")
         ):
-            self._rollback_directory(dest_path)
+            _rollback_directory(dest_path)
             raise ValueError(
                 "Manifest incomplete: missing one or more of name, cat_id, proto_id."
             )
@@ -324,10 +326,10 @@ class AdapterManager:
         if requirements_path.is_file():
             venv_path.mkdir(parents=True, exist_ok=True)
             try:
-                self._install_dependencies(requirements_path, venv_path)
+                _install_dependencies(requirements_path, venv_path)
             except ValueError:
-                self._rollback_directory(dest_path)
-                self._rollback_directory(venv_path)
+                _rollback_directory(dest_path)
+                _rollback_directory(venv_path)
                 raise
 
         stub = PlatformManifest(
@@ -342,10 +344,10 @@ class AdapterManager:
         )
 
         try:
-            manifest_record = self._build_manifest_from_ini(adapter_id, ini_data, stub)
+            manifest_record = _build_manifest_from_ini(adapter_id, ini_data, stub)
         except ValueError:
-            self._rollback_directory(dest_path)
-            self._rollback_directory(venv_path)
+            _rollback_directory(dest_path)
+            _rollback_directory(venv_path)
             raise
 
         registry[adapter_id] = manifest_record
@@ -362,13 +364,13 @@ class AdapterManager:
         p_target = Path(manifest.path)
         v_target = Path(manifest.venv_path)
 
-        if not self._is_safe_path(
+        if not _is_safe_path(
             platforms_config.adapters_dir, p_target
-        ) or not self._is_safe_path(platforms_config.adapters_venv_dir, v_target):
+        ) or not _is_safe_path(platforms_config.adapters_venv_dir, v_target):
             raise ValueError("Deletion paths run outside system target roots.")
 
-        self._rollback_directory(p_target)
-        self._rollback_directory(v_target)
+        _rollback_directory(p_target)
+        _rollback_directory(v_target)
 
         del registry[adapter_id]
         self._save_registry(registry)
@@ -389,7 +391,7 @@ class AdapterManager:
                 continue
 
             adapter_path = Path(manifest.path)
-            if not self._is_safe_path(platforms_config.adapters_dir, adapter_path):
+            if not _is_safe_path(platforms_config.adapters_dir, adapter_path):
                 logger.error("Skipping update: invalid path for %s", target_id)
                 continue
 
@@ -400,7 +402,7 @@ class AdapterManager:
                 logger.error("Failed to pull updates for %s: %s", target_id, e)
                 continue
 
-            ini_data = self._load_ini_file(adapter_path / "manifest.ini", "platform")
+            ini_data = _load_ini_file(adapter_path / "manifest.ini", "platform")
             if not ini_data:
                 logger.error(
                     "Could not read updated manifest for %s; skipping.", target_id
@@ -408,7 +410,7 @@ class AdapterManager:
                 continue
 
             try:
-                registry[target_id] = self._build_manifest_from_ini(
+                registry[target_id] = _build_manifest_from_ini(
                     target_id, ini_data, manifest
                 )
                 logger.info("Updated manifest for: %s", target_id)
@@ -420,7 +422,7 @@ class AdapterManager:
                 requirements_path = adapter_path / "requirements.txt"
                 if requirements_path.is_file():
                     try:
-                        self._install_dependencies(
+                        _install_dependencies(
                             requirements_path, Path(manifest.venv_path)
                         )
                     except ValueError:
@@ -452,11 +454,11 @@ class AdapterManager:
                 logger.debug("Skipping already registered adapter: %s", adapter_id)
                 continue
 
-            if not self._validate_adapter_files(adapter_path):
+            if not _validate_adapter_files(adapter_path):
                 logger.warning("Skipping invalid adapter directory: %s", adapter_path)
                 continue
 
-            ini_data = self._load_ini_file(adapter_path / "manifest.ini", "platform")
+            ini_data = _load_ini_file(adapter_path / "manifest.ini", "platform")
             if not ini_data or not all(
                 ini_data.get(f) for f in ("name", "display_name", "cat_id", "proto_id")
             ):
@@ -476,7 +478,7 @@ class AdapterManager:
             )
 
             try:
-                registry[adapter_id] = self._build_manifest_from_ini(
+                registry[adapter_id] = _build_manifest_from_ini(
                     adapter_id, ini_data, stub
                 )
                 logger.info("Recovered adapter: '%s'", ini_data["name"])

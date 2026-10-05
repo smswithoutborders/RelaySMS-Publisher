@@ -9,7 +9,7 @@ from twilio.request_validator import RequestValidator
 
 import rest_services.v1.publications as publications_routes
 import rest_services.v1.routes as routes
-from publications import PayloadMalformedError
+from publisher.publications import PayloadMalformedError
 
 AUTH_TOKEN = "test-auth-token"
 WEBHOOK_URL = "http://testserver/v1/twilio-sms"
@@ -33,9 +33,9 @@ def _enabled(set_config, monkeypatch):
     monkeypatch.setattr(publications_routes, "publish_message", MagicMock())
     monkeypatch.setattr(publications_routes, "forward_twilio_webhook", MagicMock())
     monkeypatch.setattr(
-        publications_routes.PublicationService,
+        publications_routes.publications,
         "validate",
-        staticmethod(lambda text: None),
+        lambda text: None,
     )
 
 
@@ -86,9 +86,7 @@ def test_malformed_payload_rejected(client, monkeypatch):
     def _raise(text):
         raise PayloadMalformedError("bad payload")
 
-    monkeypatch.setattr(
-        publications_routes.PublicationService, "validate", staticmethod(_raise)
-    )
+    monkeypatch.setattr(publications_routes.publications, "validate", _raise)
 
     params = {"From": "+237123456789", "Body": "not-base64"}
     response = _signed_post(client, params)

@@ -151,7 +151,7 @@ def test_stats_need_read_scope(client, seeded, url):
 
 
 def test_scope_changes_apply_to_existing_sessions(client, seeded):
-    from publisher.models import credential as credentials
+    from publisher import credentials
 
     login(
         client,

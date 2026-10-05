@@ -6,9 +6,10 @@ import logging
 from grpc_interceptor.exceptions import InvalidArgument, Unauthenticated
 
 from grpc_services.utils import require_fields, validate_client_ephemeral_public_keys
-from keys import KeyManager, KeyManagerError
 from protos.v3 import publisher_pb2
+from publisher import keys
 from publisher.db import get_session
+from publisher.models.server_identity_key import mark_key_used
 from publisher.models.token_hash import update_last_used as mark_token_hash_used
 
 logger = logging.getLogger(__name__)
@@ -21,17 +22,16 @@ def sync_keys(request, payload: bytes) -> publisher_pb2.SyncKeysResponse:
     validate_client_ephemeral_public_keys(request.client_ephemeral_public_keys)
 
     with get_session() as s:
-        key_manager = KeyManager(s)
         try:
-            token = key_manager.verify_token(request.token_id, request.key_id, payload)
-        except KeyManagerError:
+            token = keys.verify_token(s, request.token_id, request.key_id, payload)
+        except keys.KeyManagementError:
             raise Unauthenticated("sync failed") from None
 
-        key_manager.mark_identity_key_used(request.key_id)
-        server_public_keys = key_manager.sync_token_pools(
-            token.token_hash, request.client_ephemeral_public_keys
+        mark_key_used(s, request.key_id)
+        server_public_keys = keys.sync_token_pools(
+            s, token.token_hash, request.client_ephemeral_public_keys
         )
-        mark_token_hash_used(token.token_hash, s)
+        mark_token_hash_used(s, token.token_hash)
         logger.info("Successfully synced keys for token_id=%s", request.token_id)
 
     return publisher_pb2.SyncKeysResponse(

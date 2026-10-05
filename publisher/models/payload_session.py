@@ -8,13 +8,10 @@ from sqlalchemy import String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from publisher.db import Base
+from publisher.db.types import utc_now
 
 if TYPE_CHECKING:
     from publisher.models import PayloadSegment
-
-
-def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.UTC)
 
 
 class PayloadSession(Base):
@@ -23,9 +20,9 @@ class PayloadSession(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     sender_id: Mapped[str] = mapped_column(String(255))
     session_id: Mapped[int] = mapped_column()
-    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        default=_utc_now, onupdate=_utc_now
+        default=utc_now, onupdate=utc_now
     )
 
     segments: Mapped[list[PayloadSegment]] = relationship(
@@ -39,7 +36,7 @@ class PayloadSession(Base):
     )
 
 
-def create(sender_id: str, session_id: int, session: Session) -> PayloadSession:
+def create(session: Session, sender_id: str, session_id: int) -> PayloadSession:
     """Create and persist a new payload session."""
     payload_session = PayloadSession(sender_id=sender_id, session_id=session_id)
     session.add(payload_session)
@@ -48,7 +45,7 @@ def create(sender_id: str, session_id: int, session: Session) -> PayloadSession:
 
 
 def get_by_sender_and_session(
-    sender_id: str, session_id: int, session: Session
+    session: Session, sender_id: str, session_id: int
 ) -> PayloadSession | None:
     """Retrieve a payload session by sender_id and session_id."""
     return session.scalar(
@@ -56,13 +53,13 @@ def get_by_sender_and_session(
     )
 
 
-def delete(payload_session: PayloadSession, session: Session) -> None:
+def delete(session: Session, payload_session: PayloadSession) -> None:
     """Delete a payload session and its segments via cascade."""
     session.delete(payload_session)
     session.flush()
 
 
-def delete_stale(older_than: datetime.datetime, session: Session) -> int:
+def delete_stale(session: Session, older_than: datetime.datetime) -> int:
     """Delete payload sessions created before the cutoff."""
     stale_sessions = session.scalars(
         select(PayloadSession).where(PayloadSession.created_at < older_than)

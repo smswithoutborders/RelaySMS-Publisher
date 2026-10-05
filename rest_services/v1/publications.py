@@ -6,8 +6,9 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from twilio.request_validator import RequestValidator
 from twilio.twiml.messaging_response import MessagingResponse
 
-from publications import PayloadMalformedError, PublicationService
+from publisher import publications
 from publisher.config import TwilioConfig
+from publisher.publications import PayloadMalformedError
 from rest_services.v1.schemas import PublishContentResponse, PublishRestContentRequest
 from tasks.forward_task import forward_twilio_webhook
 from tasks.publication_task import publish_message
@@ -23,7 +24,7 @@ router = APIRouter(tags=["Publishing"])
 def create_publications(body: PublishRestContentRequest) -> PublishContentResponse:
     """Queues an SMS payload for publishing."""
     try:
-        PublicationService.validate(body.text)
+        publications.validate(body.text)
     except PayloadMalformedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -56,7 +57,7 @@ async def twilio_incoming_sms(request: Request) -> Response:
         )
 
     try:
-        PublicationService.validate(text_payload)
+        publications.validate(text_payload)
     except PayloadMalformedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

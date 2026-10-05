@@ -8,11 +8,12 @@ import secrets
 import click
 from sqlalchemy import insert
 
+from publisher import credentials
+from publisher.credentials import parse_scopes
 from publisher.db import get_session
 from publisher.db.types import utc_now
 from publisher.log import setup_logging
-from publisher.models import credential as credentials
-from publisher.models.credential import ALL_SCOPES, Scope, parse_scopes
+from publisher.models.credential import ALL_SCOPES, Scope
 from publisher.models.publication_stats import PublicationStats
 
 PLATFORMS = ("gmail", "twitter", "telegram", "slack", "bluesky", "mastodon")
@@ -52,7 +53,7 @@ def _random_scopes() -> frozenset[Scope]:
         picked = random.sample(list(Scope), random.randint(1, len(Scope) - 1))
         try:
             scopes = parse_scopes(picked)
-        except ValueError:
+        except credentials.InvalidCredentialError:
             continue
         if scopes != ALL_SCOPES:
             return scopes

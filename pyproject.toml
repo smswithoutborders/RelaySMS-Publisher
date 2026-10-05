@@ -9,7 +9,9 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM", "N", "RUF", "LOG", "G", "D"]
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "I", "B", "UP", "SIM", "N", "RUF", "LOG", "G", "D", "PLR6301"]
 # Docstrings are only written where they add something, so none are required.
 ignore = ["D1"]
 
@@ -34,6 +36,8 @@ extend-immutable-calls = [
 "migrations/versions/*" = ["D"]
 # Usage examples in the help text are full shell commands.
 "tests/client.py" = ["E501"]
+# pytest groups tests into classes that don't use self.
+"tests/*" = ["PLR6301"]
 
 [tool.pyright]
 typeCheckingMode = "basic"

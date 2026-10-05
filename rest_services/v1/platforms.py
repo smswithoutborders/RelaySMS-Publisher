@@ -8,7 +8,7 @@ from pathlib import Path as PathLib
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse
 
-from platforms.adapter_manager import AdapterManager
+from publisher.platforms.manager import AdapterManager
 from rest_services.v1.params import NAME_PATTERN, filter_query
 from rest_services.v1.schemas import OAuthClientMetadata, PlatformManifest
 

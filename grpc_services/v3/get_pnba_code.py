@@ -7,8 +7,8 @@ from datetime import datetime
 from grpc_interceptor.exceptions import InvalidArgument
 
 from grpc_services.utils import call_adapter, require_fields
-from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2
+from publisher.platforms.manager import AdapterManager
 
 logger = logging.getLogger(__name__)
 

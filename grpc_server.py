@@ -17,12 +17,12 @@ from grpc_services.interceptors import (
     V1AuthInterceptor,
 )
 from grpc_services.v3.servicer import PublisherServicerV3
-from keys import KeyManager
-from platforms.adapter_manager import AdapterManager
 from protos.v3 import publisher_pb2_grpc as v3_grpc
+from publisher import keys
 from publisher.config import GrpcConfig
 from publisher.db import dispose_engine, get_session
 from publisher.log import setup_logging
+from publisher.platforms.manager import AdapterManager
 
 logger = logging.getLogger(__name__)
 grpc_config = GrpcConfig.get()
@@ -59,8 +59,7 @@ def _build_server(max_workers: int) -> grpc.Server:
     )
 
     with get_session() as db:
-        key_manager = KeyManager(session=db)
-        key_manager.initialize_server_identity_keys()
+        keys.initialize_server_identity_keys(db)
 
     v3_grpc.add_PublisherServicer_to_server(
         PublisherServicerV3(adapter_manager=AdapterManager()), grpc_server

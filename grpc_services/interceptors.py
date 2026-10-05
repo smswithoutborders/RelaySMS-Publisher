@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 from contextvars import ContextVar
+from typing import override
 
 import grpc
 from cachetools import TTLCache
@@ -43,6 +44,7 @@ def request_payload() -> bytes:
 class LoggingInterceptor(ServerInterceptor):
     server_protocol = "HTTP/2.0"
 
+    @override
     def intercept(self, method, request_or_iterator, context, method_name):
         try:
             return method(request_or_iterator, context)
@@ -59,6 +61,7 @@ class LoggingInterceptor(ServerInterceptor):
 class ErrorInterceptor(ExceptionToStatusInterceptor):
     """Turn exceptions raised by handlers into gRPC status codes."""
 
+    @override
     def handle_exception(self, ex, request_or_iterator, context, method_name):
         span = otel_trace.get_current_span()
 
@@ -89,6 +92,7 @@ class V1AuthInterceptor(ServerInterceptor):
         self._nonces = TTLCache(maxsize=10000, ttl=nonce_ttl_seconds)
         self._nonce_lock = threading.Lock()
 
+    @override
     def intercept(self, method, request_or_iterator, context, method_name):
         # Health checks and other services are not signed.
         if not method_name.startswith(self._prefixes):
@@ -128,7 +132,7 @@ class V1AuthInterceptor(ServerInterceptor):
 
         try:
             with get_session() as s:
-                ss_kid = get_private_key(key_id, s).private_bytes_raw()
+                ss_kid = get_private_key(s, key_id).private_bytes_raw()
         except ValueError as e:
             raise _rejected(str(e)) from None
 

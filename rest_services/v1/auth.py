@@ -15,9 +15,10 @@ from fastapi.security import (
 from sqlalchemy.orm import Session
 
 from publisher.config import AuthConfig
+from publisher.credentials import authenticate, record_login
 from publisher.db import get_db
 from publisher.models import credential_session as credential_sessions
-from publisher.models.credential import Credential, authenticate, record_login
+from publisher.models.credential import Credential
 from publisher.models.credential_session import CredentialSession
 from rest_services.v1.errors import ApiError
 from rest_services.v1.schemas import CurrentCredential, LoginRequest

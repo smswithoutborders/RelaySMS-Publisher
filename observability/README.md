@@ -170,13 +170,13 @@ notification channel. `CONTAINS` is a real query-builder operator; wrap the
   service.name = 'relaysms-publisher-worker' AND (body CONTAINS 'Failed to process payload' OR body CONTAINS 'Failed to publish message' OR body CONTAINS 'An unexpected error occurred during task processing')
   ```
 
-- **Platform adapter failures** (`platforms/adapter_ipc_handler.py`):
+- **Platform adapter failures** (`publisher/platforms/ipc.py`):
 
   ```
   service.name = 'relaysms-publisher-worker' AND (body CONTAINS 'Subprocess failed' OR body CONTAINS 'Malformed JSON response' OR body CONTAINS 'Subprocess execution timed out' OR body CONTAINS 'Unexpected failure during IPC invocation')
   ```
 
-- **Key management failures** (`keys.py`):
+- **Key management failures** (`publisher/keys.py`):
 
   ```
   body CONTAINS 'Failed to generate server identity keys' OR body CONTAINS 'Token hash missing'

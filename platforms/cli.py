@@ -6,8 +6,8 @@ from pathlib import Path
 
 import click
 
-from platforms.adapter_manager import AdapterManager
 from publisher.log import setup_logging
+from publisher.platforms.manager import AdapterManager
 
 manager = AdapterManager()
 

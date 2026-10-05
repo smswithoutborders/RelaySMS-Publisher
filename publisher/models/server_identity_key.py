@@ -9,12 +9,8 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from sqlalchemy import CursorResult, LargeBinary, select, update
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from publisher.db import Base, get_session
-from publisher.db.types import PrivateEncryptedBinary
-
-
-def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.UTC)
+from publisher.db import Base
+from publisher.db.types import PrivateEncryptedBinary, utc_now
 
 
 class ServerIdentityKey(Base):
@@ -26,46 +22,44 @@ class ServerIdentityKey(Base):
     key_index: Mapped[int] = mapped_column(unique=True)
     private_key: Mapped[bytes] = mapped_column(PrivateEncryptedBinary)
     public_key: Mapped[bytes] = mapped_column(LargeBinary(32))
-    created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        default=_utc_now, onupdate=_utc_now
+        default=utc_now, onupdate=utc_now
     )
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(default=None)
     used_count: Mapped[int] = mapped_column(default=0)
 
 
-def get_public_keys() -> list[dict[str, Any]]:
+def get_public_keys(session: Session) -> list[dict[str, Any]]:
     """Get all public keys for API responses."""
-    with get_session() as s:
-        keys = s.scalars(
-            select(ServerIdentityKey).order_by(ServerIdentityKey.key_index)
-        ).all()
-        return [
-            {
-                "key_id": key.key_index,
-                "public_key": base64.urlsafe_b64encode(key.public_key).decode("ascii"),
-            }
-            for key in keys
-        ]
-
-
-def get_public_key(key_id: int) -> dict[str, Any]:
-    """Get a single public key for API response."""
-    if not (0 <= key_id <= 255):
-        raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
-    with get_session() as s:
-        key = s.scalar(
-            select(ServerIdentityKey).where(ServerIdentityKey.key_index == key_id)
-        )
-        if not key:
-            raise ValueError(f"Server identity key {key_id} not found")
-        return {
+    keys = session.scalars(
+        select(ServerIdentityKey).order_by(ServerIdentityKey.key_index)
+    ).all()
+    return [
+        {
             "key_id": key.key_index,
             "public_key": base64.urlsafe_b64encode(key.public_key).decode("ascii"),
         }
+        for key in keys
+    ]
 
 
-def get_private_key(key_id: int, session: Session) -> X25519PrivateKey:
+def get_public_key(session: Session, key_id: int) -> dict[str, Any]:
+    """Get a single public key for API response."""
+    if not (0 <= key_id <= 255):
+        raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
+    key = session.scalar(
+        select(ServerIdentityKey).where(ServerIdentityKey.key_index == key_id)
+    )
+    if not key:
+        raise ValueError(f"Server identity key {key_id} not found")
+    return {
+        "key_id": key.key_index,
+        "public_key": base64.urlsafe_b64encode(key.public_key).decode("ascii"),
+    }
+
+
+def get_private_key(session: Session, key_id: int) -> X25519PrivateKey:
     """Fetch a private key for cryptographic operations."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
@@ -77,7 +71,7 @@ def get_private_key(key_id: int, session: Session) -> X25519PrivateKey:
     return X25519PrivateKey.from_private_bytes(key.private_key)
 
 
-def mark_key_used(key_id: int, session: Session) -> None:
+def mark_key_used(session: Session, key_id: int) -> None:
     """Mark a server identity key as used after a successful operation."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
@@ -87,7 +81,7 @@ def mark_key_used(key_id: int, session: Session) -> None:
             update(ServerIdentityKey)
             .where(ServerIdentityKey.key_index == key_id)
             .values(
-                last_used_at=_utc_now(),
+                last_used_at=utc_now(),
                 used_count=ServerIdentityKey.used_count + 1,
             )
         ),

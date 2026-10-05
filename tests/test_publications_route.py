@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 import rest_services.v1.publications as publications_routes
 import rest_services.v1.routes as routes
-from publications import PayloadMalformedError
+from publisher.publications import PayloadMalformedError
 
 
 @pytest.fixture
@@ -22,9 +22,9 @@ def client():
 def _stub_publish(monkeypatch):
     monkeypatch.setattr(publications_routes, "publish_message", MagicMock())
     monkeypatch.setattr(
-        publications_routes.PublicationService,
+        publications_routes.publications,
         "validate",
-        staticmethod(lambda text: None),
+        lambda text: None,
     )
 
 
@@ -60,9 +60,7 @@ def test_malformed_payload_rejected(client, monkeypatch):
     def _raise(text):
         raise PayloadMalformedError("bad payload")
 
-    monkeypatch.setattr(
-        publications_routes.PublicationService, "validate", staticmethod(_raise)
-    )
+    monkeypatch.setattr(publications_routes.publications, "validate", _raise)
 
     response = client.post(
         "/v1/publications",

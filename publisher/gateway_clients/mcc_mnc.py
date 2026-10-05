@@ -10,9 +10,11 @@ import os
 from functools import cache
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
-SNAPSHOT_FILE = BASE_DIR / "mcc_mnc_table.json"
-OVERRIDES_FILE = BASE_DIR / "mcc_mnc_overrides.json"
+from publisher.config import ROOT
+
+SNAPSHOT_FILE = Path(__file__).resolve().parent / "mcc_mnc_table.json"
+# Written by the CLI, so it lives with the other runtime data.
+OVERRIDES_FILE = ROOT / "gateway_clients" / "mcc_mnc_overrides.json"
 
 _overrides_cache: list[dict] = []
 _overrides_mtime: float = 0.0
