@@ -1,4 +1,4 @@
-FROM python:3.14.7-slim-bookworm AS builder
+FROM python:3.14.8-slim-bookworm AS builder
 
 WORKDIR /publisher
 
@@ -36,7 +36,7 @@ RUN --mount=type=cache,sharing=locked,target=/root/.cargo/registry \
   && make build
 
 
-FROM python:3.14.7-slim-bookworm
+FROM python:3.14.8-slim-bookworm
 
 WORKDIR /publisher
 
