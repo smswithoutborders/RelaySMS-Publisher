@@ -4,7 +4,7 @@ import email.message
 
 import pytest
 
-import smtp_auth
+from publisher.smtp import auth as smtp_auth
 
 
 def make_message(auth_results=None, from_addr="user@example.com"):

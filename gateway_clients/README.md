@@ -3,21 +3,21 @@
 Registered clients are also readable via the REST API: see [List Gateway Clients](../docs/rest.md#2-list-gateway-clients).
 
 ```bash
-GATEWAY_CLIENTS_REGISTRY_FILE=gateway_clients/registry.json
+GATEWAY_CLIENTS_REGISTRY_FILE=data/gateway_clients/registry.json
 ```
 
 > [!IMPORTANT]
-> Use `./gateway-clients.sh`, not `python3 -m gateway_clients.cli` directly. It resolves the install dir, loads `.env`, and runs as the service user so the registry file's ownership doesn't drift.
+> Use `./publisher.sh gateway-clients`, not `python3 -m publisher gateway-clients` directly. It resolves the install dir, loads `.env`, and runs as the service user so the registry file's ownership doesn't drift.
 
 ## Commands
 
 ```bash
-./gateway-clients.sh create --msisdn <MSISDN> --protocols <PROTOCOL,...> [--country] [--operator] [--operator-code]
-./gateway-clients.sh list [--msisdn] [--country] [--operator]
-./gateway-clients.sh update <MSISDN> [--country] [--operator] [--operator-code] [--protocols]
-./gateway-clients.sh delete <MSISDN>
-./gateway-clients.sh countries
-./gateway-clients.sh operators --country <COUNTRY>
+./publisher.sh gateway-clients create --msisdn <MSISDN> --protocols <PROTOCOL,...> [--country] [--operator] [--operator-code]
+./publisher.sh gateway-clients list [--msisdn] [--country] [--operator]
+./publisher.sh gateway-clients update <MSISDN> [--country] [--operator] [--operator-code] [--protocols]
+./publisher.sh gateway-clients delete <MSISDN>
+./publisher.sh gateway-clients countries
+./publisher.sh gateway-clients operators --country <COUNTRY>
 ```
 
 `create` resolves country, operator, and PLMN code from the MSISDN automatically; you only supply the MSISDN and protocol(s). If that fails or is ambiguous (e.g. AT&T has nine PLMNs in the US), pass `--country`/`--operator`/`--operator-code` directly. The error message lists candidates when ambiguous. This is common for US/Canada numbers, since `phonenumbers` has little NANP carrier data.
@@ -28,13 +28,13 @@ Resolution uses `phonenumbers` to get a country, ISO region, and carrier name, t
 
 The table is two files, checked in order:
 
-- `mcc_mnc_overrides.json`: admin-managed, checked first
-- `mcc_mnc_table.json`: vendored snapshot of [musalbas/mcc-mnc-table](https://github.com/musalbas/mcc-mnc-table).
+- `mcc_mnc_overrides.json`: admin-managed, checked first; kept next to the registry (`data/gateway_clients/` by default)
+- `mcc_mnc_table.json` (in `publisher/gateway_clients/`): vendored snapshot of [musalbas/mcc-mnc-table](https://github.com/musalbas/mcc-mnc-table).
 
 ```bash
-./gateway-clients.sh mcc-mnc list [--country-code] [--network] [--iso]
-./gateway-clients.sh mcc-mnc add-override --mcc <MCC> --mnc <MNC> --country-code <CC> --network <NAME> --country <COUNTRY> [--iso <ISO>]
-./gateway-clients.sh mcc-mnc remove-override --mcc <MCC> --mnc <MNC>
+./publisher.sh gateway-clients mcc-mnc list [--country-code] [--network] [--iso]
+./publisher.sh gateway-clients mcc-mnc add-override --mcc <MCC> --mnc <MNC> --country-code <CC> --network <NAME> --country <COUNTRY> [--iso <ISO>]
+./publisher.sh gateway-clients mcc-mnc remove-override --mcc <MCC> --mnc <MNC>
 ```
 
 Commit override additions. They're general PLMN fixes useful to any deployment, not local state.

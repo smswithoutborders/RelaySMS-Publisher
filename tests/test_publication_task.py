@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import tasks.publication_task as publication_task
 from publisher.publications import (
     AdapterIntegrationError,
     OfflineTagInvalidError,
@@ -14,6 +13,7 @@ from publisher.publications import (
     PayloadNotSupportedError,
     ProtocolNotAllowedError,
 )
+from publisher.tasks import publication_task
 
 
 @contextmanager

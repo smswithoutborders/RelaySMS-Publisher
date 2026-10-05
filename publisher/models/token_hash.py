@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""TokenHash model and related functions."""
+"""Hashes of the tokens issued to clients, used to verify them."""
 
 import datetime
 import hashlib
@@ -17,8 +17,6 @@ if TYPE_CHECKING:
 
 
 class TokenHash(Base):
-    """TokenHash Model."""
-
     __tablename__ = "token_hashes"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -30,11 +28,11 @@ class TokenHash(Base):
     )
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(default=None)
 
-    token: Mapped[Token] = relationship("Token", back_populates="token_hash")
-    server_keys: Mapped[list[ServerEphemeralKey]] = relationship(
+    token: Mapped["Token"] = relationship("Token", back_populates="token_hash")
+    server_keys: Mapped[list["ServerEphemeralKey"]] = relationship(
         "ServerEphemeralKey", back_populates="token_hash", cascade="all, delete-orphan"
     )
-    client_keys: Mapped[list[ClientEphemeralKey]] = relationship(
+    client_keys: Mapped[list["ClientEphemeralKey"]] = relationship(
         "ClientEphemeralKey", back_populates="token_hash", cascade="all, delete-orphan"
     )
 
@@ -52,7 +50,7 @@ class TokenHash(Base):
 
 
 def create(session: Session, token_pk_id: int) -> tuple[TokenHash, bytes]:
-    """Create a new token hash."""
+    """Create a token hash; return it with the raw token, which isn't stored."""
     raw_token = secrets.token_bytes(32)
     token_hash_bytes = hashlib.sha256(raw_token).digest()
 
@@ -63,7 +61,6 @@ def create(session: Session, token_pk_id: int) -> tuple[TokenHash, bytes]:
 
 
 def update_last_used(session: Session, token_hash: TokenHash) -> None:
-    """Update the last used timestamp for a token hash."""
     token_hash.last_used_at = utc_now()
     session.add(token_hash)
     session.flush()

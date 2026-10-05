@@ -107,6 +107,8 @@ port_is_free() {
 # Mirrors install.sh's own copy, which can't source this file (must also
 # run standalone via curl | sudo bash). Read by the scripts that source this one.
 # shellcheck disable=SC2034
+UNIT_TEMPLATE_DIR="deploy/systemd"
+# shellcheck disable=SC2034
 TARGET_UNIT_TEMPLATE="relaysms-publisher.target"
 # shellcheck disable=SC2034
 SERVICE_UNIT_TEMPLATES=(
@@ -125,6 +127,33 @@ unit_name_for() {
   else
     echo "$template" | sed -E "s/^relaysms-publisher/relaysms-publisher-$INSTANCE_NAME/"
   fi
+}
+
+# Renders every unit template into /etc/systemd/system, the same way install.sh
+# does. Expects INSTALL_DIR and INSTANCE_NAME to already be set by the caller.
+render_units() {
+  local unit_user="$1" rw_paths="$2"
+  local instance_sed_args=()
+  if [ -n "${INSTANCE_NAME:-}" ]; then
+    instance_sed_args+=(-e "s/relaysms-publisher\.target/$(unit_name_for "$TARGET_UNIT_TEMPLATE")/g")
+    local svc_name
+    for svc_name in rest grpc worker beat smtp; do
+      instance_sed_args+=(
+        -e "s/relaysms-publisher-$svc_name\.service/relaysms-publisher-$INSTANCE_NAME-$svc_name.service/g"
+        -e "s/relaysms-publisher-$svc_name\$/relaysms-publisher-$INSTANCE_NAME-$svc_name/g"
+      )
+    done
+  fi
+
+  local template
+  for template in "$TARGET_UNIT_TEMPLATE" "${SERVICE_UNIT_TEMPLATES[@]}"; do
+    sed \
+      -e "s/User=relaysms/User=$unit_user/" \
+      -e "s#/opt/relaysms/relaysms-publisher#$INSTALL_DIR#g" \
+      -e "s#__RW_PATHS__#$rw_paths#" \
+      "${instance_sed_args[@]}" \
+      "$INSTALL_DIR/$UNIT_TEMPLATE_DIR/$template" >"/etc/systemd/system/$(unit_name_for "$template")"
+  done
 }
 
 # Expects INSTALL_DIR to already be set by the caller.

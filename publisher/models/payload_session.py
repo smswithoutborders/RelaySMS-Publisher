@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Payload session model and related functions."""
+"""Multi-part payloads waiting for all their segments."""
 
 import datetime
 from typing import TYPE_CHECKING
@@ -25,7 +25,7 @@ class PayloadSession(Base):
         default=utc_now, onupdate=utc_now
     )
 
-    segments: Mapped[list[PayloadSegment]] = relationship(
+    segments: Mapped[list["PayloadSegment"]] = relationship(
         "PayloadSegment", back_populates="session", cascade="all, delete-orphan"
     )
 
@@ -37,7 +37,6 @@ class PayloadSession(Base):
 
 
 def create(session: Session, sender_id: str, session_id: int) -> PayloadSession:
-    """Create and persist a new payload session."""
     payload_session = PayloadSession(sender_id=sender_id, session_id=session_id)
     session.add(payload_session)
     session.flush()
@@ -47,7 +46,6 @@ def create(session: Session, sender_id: str, session_id: int) -> PayloadSession:
 def get_by_sender_and_session(
     session: Session, sender_id: str, session_id: int
 ) -> PayloadSession | None:
-    """Retrieve a payload session by sender_id and session_id."""
     return session.scalar(
         select(PayloadSession).filter_by(sender_id=sender_id, session_id=session_id)
     )

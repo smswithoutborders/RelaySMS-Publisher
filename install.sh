@@ -19,7 +19,7 @@ REPO_URL="https://github.com/smswithoutborders/RelaySMS-Publisher.git"
 BRANCH="${BRANCH:-main}"
 CARGO_BIN="$HOME/.cargo/bin"
 DEPS_MARKER="/var/lib/relaysms-publisher-deps-installed"
-NGINX_CONF_TEMPLATE="relaysms-publisher-nginx.conf.template"
+NGINX_CONF_TEMPLATE="deploy/nginx/relaysms-publisher-nginx.conf.template"
 SITE_NAME="${SITE_NAME:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 SKIP_NGINX="${SKIP_NGINX:-0}"
@@ -54,6 +54,7 @@ OBSERVABILITY_SITE_NAME="${OBSERVABILITY_SITE_NAME:-}"
 OBSERVABILITY_KUMA_SITE_NAME="${OBSERVABILITY_KUMA_SITE_NAME:-}"
 OBSERVABILITY_LETSENCRYPT_EMAIL="${OBSERVABILITY_LETSENCRYPT_EMAIL:-}"
 
+UNIT_TEMPLATE_DIR="deploy/systemd"
 TARGET_UNIT_TEMPLATE="relaysms-publisher.target"
 SERVICE_UNIT_TEMPLATES=(
   relaysms-publisher-rest.service
@@ -662,7 +663,7 @@ create_app_directories() {
 run_config_check() {
   log "Checking configuration"
   # config reads .env itself the same way systemd does, so it is not sourced here.
-  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher.config)
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
 }
 
 run_migrations() {
@@ -699,7 +700,7 @@ install_services() {
 
   local template dest
   for template in "${ALL_UNIT_TEMPLATES[@]}"; do
-    [ -f "$template" ] || error "Service file not found: $template"
+    [ -f "$UNIT_TEMPLATE_DIR/$template" ] || error "Service file not found: $UNIT_TEMPLATE_DIR/$template"
     dest=$(unit_name_for "$template")
     # rw_paths/INSTALL_DIR are absolute paths, so / can't be the sed delimiter.
     sed \
@@ -707,7 +708,7 @@ install_services() {
       -e "s#/opt/relaysms/relaysms-publisher#$INSTALL_DIR#g" \
       -e "s#__RW_PATHS__#$rw_paths#" \
       "${instance_sed_args[@]}" \
-      "$template" >"/etc/systemd/system/$dest"
+      "$UNIT_TEMPLATE_DIR/$template" >"/etc/systemd/system/$dest"
   done
 
   systemctl daemon-reload
@@ -1031,9 +1032,7 @@ main() {
   log "Installation complete"
   log "  Config : $INSTALL_DIR/.env"
   log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|check|update|nginx}"
-  log "  Platforms : $INSTALL_DIR/platforms.sh {add|remove|update|list|recover|env|shell}"
-  log "  Gateway Clients : $INSTALL_DIR/gateway-clients.sh {create|list|update|delete|env|shell}"
-  log "  Credentials : $INSTALL_DIR/creds.sh {scopes|create|list|set-scopes|reset-password|disable|enable|delete|revoke-sessions|env|shell}"
+  log "  CLI    : $INSTALL_DIR/publisher.sh {creds|platforms|gateway-clients|config} ... (or env|shell)"
 }
 
 main "$@"

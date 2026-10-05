@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 import pytest
 from imap_tools import MailMessage
 
-import smtp_listener
 from publisher.publications import PayloadMalformedError
+from publisher.smtp import listener as smtp_listener
 
 _next_uid = iter(range(1, 10000))
 

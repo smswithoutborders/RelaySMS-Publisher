@@ -6,8 +6,8 @@ import pytest
 from argon2 import PasswordHasher
 from click.testing import CliRunner
 
-import creds.cli as creds_cli
 from publisher import credentials
+from publisher.cli import creds as creds_cli
 from publisher.credentials import CredentialPermissionError, check_can_manage
 from publisher.db import get_session
 from publisher.models.credential import ALL_SCOPES, CredentialScope, Scope

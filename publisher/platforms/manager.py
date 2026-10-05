@@ -93,7 +93,7 @@ def _is_safe_path(base_folder: Path, target_path: Path) -> bool:
             base_folder.resolve() in target_path.resolve().parents
             or base_folder.resolve() == target_path.resolve()
         )
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return False
 
 

@@ -47,7 +47,7 @@ python -m grpc_tools.protoc -I protos/v3 --python_out=. --grpc_python_out=. prot
 ```bash
 GRPC_PORT=<your_port> \
 GRPC_HOST=<your_host> \
-python3 grpc_server.py
+python3 -m publisher.api.grpc
 ```
 
 ---

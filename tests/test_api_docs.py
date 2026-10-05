@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
+from publisher.api.rest import app as app_module
 
 
 @pytest.mark.parametrize("url", ["/docs", "/redoc", "/openapi.json"])

@@ -184,7 +184,6 @@ class GatewayClientManager:
         operator_code: str | None = None,
         protocols: list[str] | None = None,
     ) -> GatewayClientManifest:
-        """Update an existing gateway client's fields."""
         registry = self._load_registry()
         manifest = registry.get(msisdn)
         if not manifest:
@@ -203,7 +202,6 @@ class GatewayClientManager:
         return updated
 
     def delete_client(self, msisdn: str):
-        """Remove a gateway client from the registry."""
         registry = self._load_registry()
         if msisdn not in registry:
             raise ValueError(f"No gateway client found with MSISDN: {msisdn}")
@@ -213,12 +211,10 @@ class GatewayClientManager:
         logger.info("Removed gateway client: %s", msisdn)
 
     def list_countries(self) -> list[str]:
-        """Return all unique countries present in the registry."""
         registry = self._load_registry()
         return sorted({manifest.country for manifest in registry.values()})
 
     def list_operators(self, country: str) -> list[str]:
-        """Return all unique operators for a given country."""
         registry = self._load_registry()
         c_term = country.strip().lower()
         return sorted(

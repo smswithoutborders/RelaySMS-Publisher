@@ -460,7 +460,7 @@ A credential can only grant scopes it holds, can't change itself, and can't chan
 
 ## Authentication
 
-Credentials and their scopes are managed with [`./creds.sh`](../README.md#credentials).
+Credentials and their scopes are managed with [`./publisher.sh creds`](../README.md#credentials).
 
 * **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after 30 minutes idle or 12 hours.
 * **HTTP Basic:** username and password on every request, e.g. `curl -u analyst:<password> .../v1/stats/publications`. HTTPS only.

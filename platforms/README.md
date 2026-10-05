@@ -7,14 +7,14 @@ This module handles the discovery, management, and installation of platform adap
 Adapter files and the registry are stored under paths configurable in `.env`:
 
 ```bash
-PLATFORMS_ADAPTERS_DIR=platforms/adapters
-PLATFORMS_ADAPTERS_VENV_DIR=platforms/adapters_venv
-PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets
-PLATFORMS_REGISTRY_FILE=platforms/registry.json
+PLATFORMS_ADAPTERS_DIR=data/platforms/adapters
+PLATFORMS_ADAPTERS_VENV_DIR=data/platforms/venvs
+PLATFORMS_ADAPTERS_ASSETS_DIR=data/platforms/assets
+PLATFORMS_REGISTRY_FILE=data/platforms/registry.json
 ```
 
 > [!IMPORTANT]
-> Use `./platforms.sh` (from the install directory) instead of calling `python3 -m platforms.cli` directly. It automatically resolves the install directory, loads `.env`, and runs as the correct **service user** (the account systemd runs `relaysms-publisher-*` as), whether invoked directly as that user or via `sudo`. Calling the CLI module directly as the wrong user can leave the registry file or adapter directories owned incorrectly, causing the running services to fail to read/write them.
+> Use `./publisher.sh platforms` (from the install directory) instead of calling `python3 -m publisher platforms` directly. It automatically resolves the install directory, loads `.env`, and runs as the correct **service user** (the account systemd runs `relaysms-publisher-*` as), whether invoked directly as that user or via `sudo`. Calling the CLI module directly as the wrong user can leave the registry file or adapter directories owned incorrectly, causing the running services to fail to read/write them.
 
 ## Adding Adapters from GitHub
 
@@ -25,7 +25,7 @@ You can add adapters directly from a GitHub repository using the CLI.
 1. Run the following command from the project root:
 
 ```bash
-./platforms.sh add <GITHUB_URL>
+./publisher.sh platforms add <GITHUB_URL>
 ```
 
 Replace `<GITHUB_URL>` with the URL of the GitHub repository containing the adapter.
@@ -33,7 +33,7 @@ Replace `<GITHUB_URL>` with the URL of the GitHub repository containing the adap
 ### Example
 
 ```bash
-./platforms.sh add https://github.com/example/adapter-repo.git
+./publisher.sh platforms add https://github.com/example/adapter-repo.git
 ```
 
 This will clone the repository, register the adapter, and make it available for use.
@@ -47,7 +47,7 @@ You can remove an adapter by its name using the CLI.
 1. Run the following command from the project root:
 
 ```bash
-./platforms.sh remove <ADAPTER_NAME>
+./publisher.sh platforms remove <ADAPTER_NAME>
 ```
 
 Replace `<ADAPTER_NAME>` with the name of the adapter you want to remove.
@@ -55,7 +55,7 @@ Replace `<ADAPTER_NAME>` with the name of the adapter you want to remove.
 ### Example
 
 ```bash
-./platforms.sh remove example-adapter
+./publisher.sh platforms remove example-adapter
 ```
 
 This will unregister the adapter and remove it from the system.
@@ -69,7 +69,7 @@ You can update adapters by pulling the latest changes from their Git repositorie
 1. Run the following command from the project root:
 
 ```bash
-./platforms.sh update [ADAPTER_NAME] [--install]
+./publisher.sh platforms update [ADAPTER_NAME] [--install]
 ```
 
 - Replace `[ADAPTER_NAME]` with the name of the adapter you want to update. If omitted, all adapters will be updated.
@@ -80,13 +80,13 @@ You can update adapters by pulling the latest changes from their Git repositorie
 Update a specific adapter:
 
 ```bash
-./platforms.sh update example-adapter
+./publisher.sh platforms update example-adapter
 ```
 
 Update all adapters and reinstall dependencies:
 
 ```bash
-./platforms.sh update --install
+./publisher.sh platforms update --install
 ```
 
 This will pull the latest changes for the specified adapter(s) and optionally reinstall dependencies.
@@ -100,7 +100,7 @@ Some adapters ship their own `cli.py` for admin tasks that aren't part of the ru
 1. Run the following command from the project root:
 
 ```bash
-./platforms.sh exec <ADAPTER_NAME> [--proto-id ID] [--cat-id ID] -- <ARGS...>
+./publisher.sh platforms exec <ADAPTER_NAME> [--proto-id ID] [--cat-id ID] -- <ARGS...>
 ```
 
 - Replace `<ADAPTER_NAME>` with the name of the adapter.
@@ -111,7 +111,7 @@ Some adapters ship their own `cli.py` for admin tasks that aren't part of the ru
 ### Example
 
 ```bash
-./platforms.sh exec mastodon -- register -i
+./publisher.sh platforms exec mastodon -- register -i
 ```
 
 This runs the `mastodon` adapter's `cli.py` inside its own virtualenv with `register -i` as its arguments.

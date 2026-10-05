@@ -71,7 +71,7 @@ class Credential(Base):
     # Bumping this ends every session of the credential.
     session_version: Mapped[int] = mapped_column(default=1)
 
-    sessions: Mapped[list[CredentialSession]] = relationship(
+    sessions: Mapped[list["CredentialSession"]] = relationship(
         "CredentialSession", back_populates="credential", cascade="all, delete-orphan"
     )
     scope_rows: Mapped[list[CredentialScope]] = relationship(

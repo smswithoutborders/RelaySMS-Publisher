@@ -8,10 +8,10 @@ from argon2 import PasswordHasher
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import app as app_module
 import publisher.models  # noqa: F401  (registers every table on Base.metadata)
-import rest_services.v1.routes as routes
 from publisher import credentials, db
+from publisher.api.rest import app as app_module
+from publisher.api.rest.v1 import routes
 from publisher.db import Base
 from publisher.models.credential import ALL_SCOPES, Scope
 

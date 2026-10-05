@@ -16,12 +16,16 @@ jobs:
     permissions:
       contents: read
 
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.14"]
+
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.14"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       # Dry run so conflicts fail the PR without needing the native build deps.

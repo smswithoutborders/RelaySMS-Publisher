@@ -13,20 +13,20 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from sqlalchemy import func, select
 
 import publisher.models  # noqa: F401  (registers every table on Base.metadata)
-import tests.utils as client_utils
-from grpc_server import V3_SERVICE, interceptors
-from grpc_services.interceptors import V1AuthInterceptor
-from grpc_services.v3 import revoke_oauth2_token
-from grpc_services.v3.servicer import PublisherServicerV3
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from protos.v3 import publisher_pb2, publisher_pb2_grpc
 from publisher import db, keys
+from publisher.api.grpc.interceptors import V1AuthInterceptor
+from publisher.api.grpc.server import V3_SERVICE, interceptors
+from publisher.api.grpc.v3 import revoke_oauth2_token
+from publisher.api.grpc.v3.servicer import PublisherServicerV3
 from publisher.db import Base, get_session
 from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.server_identity_key import get_public_key
 from publisher.models.token import Token
 from publisher.platforms import ipc
 from publisher.platforms.manager import PlatformManifest
+from tools import client_helpers
 
 OAUTH2_ADAPTER = PlatformManifest(
     id="gmail-adapter",
@@ -75,7 +75,7 @@ def server_keys(monkeypatch):
         keys.initialize_server_identity_keys(s)
     # The client helpers fetch server public keys over REST; read them from the db.
     monkeypatch.setattr(
-        client_utils,
+        client_helpers,
         "fetch_server_identity_public_key",
         lambda _url, key_id: _public_key(key_id),
     )
@@ -124,7 +124,7 @@ def stub():
 
 
 def signed_metadata(method, payload=None):
-    _, _, metadata = client_utils.build_v1_request_metadata(
+    _, _, metadata = client_helpers.build_v1_request_metadata(
         rest_api="", method_name=f"/publisher.v3.Publisher/{method}", payload=payload
     )
     return metadata
@@ -163,7 +163,7 @@ def decrypt_token(response, keypairs):
     key_id = response.key_id
     return rrs.v1_token_decrypt_client(
         ec_kid=keypairs[key_id].private_bytes_raw(),
-        ss_kid_pk=client_utils.fetch_server_identity_public_key("", key_id),
+        ss_kid_pk=client_helpers.fetch_server_identity_public_key("", key_id),
         es_kid_pk=server_public_key(response, key_id),
         key_id=key_id,
         received_payload=response.token_ciphertext,
@@ -175,7 +175,7 @@ def encrypt_token(response, keypairs, token):
     key_id = 1 if response.key_id != 1 else 2
     ciphertext = rrs.v1_token_encrypt_client(
         ec_kid=keypairs[key_id].private_bytes_raw(),
-        ss_kid_pk=client_utils.fetch_server_identity_public_key("", key_id),
+        ss_kid_pk=client_helpers.fetch_server_identity_public_key("", key_id),
         es_kid_pk=server_public_key(response, key_id),
         key_id=key_id,
         token=token,

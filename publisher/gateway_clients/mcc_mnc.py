@@ -10,11 +10,13 @@ import os
 from functools import cache
 from pathlib import Path
 
-from publisher.config import ROOT
+from publisher.config import GatewayClientsConfig
 
 SNAPSHOT_FILE = Path(__file__).resolve().parent / "mcc_mnc_table.json"
-# Written by the CLI, so it lives with the other runtime data.
-OVERRIDES_FILE = ROOT / "gateway_clients" / "mcc_mnc_overrides.json"
+# Written by the CLI, so it lives next to the gateway client registry.
+OVERRIDES_FILE = (
+    GatewayClientsConfig.get().registry_file.parent / "mcc_mnc_overrides.json"
+)
 
 _overrides_cache: list[dict] = []
 _overrides_mtime: float = 0.0
@@ -44,6 +46,7 @@ def _load_overrides() -> list[dict]:
 
 def _save_overrides(records: list[dict]):
     global _overrides_cache, _overrides_mtime
+    OVERRIDES_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(OVERRIDES_FILE, "w", encoding="utf-8") as f:
         json.dump(records, f, indent=2, sort_keys=True)
         f.write("\n")

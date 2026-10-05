@@ -2,14 +2,13 @@
 """Settings read from the environment and checked before they are used.
 
 Each module calls get on the section class it needs. A section is loaded and
-checked once per process. Run python -m publisher.config to check every section.
+checked once per process. Run python -m publisher config check to check every section.
 """
 
 import datetime
 import logging
 import os
 import re
-import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import cache
@@ -460,7 +459,7 @@ class PlatformsConfig(Section):
 
     @classmethod
     def load(cls, read: _Reader) -> Self:
-        base = ROOT / "platforms"
+        base = ROOT / "data" / "platforms"
         github_orgs = [org.lower() for org in read.get_list("PLATFORMS_GITHUB_ORGS")]
         for org in github_orgs:
             if not GITHUB_ORG_PATTERN.match(org):
@@ -468,10 +467,10 @@ class PlatformsConfig(Section):
         return cls(
             adapters_dir=read.get_path("PLATFORMS_ADAPTERS_DIR", base / "adapters"),
             adapters_venv_dir=read.get_path(
-                "PLATFORMS_ADAPTERS_VENV_DIR", base / "adapters_venv"
+                "PLATFORMS_ADAPTERS_VENV_DIR", base / "venvs"
             ),
             adapters_assets_dir=read.get_path(
-                "PLATFORMS_ADAPTERS_ASSETS_DIR", base / "adapters_assets"
+                "PLATFORMS_ADAPTERS_ASSETS_DIR", base / "assets"
             ),
             registry_file=read.get_path(
                 "PLATFORMS_REGISTRY_FILE", base / "registry.json"
@@ -489,7 +488,7 @@ class GatewayClientsConfig(Section):
         return cls(
             registry_file=read.get_path(
                 "GATEWAY_CLIENTS_REGISTRY_FILE",
-                ROOT / "gateway_clients" / "registry.json",
+                ROOT / "data" / "gateway_clients" / "registry.json",
             )
         )
 
@@ -541,17 +540,3 @@ def check(env: Mapping[str, str] | None = None) -> list[str]:
         except ConfigError as e:
             errors += e.errors
     return errors
-
-
-def main() -> int:
-    """Print every configuration error and return 1, or print OK and return 0."""
-    errors = check()
-    if errors:
-        print(ConfigError(errors), file=sys.stderr)
-        return 1
-    print("Configuration OK")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -191,12 +191,12 @@ def test_offline_shared_secret_must_be_a_key():
     assert offline.shared_secret == KEY
 
 
-def test_registry_paths_default_to_package_dirs():
+def test_registry_paths_default_to_data_dir():
     assert load(PlatformsConfig).registry_file == (
-        config.ROOT / "platforms" / "registry.json"
+        config.ROOT / "data" / "platforms" / "registry.json"
     )
     assert load(GatewayClientsConfig).registry_file == (
-        config.ROOT / "gateway_clients" / "registry.json"
+        config.ROOT / "data" / "gateway_clients" / "registry.json"
     )
 
 

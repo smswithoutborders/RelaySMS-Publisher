@@ -1,6 +1,6 @@
 # SMTP Transport
 
-Publishes RelaySMS payloads received by email. Incoming mails are picked up by polling a mailbox over IMAP (`smtp_listener.py`), authenticated, and queued for publication.
+Publishes RelaySMS payloads received by email. Incoming mails are picked up by polling a mailbox over IMAP (`publisher/smtp/listener.py`), authenticated, and queued for publication.
 
 ## Message Format
 
@@ -57,7 +57,7 @@ Set `SMTP_VERIFY_DKIM_INDEPENDENTLY=true` to additionally re-verify the DKIM sig
 ## Running
 
 ```sh
-python3 -u smtp_listener.py
+python3 -m publisher.smtp
 ```
 
 `scripts/run.sh` and the `relaysms-publisher-smtp.service` systemd unit also start it, conditionally on `SMTP_TRANSPORT_ENABLED`.

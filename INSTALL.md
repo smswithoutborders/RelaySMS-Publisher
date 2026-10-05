@@ -91,19 +91,13 @@ Edit `.env` (see [Configuration](#configuration) below).
 
 ### Application Directories
 
-Create the directories referenced in `.env` and assign ownership to the service user. Replace `$SERVICE_USER` with your username (or `relaysms` if you created that account). By default, the SQLite database, Celery broker/result/beat files all live under `data/` and the adapters live under `platforms/`:
+Create the directories referenced in `.env` and assign ownership to the service user. Replace `$SERVICE_USER` with your username (or `relaysms` if you created that account). By default, the SQLite database, Celery broker/result/beat files and the adapters with their registries all live under `data/`:
 
 ```bash
 SERVICE_USER=$(whoami)
 
-# SQLite database + Celery broker/result/beat schedule directory (default)
-sudo mkdir -p data
-sudo chown "$SERVICE_USER": data && sudo chmod 750 data
-
-# Platform adapter directories
-sudo mkdir -p platforms/adapters platforms/adapters_venv platforms/adapters_assets
-sudo chown "$SERVICE_USER": platforms/adapters platforms/adapters_venv platforms/adapters_assets
-sudo chmod 750 platforms/adapters platforms/adapters_venv platforms/adapters_assets
+sudo mkdir -p data/platforms/adapters data/platforms/venvs data/platforms/assets data/gateway_clients
+sudo chown -R "$SERVICE_USER": data && sudo chmod -R 750 data
 ```
 
 If you changed any of the following path variables in `.env`, create the parent directory of each instead, and see [Install Services](#install-services) below for how to keep the systemd sandbox in sync:
@@ -125,16 +119,14 @@ make migrate
 The provided service unit files use a `__RW_PATHS__` placeholder for `ReadWritePaths=` instead of a hardcoded path, since all the paths listed above can be changed in `.env`. Substitute it with the actual, resolved directories before installing (`install.sh` does this for you automatically):
 
 ```bash
-RW_PATHS="$(pwd)/data $(pwd)/platforms/adapters $(pwd)/platforms/adapters_venv $(pwd)/platforms/adapters_assets"
+RW_PATHS="$(pwd)/data"
 
-sudo sed \
-    -e "s/User=relaysms/User=$SERVICE_USER/" \
-    -e "s|__RW_PATHS__|$RW_PATHS|" \
-    -i relaysms-publisher-rest.service relaysms-publisher-grpc.service \
-       relaysms-publisher-worker.service relaysms-publisher-beat.service \
-       relaysms-publisher-smtp.service
-
-sudo cp relaysms-publisher.target relaysms-publisher-*.service /etc/systemd/system/
+for unit in deploy/systemd/*; do
+    sed -e "s/User=relaysms/User=$SERVICE_USER/" \
+        -e "s|/opt/relaysms/relaysms-publisher|$(pwd)|g" \
+        -e "s|__RW_PATHS__|$RW_PATHS|" \
+        "$unit" | sudo tee "/etc/systemd/system/$(basename "$unit")" >/dev/null
+done
 sudo systemctl daemon-reload
 sudo systemctl enable relaysms-publisher.target
 sudo systemctl start relaysms-publisher.target
@@ -145,7 +137,7 @@ sudo systemctl start relaysms-publisher.target
 
 ### Nginx Reverse Proxy (optional)
 
-`install.sh` can put the REST API and gRPC server behind nginx with a Let's Encrypt certificate, using [`relaysms-publisher-nginx.conf.template`](relaysms-publisher-nginx.conf.template). It proxies `/` to `PORT` (REST) and `/publisher.v3.Publisher` to `GRPC_PORT` (gRPC), both read from `.env`, over keepalive upstream connections with the security headers and gzip settings shown in the template.
+`install.sh` can put the REST API and gRPC server behind nginx with a Let's Encrypt certificate, using [`deploy/nginx/relaysms-publisher-nginx.conf.template`](deploy/nginx/relaysms-publisher-nginx.conf.template). It proxies `/` to `PORT` (REST) and `/publisher.v3.Publisher` to `GRPC_PORT` (gRPC), both read from `.env`, over keepalive upstream connections with the security headers and gzip settings shown in the template.
 
 When run interactively, `install.sh` prompts for whether to configure nginx and for the domain name. For unattended installs, pass flags instead:
 
@@ -173,7 +165,7 @@ sudo sed \
     -e "s/__SERVER_NAME__/publisher.example.com/g" \
     -e "s/__REST_PORT__/16000/g" \
     -e "s/__GRPC_PORT__/6000/g" \
-    relaysms-publisher-nginx.conf.template | sudo tee /etc/nginx/sites-available/publisher.example.com.conf >/dev/null
+    deploy/nginx/relaysms-publisher-nginx.conf.template | sudo tee /etc/nginx/sites-available/publisher.example.com.conf >/dev/null
 
 sudo ln -s /etc/nginx/sites-available/publisher.example.com.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
@@ -212,20 +204,20 @@ sudo certbot --nginx -d publisher.example.com --redirect
 
 `update` also validates `.env`. Services restart regardless, since each fails only on the settings it uses, but the command exits with an error if any setting is invalid.
 
-`nginx` re-renders the site from `relaysms-publisher-nginx.conf.template`, reattaches the Let's Encrypt certificate (or obtains one), enables HTTP/2 for gRPC and reloads nginx. Run it after an update that changes the template. It detects the installed domain, or takes one: `sudo ./manage.sh nginx publisher.example.com`. The previous file is kept as `<site>.conf.bak` and restored if the new config fails.
+`nginx` re-renders the site from `deploy/nginx/relaysms-publisher-nginx.conf.template`, reattaches the Let's Encrypt certificate (or obtains one), enables HTTP/2 for gRPC and reloads nginx. Run it after an update that changes the template. It detects the installed domain, or takes one: `sudo ./manage.sh nginx publisher.example.com`. The previous file is kept as `<site>.conf.bak` and restored if the new config fails.
 
 ## Managing Platform Adapters
 
-Use `platforms.sh` instead of calling `python3 -m platforms.cli` directly. It automatically resolves the install directory, loads `.env`, uses the project venv, and runs as the correct service user so adapter files and the registry never end up with mismatched ownership:
+Use `publisher.sh` instead of calling `python3 -m publisher` directly. It automatically resolves the install directory, loads `.env`, uses the project venv, and runs as the correct service user so adapter files and the registry never end up with mismatched ownership:
 
 ```bash
-./platforms.sh add <GITHUB_URL>          # Add an adapter
-./platforms.sh remove <NAME>             # Remove an adapter
-./platforms.sh update [NAME] [--install] # Update one or all adapters
-./platforms.sh list                      # List registered adapters
-./platforms.sh recover                   # Rebuild registry from disk
-./platforms.sh env                       # Show resolved paths and service user
-./platforms.sh shell                     # Open a shell as the service user with .env loaded
+./publisher.sh platforms add <GITHUB_URL>          # Add an adapter
+./publisher.sh platforms remove <NAME>             # Remove an adapter
+./publisher.sh platforms update [NAME] [--install] # Update one or all adapters
+./publisher.sh platforms list                      # List registered adapters
+./publisher.sh platforms recover                   # Rebuild registry from disk
+./publisher.sh env                                 # Show resolved paths and service user
+./publisher.sh shell                               # Open a shell as the service user with .env loaded
 ```
 
 See [Platforms Documentation](platforms/README.md) for details.
@@ -382,21 +374,20 @@ CELERY_BEAT_SCHEDULE_PATH=data/celerybeat-schedule
 ### Platform Adapters
 
 ```bash
-PLATFORMS_ADAPTERS_DIR=platforms/adapters
-PLATFORMS_ADAPTERS_VENV_DIR=platforms/adapters_venv
-PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets
-PLATFORMS_REGISTRY_FILE=platforms/registry.json
+PLATFORMS_ADAPTERS_DIR=data/platforms/adapters
+PLATFORMS_ADAPTERS_VENV_DIR=data/platforms/venvs
+PLATFORMS_ADAPTERS_ASSETS_DIR=data/platforms/assets
+PLATFORMS_REGISTRY_FILE=data/platforms/registry.json
 ```
 
 See [Platforms Documentation](platforms/README.md) and individual adapter READMEs for setup.
 
 > [!NOTE]
-> `PLATFORMS_REGISTRY_FILE` is written to by `platforms.cli add|remove|update` and read by the running services at startup. Always run `platforms.cli` as the service user (see [Platforms Documentation](platforms/README.md)) so the registry stays writable and readable across CLI runs and service restarts.
+> `PLATFORMS_REGISTRY_FILE` is written to by `publisher.sh platforms add|remove|update` and read by the running services at startup. Always run `publisher.sh platforms` as the service user (see [Platforms Documentation](platforms/README.md)) so the registry stays writable and readable across CLI runs and service restarts.
 
 | Path | Description |
 |---|---|
 | `/opt/relaysms/relaysms-publisher/` | Installation root |
 | `/opt/relaysms/relaysms-publisher/.env` | Configuration (root:relaysms, 640) |
-| `/opt/relaysms/relaysms-publisher/data/` | SQLite database, Celery broker/result/beat files (relaysms, 750) |
-| `/opt/relaysms/relaysms-publisher/platforms/` | Adapter data (relaysms, 750) |
+| `/opt/relaysms/relaysms-publisher/data/` | SQLite database, Celery files, adapters and registries (relaysms, 750) |
 | `/etc/systemd/system/relaysms-publisher*` | Service units |

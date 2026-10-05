@@ -17,6 +17,11 @@ jobs:
     permissions:
       contents: read
 
+    # The oldest supported Python (Ubuntu 24.04 LTS) and the one in the Docker image.
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.14"]
+
     steps:
       - uses: actions/checkout@v5
         with:
@@ -24,7 +29,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.14"
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: requirements*.txt
 
@@ -42,11 +47,13 @@ jobs:
         run: make build PYTHON=venv/bin/python
 
       - uses: actions/cache@v6
+        if: matrix.python-version == '3.14'
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Run hooks
+        if: matrix.python-version == '3.14'
         run: venv/bin/pre-commit run --all-files --show-diff-on-failure
 
       - name: Run tests

@@ -7,9 +7,7 @@ platforms/available/*
 *.sh
 !install.sh
 !manage.sh
-!platforms.sh
-!gateway-clients.sh
-!creds.sh
+!publisher.sh
 !sync-env.sh
 !docker-entrypoint.sh
 !scripts/*.sh

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Token model and related functions."""
+"""Platform tokens stored for each linked account."""
 
 import datetime
 import secrets
@@ -18,10 +18,7 @@ def _generate_uint32_token() -> int:
 
 
 class Token(Base):
-    """Token Model.
-
-    token_data: {"account_id": "...", "token": {...}}
-    """
+    """token_data is {"account_id": "...", "token": {...}}."""
 
     __tablename__ = "tokens"
 
@@ -49,7 +46,6 @@ def create(
     proto_id: int,
     token_data: dict[str, Any],
 ) -> Token:
-    """Create and persist a new token."""
     token = Token(
         platform=platform, cat_id=cat_id, proto_id=proto_id, token_data=token_data
     )
@@ -61,7 +57,6 @@ def create(
 def update_token_data(
     session: Session, token: Token, new_token_data: dict[str, Any]
 ) -> Token:
-    """Update the token_data of an existing token."""
     token.token_data = new_token_data
     session.flush()
     return token

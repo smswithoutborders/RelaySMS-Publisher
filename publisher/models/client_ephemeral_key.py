@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Client ephemeral key model and related functions."""
+"""Client public keys in a token's ephemeral key pool."""
 
 import datetime
 from typing import TYPE_CHECKING
@@ -15,8 +15,6 @@ if TYPE_CHECKING:
 
 
 class ClientEphemeralKey(Base):
-    """Client Ephemeral Key Model."""
-
     __tablename__ = "client_ephemeral_keys"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -32,7 +30,7 @@ class ClientEphemeralKey(Base):
     )
     used_at: Mapped[datetime.datetime | None] = mapped_column(default=None)
 
-    token_hash: Mapped[TokenHash] = relationship(
+    token_hash: Mapped["TokenHash"] = relationship(
         "TokenHash", back_populates="client_keys"
     )
 

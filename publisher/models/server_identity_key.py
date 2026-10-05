@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Server identity key model and related functions."""
+"""The server's long-term X25519 identity keys."""
 
 import base64
 import datetime
@@ -31,7 +31,7 @@ class ServerIdentityKey(Base):
 
 
 def get_public_keys(session: Session) -> list[dict[str, Any]]:
-    """Get all public keys for API responses."""
+    """All public keys, base64url-encoded for API responses."""
     keys = session.scalars(
         select(ServerIdentityKey).order_by(ServerIdentityKey.key_index)
     ).all()
@@ -45,7 +45,7 @@ def get_public_keys(session: Session) -> list[dict[str, Any]]:
 
 
 def get_public_key(session: Session, key_id: int) -> dict[str, Any]:
-    """Get a single public key for API response."""
+    """One public key, base64url-encoded for API responses."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
     key = session.scalar(

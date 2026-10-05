@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from twilio.request_validator import RequestValidator
 
-import rest_services.v1.publications as publications_routes
-import rest_services.v1.routes as routes
+from publisher.api.rest.v1 import publications as publications_routes
+from publisher.api.rest.v1 import routes
 from publisher.publications import PayloadMalformedError
 
 AUTH_TOKEN = "test-auth-token"

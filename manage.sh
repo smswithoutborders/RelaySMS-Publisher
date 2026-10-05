@@ -57,10 +57,23 @@ sync_app_directories() {
   done
 }
 
+# Re-renders the units from the templates, so updates pick up new ExecStart lines.
+# Keeps the installed User= and ReadWritePaths=.
+update_units() {
+  local installed service_user rw_paths
+  installed="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
+  [ -f "$installed" ] || error "No installed units found at $installed. Run install.sh first."
+  service_user="$(awk -F= '/^User=/ { print $2; exit }' "$installed")"
+  rw_paths="$(awk -F= '/^ReadWritePaths=/ { print $2; exit }' "$installed")"
+  [ -n "$service_user" ] && [ -n "$rw_paths" ] ||
+    error "Couldn't read User= and ReadWritePaths= from $installed"
+  render_units "$service_user" "$rw_paths"
+}
+
 run_migrations() {
   local service_user
   service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher.config"
+  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher config check"
 
   log "Running database migrations"
   (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m alembic upgrade head)
@@ -69,11 +82,11 @@ run_migrations() {
 run_config_check() {
   local service_user
   service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher.config"
+  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher config check"
 
   log "Checking configuration"
   # config reads .env itself the same way systemd does, so it is not sourced here.
-  (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m publisher.config)
+  (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m publisher config check)
 }
 
 cmd_check() {
@@ -223,11 +236,15 @@ EOF
 }
 
 cmd_update() {
-  local migrate=0
+  local migrate=0 pulled=0
   while [ $# -gt 0 ]; do
     case "$1" in
     -m | --migrate)
       migrate=1
+      shift
+      ;;
+    --pulled)
+      pulled=1
       shift
       ;;
     -h | --help)
@@ -242,14 +259,19 @@ cmd_update() {
   done
 
   check_sudo
-  local svc
-  for svc in "${SERVICE_UNITS[@]}"; do
-    systemctl stop "$svc"
-  done
-
   cd "$INSTALL_DIR"
-  git pull
-  git submodule update --init --recursive
+  local svc
+  if [ "$pulled" = "0" ]; then
+    for svc in "${SERVICE_UNITS[@]}"; do
+      systemctl stop "$svc"
+    done
+    git pull
+    git submodule update --init --recursive
+    # Finish with the manage.sh just pulled, so changed update steps apply now.
+    local args=(--pulled)
+    [ "$migrate" = "1" ] && args+=(--migrate)
+    exec "$INSTALL_DIR/manage.sh" update "${args[@]}"
+  fi
 
   venv/bin/pip install --quiet --upgrade pip
   venv/bin/pip install --quiet -r requirements.txt
@@ -261,7 +283,9 @@ cmd_update() {
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
   make build
 
+  "$INSTALL_DIR/scripts/migrate-runtime-data.sh"
   sync_app_directories
+  update_units
 
   # Each service fails only on the settings it uses, so restart all and report after.
   local config_ok=1
@@ -325,7 +349,7 @@ install_nginx_site() {
     -e "s/__SERVER_NAME__/$site/g" \
     -e "s/__REST_PORT__/${rest_port:-16000}/g" \
     -e "s/__GRPC_PORT__/${grpc_port:-6000}/g" \
-    "$INSTALL_DIR/relaysms-publisher-nginx.conf.template" >"$conf" || return 1
+    "$INSTALL_DIR/deploy/nginx/relaysms-publisher-nginx.conf.template" >"$conf" || return 1
   ln -sf "$conf" "/etc/nginx/sites-enabled/${site}.conf" || return 1
 
   # Re-adds the 443 block that re-rendering dropped.

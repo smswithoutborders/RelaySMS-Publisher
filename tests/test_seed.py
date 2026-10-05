@@ -4,8 +4,8 @@ import datetime
 
 from click.testing import CliRunner
 
-import seed
 from publisher import credentials
+from publisher.cli import seed
 from publisher.db import get_session
 from publisher.models.publication_stats import PublicationStats
 from tests.creds_fixtures import *  # noqa: F403

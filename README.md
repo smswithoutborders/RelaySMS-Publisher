@@ -16,7 +16,7 @@ Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS w
 
 ## Requirements
 
-- **Python:** >= 3.8.10
+- **Python:** >= 3.12
 - **Database:** SQLite, MySQL (>= 8.0.28) / MariaDB, or PostgreSQL (>= 12)
 
 **Ubuntu Dependencies:**
@@ -81,14 +81,16 @@ make build
 make migrate
 
 # Start gRPC, REST API, Celery worker, and Celery beat together
-./scripts/run.sh
+make run
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for code conventions.
 
 Seed random data:
 
 ```bash
-python3 -m seed stats --count 5000 --days 90   # publication stats
-python3 -m seed creds --count 5                # non-administrator credentials, prints passwords
+python3 -m publisher seed stats --count 5000 --days 90   # publication stats
+python3 -m publisher seed creds --count 5                # non-administrator credentials, prints passwords
 ```
 
 ### Docker
@@ -113,8 +115,6 @@ docker run -d \
   -p 16000:16000 \
   -p 6000:6000 \
   -v $(pwd)/data:/publisher/data \
-  -v $(pwd)/platforms:/publisher/platforms \
-  -v $(pwd)/gateway_clients:/publisher/gateway_clients \
   relaysms-publisher:latest
 ```
 
@@ -167,9 +167,9 @@ Whole-database encryption (`DATABASE_ENCRYPTION_ENABLED`) is SQLCipher for SQLit
 ### Adapters
 
 ```bash
-PLATFORMS_ADAPTERS_DIR=platforms/adapters
-PLATFORMS_ADAPTERS_VENV_DIR=platforms/adapters_venv
-PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets
+PLATFORMS_ADAPTERS_DIR=data/platforms/adapters
+PLATFORMS_ADAPTERS_VENV_DIR=data/platforms/venvs
+PLATFORMS_ADAPTERS_ASSETS_DIR=data/platforms/assets
 PLATFORMS_GITHUB_ORGS=                # Orgs administrators may install adapters from over the API
 ```
 
@@ -219,7 +219,7 @@ Supported platforms can be retrieved via the REST API: `/v1/platforms`.
 > Each adapter has its own configuration requirements. See:
 >
 > - [Platform Adapters Documentation](platforms/README.md)
-> - Individual adapter READMEs: `platforms/adapters/*/README.md`
+> - Individual adapter READMEs: `data/platforms/adapters/*/README.md`
 
 **Available adapters:**
 
@@ -242,16 +242,16 @@ Registered gateway clients can be retrieved via the REST API: `/v1/gateway-clien
 Logins for the REST API, each with scopes. One holding every scope is an administrator. Also manageable over the [REST API](docs/rest.md#15-list-credentials).
 
 ```bash
-./creds.sh scopes                                          # list scopes
-./creds.sh create --username ops --administrator           # prints the password once
-./creds.sh create --username analyst --scope stats:publications:read
-./creds.sh set-scopes --username analyst --scope stats:publications:read --scope stats:publications:reasons
-./creds.sh list
-./creds.sh reset-password --username analyst
-./creds.sh disable --username analyst
-./creds.sh enable --username analyst
-./creds.sh revoke-sessions --username analyst
-./creds.sh delete --username analyst
+./publisher.sh creds scopes                                          # list scopes
+./publisher.sh creds create --username ops --administrator           # prints the password once
+./publisher.sh creds create --username analyst --scope stats:publications:read
+./publisher.sh creds set-scopes --username analyst --scope stats:publications:read --scope stats:publications:reasons
+./publisher.sh creds list
+./publisher.sh creds reset-password --username analyst
+./publisher.sh creds disable --username analyst
+./publisher.sh creds enable --username analyst
+./publisher.sh creds revoke-sessions --username analyst
+./publisher.sh creds delete --username analyst
 ```
 
 ## Documentation
@@ -259,18 +259,21 @@ Logins for the REST API, each with scopes. One holding every scope is an adminis
 - [Installation Guide](INSTALL.md) - Detailed setup instructions
 - [gRPC API](docs/grpc.md) - gRPC interface documentation
 - [REST API](docs/rest.md) - REST API reference
+- [SMTP Transport](docs/smtp.md) - Publishing payloads sent by email
 - [Platform Adapters](platforms/README.md) - Extending functionality
 - [Gateway Clients](gateway_clients/README.md) - Managing the gateway client registry
 - [Observability](observability/README.md) - Tracing, metrics, logs, uptime monitoring
+- [Reference Client](tools/README.md) - Exercising the gRPC and REST flows by hand
+- [Contributing](CONTRIBUTING.md) - Setup and code conventions
 
 ## Testing
 
 ```bash
-python -m pytest                 # test suite, also run by the pre-push hook
-pre-commit run --all-files       # formatting, lint, types and shell checks
+make test     # test suite, also run by the pre-push hook
+make check    # formatting, lint, types and shell checks
 ```
 
-CI runs both on every pull request. For the manual gRPC/REST client, see [tests/README.md](tests/README.md).
+CI runs both on every pull request.
 
 ## License
 

@@ -24,4 +24,6 @@ jobs:
           envs: PATH
           script: |
             set -e
+            # Pull first so the update runs with the new manage.sh.
+            sudo git -C /opt/relaysms/relaysms-publisher pull --ff-only
             sudo /opt/relaysms/relaysms-publisher/manage.sh update

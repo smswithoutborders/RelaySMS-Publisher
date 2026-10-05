@@ -7,13 +7,13 @@ import pytest
 from sqlalchemy import select
 
 import publisher.models  # noqa: F401  registers all model classes on Base.metadata
-import tasks.cleanup_task as cleanup_task
 from publisher import db as db_module
 from publisher.models.client_ephemeral_key import ClientEphemeralKey
 from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.token import Token
 from publisher.models.token import create as create_token
 from publisher.models.token_hash import create as create_token_hash
+from publisher.tasks import cleanup_task
 
 DAY = datetime.timedelta(days=1)
 OAUTH2 = 0

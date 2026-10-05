@@ -1,0 +1,39 @@
+[Unit]
+Description=RelaySMS Publisher Celery Worker
+PartOf=relaysms-publisher.target
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=relaysms
+WorkingDirectory=/opt/relaysms/relaysms-publisher
+EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
+Environment=OTEL_SERVICE_NAME=relaysms-publisher-worker
+Environment=PATH=/opt/relaysms/relaysms-publisher/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/relaysms/relaysms-publisher/scripts/otel-wrap.sh /opt/relaysms/relaysms-publisher/venv/bin/celery \
+    -A publisher.tasks.celery_app:celery_app worker \
+    --loglevel=info \
+    --without-gossip \
+    --without-mingle \
+    --without-heartbeat
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=relaysms-publisher-worker
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+NoNewPrivileges=true
+ReadWritePaths=__RW_PATHS__
+
+[Install]
+WantedBy=relaysms-publisher.target

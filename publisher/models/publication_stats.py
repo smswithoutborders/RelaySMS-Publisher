@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Publication stats model and related functions."""
+"""Outcomes of publish attempts, with listing and summaries."""
 
 import base64
 import binascii
@@ -135,7 +135,7 @@ def decode_cursor(cursor: str) -> Cursor:
         created_at = as_utc(datetime.datetime.fromisoformat(data["t"]))
         row_id = data["i"]
         direction = data["d"]
-    except binascii.Error, UnicodeDecodeError, ValueError, KeyError, TypeError:
+    except (binascii.Error, UnicodeDecodeError, ValueError, KeyError, TypeError):
         raise InvalidCursorError("Invalid cursor.") from None
 
     if type(row_id) is not int or row_id < 1 or direction not in ("next", "prev"):

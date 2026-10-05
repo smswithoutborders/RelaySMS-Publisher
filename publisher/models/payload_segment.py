@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Payload segment model and related functions."""
+"""Segments of multi-part payloads, kept until the payload is complete."""
 
 import datetime
 import logging
@@ -31,7 +31,7 @@ class PayloadSegment(Base):
         default=utc_now, onupdate=utc_now
     )
 
-    session: Mapped[PayloadSession] = relationship(
+    session: Mapped["PayloadSession"] = relationship(
         "PayloadSession", back_populates="segments"
     )
 

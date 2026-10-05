@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""CredentialSession model and related functions."""
+"""Web sessions created by logging in with a credential."""
 
 import datetime
 import hashlib
@@ -60,7 +60,7 @@ class CredentialSession(Base):
     session_version: Mapped[int] = mapped_column()
     user_agent: Mapped[str | None] = mapped_column(String(255), default=None)
 
-    credential: Mapped[Credential] = relationship(
+    credential: Mapped["Credential"] = relationship(
         "Credential", back_populates="sessions"
     )
 
@@ -73,7 +73,7 @@ class CredentialSession(Base):
 
 def create(
     session: Session,
-    credential: Credential,
+    credential: "Credential",
     *,
     max_age: datetime.timedelta,
     user_agent: str | None = None,

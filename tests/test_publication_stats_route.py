@@ -4,6 +4,7 @@ import datetime
 
 import pytest
 
+from publisher.api.rest.v1.schemas import StatsGroupBy, StatsInterval
 from publisher.db import get_session
 from publisher.db.types import DATE_BUCKET_UNITS, utc_now
 from publisher.models.publication_stats import (
@@ -11,7 +12,6 @@ from publisher.models.publication_stats import (
     PublicationStats,
     encode_cursor,
 )
-from rest_services.v1.schemas import StatsGroupBy, StatsInterval
 from tests.creds_fixtures import *  # noqa: F403
 from tests.creds_fixtures import USERNAME, basic_auth, create_credential, login
 

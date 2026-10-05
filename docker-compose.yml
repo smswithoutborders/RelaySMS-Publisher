@@ -16,5 +16,3 @@ services:
       - "${GRPC_PORT:-6000}:${GRPC_PORT:-6000}"
     volumes:
       - ./data:/publisher/data
-      - ./platforms:/publisher/platforms
-      - ./gateway_clients:/publisher/gateway_clients

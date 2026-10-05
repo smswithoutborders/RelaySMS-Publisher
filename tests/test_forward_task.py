@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-import tasks.forward_task as forward_task
+from publisher.tasks import forward_task
 
 SAMPLE_PARAMS = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
 

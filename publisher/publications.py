@@ -99,7 +99,7 @@ def publish(
     protocol: str | None = None,
     tag: str | None = None,
 ) -> str | None:
-    """Processes incoming payload and publishes to target platform."""
+    """Publish a payload; return the platform, or None while segments are missing."""
     payload = _assemble(
         session,
         payload_raw=payload_raw,

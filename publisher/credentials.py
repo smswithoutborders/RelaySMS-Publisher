@@ -271,7 +271,7 @@ def authenticate(session: Session, username: str, password: str) -> Credential |
 
     try:
         password_hasher.verify(credential.password_hash, password)
-    except VerificationError, InvalidHashError:
+    except (VerificationError, InvalidHashError):
         return None
 
     if not credential.is_active:
