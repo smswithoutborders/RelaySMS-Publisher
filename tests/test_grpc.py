@@ -316,7 +316,10 @@ def test_other_services_skip_request_auth():
     interceptor = V1AuthInterceptor(services=[V3_SERVICE], nonce_ttl_seconds=60)
 
     result = interceptor.intercept(
-        lambda request, context: "served", None, None, "/grpc.health.v1.Health/Check"
+        lambda request, context: "served",
+        None,
+        MagicMock(),
+        "/grpc.health.v1.Health/Check",
     )
 
     assert result == "served"
@@ -449,7 +452,7 @@ def test_get_pnba_code(stub, adapter):
 
     assert response.success
     assert response.message == "Code sent"
-    expected = datetime.datetime(2026, 10, 1, 12, tzinfo=datetime.timezone.utc)
+    expected = datetime.datetime(2026, 10, 1, 12, tzinfo=datetime.UTC)
     assert response.expires_at == int(expected.timestamp())
 
 

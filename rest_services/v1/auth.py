@@ -2,7 +2,6 @@
 """Session cookie and HTTP Basic auth, scope checks, and the /auth endpoints."""
 
 from dataclasses import dataclass
-from typing import Optional
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -51,7 +50,7 @@ session_cookie = APIKeyCookie(
 @dataclass(frozen=True)
 class AuthContext:
     credential: Credential
-    session: Optional[CredentialSession] = None
+    session: CredentialSession | None = None
 
 
 def set_session_cookie(response: Response, raw_token: str) -> None:
@@ -90,7 +89,7 @@ def _basic_challenge(detail: str) -> HTTPException:
     )
 
 
-def _request_origin(request: Request) -> Optional[str]:
+def _request_origin(request: Request) -> str | None:
     origin = request.headers.get("Origin")
     if origin and origin != "null":
         return origin.rstrip("/")
@@ -115,8 +114,8 @@ def check_origin(request: Request) -> None:
 def authenticate_request(
     request: Request,
     response: Response,
-    basic: Optional[HTTPBasicCredentials] = Depends(basic_auth),
-    raw_token: Optional[str] = Depends(session_cookie),
+    basic: HTTPBasicCredentials | None = Depends(basic_auth),
+    raw_token: str | None = Depends(session_cookie),
     db: Session = Depends(get_db),
 ) -> AuthContext:
     response.headers["Cache-Control"] = PRIVATE_CACHE_CONTROL
@@ -167,7 +166,7 @@ def require_scopes(context: AuthContext, *scopes: str) -> None:
 
 
 def _current_credential(
-    credential: Credential, session: Optional[CredentialSession] = None
+    credential: Credential, session: CredentialSession | None = None
 ) -> CurrentCredential:
     return CurrentCredential(
         username=credential.username,

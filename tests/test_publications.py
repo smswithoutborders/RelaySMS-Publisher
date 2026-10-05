@@ -91,8 +91,10 @@ def test_protocol_allowlist_is_still_enforced_before_tag_check(set_config, servi
 def test_online_payload_bypasses_protocol_and_tag_checks(
     set_config, monkeypatch, service
 ):
-    """A token-based (online) payload must skip the offline-only allowlist/tag
-    checks entirely, even over https with a secret configured and no tag."""
+    """Skip the offline-only allowlist and tag checks for online payloads.
+
+    Holds even over https with a secret configured and no tag.
+    """
     set_config(
         publications,
         "offline_config",

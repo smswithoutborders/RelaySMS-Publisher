@@ -49,7 +49,7 @@ def _make_token(
     )
     token_hash, _ = create_token_hash(token.id, session)
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     token.created_at = now - created_days_ago * DAY
     if last_used_days_ago is not None:
         token_hash.last_used_at = now - last_used_days_ago * DAY
@@ -69,9 +69,7 @@ def test_cleanup_idle_tokens_deletes_only_idle_ones(_adapter_manager, caplog):
         fresh_token, _ = _make_token(
             session, platform="gmail", proto_id=OAUTH2, created_days_ago=0
         )
-        idle_token, _ = _make_token(
-            session, platform="gmail", proto_id=OAUTH2, created_days_ago=100
-        )
+        _make_token(session, platform="gmail", proto_id=OAUTH2, created_days_ago=100)
         active_token, _ = _make_token(
             session,
             platform="gmail",
@@ -79,7 +77,7 @@ def test_cleanup_idle_tokens_deletes_only_idle_ones(_adapter_manager, caplog):
             created_days_ago=100,
             last_used_days_ago=1,
         )
-        fresh_id, idle_id, active_id = fresh_token.id, idle_token.id, active_token.id
+        fresh_id, active_id = fresh_token.id, active_token.id
 
     cleanup_task.cleanup_idle_tokens()
 

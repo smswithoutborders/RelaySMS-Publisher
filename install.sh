@@ -551,15 +551,15 @@ clone_repository() {
   if [ -d "$INSTALL_DIR/.git" ]; then
     log "Repository exists, updating"
     cd "$INSTALL_DIR"
-    git -c url."https://github.com/".insteadOf="git@github.com:" fetch origin
+    git -c "url.https://github.com/.insteadOf=git@github.com:" fetch origin
     git checkout "$BRANCH"
-    git -c url."https://github.com/".insteadOf="git@github.com:" pull origin "$BRANCH"
+    git -c "url.https://github.com/.insteadOf=git@github.com:" pull origin "$BRANCH"
     log "Updating submodules"
     git submodule update --init --recursive
   else
     mkdir -p "$(dirname "$INSTALL_DIR")"
     log "Cloning with submodules"
-    git -c url."https://github.com/".insteadOf="git@github.com:" \
+    git -c "url.https://github.com/.insteadOf=git@github.com:" \
       clone --recurse-submodules -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
   fi
   # Git refuses to clone into a pre-existing non-empty dir, so this can't

@@ -12,10 +12,11 @@ from publications import PayloadMalformedError
 _next_uid = iter(range(1, 10000))
 
 
-def build_email(body: str, from_addr: str = "user@example.com") -> MailMessage:
-    """Build an imap_tools MailMessage (with a UID, as a real IMAP fetch
-    would produce) from raw RFC822 bytes, without needing a real IMAP
-    connection."""
+def build_email(body: str, from_addr: str | None = "user@example.com") -> MailMessage:
+    """Build an imap_tools MailMessage with a UID from raw RFC822 bytes.
+
+    Matches what a real IMAP fetch produces, without an IMAP connection.
+    """
     headers = []
     if from_addr is not None:
         headers.append(f"From: {from_addr}")
@@ -29,8 +30,7 @@ def build_email(body: str, from_addr: str = "user@example.com") -> MailMessage:
 
 @pytest.fixture(autouse=True)
 def _default_auth_allow(monkeypatch):
-    """By default, allow through the sender/auth checks so each test only
-    has to override what it's actually exercising."""
+    """Let the sender and auth checks pass, so tests override only what they test."""
     monkeypatch.setattr(smtp_listener.smtp_auth, "is_sender_allowed", lambda addr: True)
     monkeypatch.setattr(
         smtp_listener.smtp_auth, "evaluate", lambda msg, raw, addr: (True, "ok")

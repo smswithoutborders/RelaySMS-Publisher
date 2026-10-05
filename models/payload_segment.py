@@ -2,7 +2,7 @@
 """Payload segment model and related functions."""
 
 import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, LargeBinary, select
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 
 def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 class PayloadSegment(Base):
@@ -34,15 +34,15 @@ class PayloadSegment(Base):
         default=_utc_now, onupdate=_utc_now
     )
 
-    session: Mapped["PayloadSession"] = relationship(
+    session: Mapped[PayloadSession] = relationship(
         "PayloadSession", back_populates="segments"
     )
 
 
 def create_if_not_exists(
     session_id: int, data: bytes, session: Session
-) -> Optional[PayloadSegment]:
-    """Insert segment; silently returns None on duplicate without poisoning the session."""
+) -> PayloadSegment | None:
+    """Insert a segment; return None on a duplicate without poisoning the session."""
     try:
         with session.begin_nested():
             seg = PayloadSegment(session_id=session_id, data=data)
@@ -54,7 +54,7 @@ def create_if_not_exists(
         return None
 
 
-def get_all_data(session_id: int, session: Session) -> List[bytes]:
+def get_all_data(session_id: int, session: Session) -> list[bytes]:
     """Return all segment data bytes for a session as a flat list."""
     return list(
         session.scalars(

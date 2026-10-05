@@ -1,0 +1,53 @@
+name: Checks
+
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+  push:
+    branches:
+      - staging
+      - main
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsqlcipher-dev libmagic1
+
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Build protos and payload specs
+        run: make build-setup python=venv/bin/python
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run hooks
+        run: venv/bin/pre-commit run --all-files --show-diff-on-failure
+
+      - name: Run tests
+        run: venv/bin/python -m pytest

@@ -2,7 +2,6 @@
 
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import msgspec
 import phonenumbers
@@ -21,7 +20,7 @@ class GatewayClientManifest(msgspec.Struct, forbid_unknown_fields=False):
     country: str
     operator: str
     operator_code: str
-    protocols: List[str]
+    protocols: list[str]
 
 
 class GatewayClientManager:
@@ -29,10 +28,10 @@ class GatewayClientManager:
 
     def __init__(self, registry_file: Path | None = None):
         self.registry_file = registry_file or gateway_clients_config.registry_file
-        self._registry: Dict[str, GatewayClientManifest] = {}
+        self._registry: dict[str, GatewayClientManifest] = {}
         self._last_modified: float = 0.0
 
-    def _load_registry(self) -> Dict[str, GatewayClientManifest]:
+    def _load_registry(self) -> dict[str, GatewayClientManifest]:
         try:
             current_mtime = os.stat(self.registry_file).st_mtime
         except FileNotFoundError:
@@ -44,7 +43,7 @@ class GatewayClientManager:
         try:
             with open(self.registry_file, "rb") as f:
                 registry = msgspec.json.decode(
-                    f.read(), type=Dict[str, GatewayClientManifest]
+                    f.read(), type=dict[str, GatewayClientManifest]
                 )
             self._registry = registry
             self._last_modified = current_mtime
@@ -53,7 +52,7 @@ class GatewayClientManager:
             logger.error("Failed to read registry: %s", e)
             return self._registry
 
-    def _save_registry(self, data: Dict[str, GatewayClientManifest]):
+    def _save_registry(self, data: dict[str, GatewayClientManifest]):
         try:
             self.registry_file.parent.mkdir(parents=True, exist_ok=True)
             self.registry_file.write_bytes(msgspec.json.encode(data))
@@ -64,10 +63,11 @@ class GatewayClientManager:
 
     @staticmethod
     def resolve_operator_info(msisdn: str):
-        """Best-effort (country, operator, operator_code, candidates) for an
-        MSISDN. operator_code is only set when exactly one PLMN matches;
-        otherwise candidates lists the ambiguous options. Any field may be
-        None."""
+        """Best-effort (country, operator, operator_code, candidates) for an MSISDN.
+
+        operator_code is only set when exactly one PLMN matches; otherwise
+        candidates lists the ambiguous options. Any field may be None.
+        """
         try:
             number = phonenumbers.parse(msisdn, None)
         except phonenumbers.NumberParseException as e:
@@ -80,7 +80,7 @@ class GatewayClientManager:
         operator = carrier.name_for_number(number, "en") or None
 
         operator_code = None
-        candidates: List[str] = []
+        candidates: list[str] = []
         if operator:
             network = operator.split()[0].lower()
             matches = mcc_mnc.find_matches(
@@ -97,13 +97,15 @@ class GatewayClientManager:
     def create_client(
         self,
         msisdn: str,
-        protocols: List[str],
-        country: Optional[str] = None,
-        operator: Optional[str] = None,
-        operator_code: Optional[str] = None,
+        protocols: list[str],
+        country: str | None = None,
+        operator: str | None = None,
+        operator_code: str | None = None,
     ) -> GatewayClientManifest:
-        """Register a gateway client. country/operator/operator_code are
-        resolved from the MSISDN unless given explicitly."""
+        """Register a gateway client.
+
+        country/operator/operator_code are resolved from the MSISDN unless given.
+        """
         registry = self._load_registry()
         if msisdn in registry:
             raise ValueError(f"Gateway client '{msisdn}' is already registered.")
@@ -115,7 +117,7 @@ class GatewayClientManager:
         operator = operator or resolved_operator
         operator_code = operator_code or resolved_operator_code
 
-        if not all((country, operator, operator_code)):
+        if not (country and operator and operator_code):
             if candidates:
                 raise ValueError(
                     f"Multiple PLMNs match operator '{operator}': "
@@ -153,10 +155,10 @@ class GatewayClientManager:
 
     def list_clients(
         self,
-        msisdn: Optional[str] = None,
-        country: Optional[str] = None,
-        operator: Optional[str] = None,
-    ) -> List[GatewayClientManifest]:
+        msisdn: str | None = None,
+        country: str | None = None,
+        operator: str | None = None,
+    ) -> list[GatewayClientManifest]:
         """Return manifests matching any combination of optional filters."""
         registry = self._load_registry()
         if not registry:
@@ -177,10 +179,10 @@ class GatewayClientManager:
     def update_client(
         self,
         msisdn: str,
-        country: Optional[str] = None,
-        operator: Optional[str] = None,
-        operator_code: Optional[str] = None,
-        protocols: Optional[List[str]] = None,
+        country: str | None = None,
+        operator: str | None = None,
+        operator_code: str | None = None,
+        protocols: list[str] | None = None,
     ) -> GatewayClientManifest:
         """Update an existing gateway client's fields."""
         registry = self._load_registry()
@@ -210,12 +212,12 @@ class GatewayClientManager:
         self._save_registry(registry)
         logger.info("Removed gateway client: %s", msisdn)
 
-    def list_countries(self) -> List[str]:
+    def list_countries(self) -> list[str]:
         """Return all unique countries present in the registry."""
         registry = self._load_registry()
         return sorted({manifest.country for manifest in registry.values()})
 
-    def list_operators(self, country: str) -> List[str]:
+    def list_operators(self, country: str) -> list[str]:
         """Return all unique operators for a given country."""
         registry = self._load_registry()
         c_term = country.strip().lower()

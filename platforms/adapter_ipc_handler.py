@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import contextlib
 import json
 import logging
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from logutils import get_logger
 
@@ -16,7 +17,8 @@ logger = get_logger(__name__)
 # logutils.py). Parsing that back out lets us re-emit the line at its
 # real severity.
 _SUBPROCESS_LOG_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} - \S+ - (?P<level>[A-Z]+) - (?P<message>.*)$"
+    r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} - \S+ - "
+    r"(?P<level>[A-Z]+) - (?P<message>.*)$"
 )
 
 
@@ -34,13 +36,13 @@ def _relay_subprocess_line(adapter_name: str, line: str) -> None:
 
 
 class AdapterIPCHandler:
-    """Handles secure inter-process communication with adapter scripts via JSON pipes."""
+    """Inter-process communication with adapter scripts via JSON pipes."""
 
     @staticmethod
     def invoke(
-        adapter_path: str, venv_path: str, method: str, params: Optional[dict] = None
-    ) -> Dict[str, Any]:
-        """Invokes an adapter method securely using JSON payload piping over standard IO."""
+        adapter_path: str, venv_path: str, method: str, params: dict | None = None
+    ) -> dict[str, Any]:
+        """Invoke an adapter method, piping JSON over standard IO."""
         a_base = Path(adapter_path).resolve()
         v_base = Path(venv_path).resolve()
 
@@ -105,9 +107,7 @@ class AdapterIPCHandler:
 
         except Exception as e:
             if process:
-                try:
+                with contextlib.suppress(OSError):
                     process.kill()
-                except OSError:
-                    pass
             logger.error("Unexpected failure during IPC invocation: %s", e)
             raise

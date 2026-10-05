@@ -2,7 +2,7 @@
 """Client ephemeral key model and related functions."""
 
 import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Index, LargeBinary, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 class ClientEphemeralKey(Base):
@@ -33,9 +33,9 @@ class ClientEphemeralKey(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=_utc_now, onupdate=_utc_now
     )
-    used_at: Mapped[Optional[datetime.datetime]] = mapped_column(default=None)
+    used_at: Mapped[datetime.datetime | None] = mapped_column(default=None)
 
-    token_hash: Mapped["TokenHash"] = relationship(
+    token_hash: Mapped[TokenHash] = relationship(
         "TokenHash", back_populates="client_keys"
     )
 

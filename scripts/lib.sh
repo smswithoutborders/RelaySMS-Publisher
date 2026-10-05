@@ -105,8 +105,10 @@ port_is_free() {
 }
 
 # Mirrors install.sh's own copy, which can't source this file (must also
-# run standalone via curl | sudo bash).
+# run standalone via curl | sudo bash). Read by the scripts that source this one.
+# shellcheck disable=SC2034
 TARGET_UNIT_TEMPLATE="relaysms-publisher.target"
+# shellcheck disable=SC2034
 SERVICE_UNIT_TEMPLATES=(
   relaysms-publisher-rest.service
   relaysms-publisher-grpc.service
@@ -114,7 +116,6 @@ SERVICE_UNIT_TEMPLATES=(
   relaysms-publisher-beat.service
   relaysms-publisher-smtp.service
 )
-ALL_UNIT_TEMPLATES=("$TARGET_UNIT_TEMPLATE" "${SERVICE_UNIT_TEMPLATES[@]}")
 
 # Expects INSTANCE_NAME to already be set by the caller (empty is fine).
 unit_name_for() {
@@ -146,7 +147,8 @@ read_env_var() {
 # Prefers the installed unit's User=, then .env's owner, then whoever is
 # running the script. Expects ENV_FILE and INSTANCE_NAME to already be set.
 detect_service_user() {
-  local unit="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
+  local unit
+  unit="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
   if [ -f "$unit" ]; then
     grep -E "^User=" "$unit" | head -1 | cut -d= -f2 && return
   fi

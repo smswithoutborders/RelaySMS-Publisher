@@ -22,7 +22,8 @@ check_sudo() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
 # Reads the installed unit only. Prints nothing when the service isn't installed,
 # so callers can report it.
 detect_service_user() {
-  local unit="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
+  local unit
+  unit="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
   [ -f "$unit" ] || return 0
   awk -F= '/^User=/ { print $2; exit }' "$unit"
 }
@@ -349,8 +350,9 @@ cmd_nginx() {
     ;;
   esac
   check_sudo
-  command -v nginx &>/dev/null && command -v certbot &>/dev/null ||
+  if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
     error "nginx and certbot must be installed"
+  fi
 
   local site="${1:-}"
   [ -n "$site" ] || site=$(detect_nginx_site)

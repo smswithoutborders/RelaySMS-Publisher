@@ -16,7 +16,7 @@ from models.credential import (
     Scope,
     check_can_manage,
 )
-from tests.creds_fixtures import *  # noqa: F401,F403
+from tests.creds_fixtures import *  # noqa: F403
 from tests.creds_fixtures import USERNAME, can_log_in, create_credential
 
 

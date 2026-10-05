@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import email
+import email.message
 
 import pytest
 
@@ -8,8 +8,7 @@ import smtp_auth
 
 
 def make_message(auth_results=None, from_addr="user@example.com"):
-    """Build a minimal email.message.Message with optional
-    Authentication-Results headers."""
+    """Build a minimal email.message.Message with optional auth result headers."""
     msg = email.message.Message()
     if from_addr is not None:
         msg["From"] = from_addr

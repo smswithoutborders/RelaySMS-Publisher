@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import base64
+from collections.abc import Iterable
 
 import pytest
 from argon2 import PasswordHasher
@@ -13,7 +14,7 @@ import models  # noqa: F401  (registers every table on Base.metadata)
 import rest_services.v1.routes as routes
 from db import Base
 from models import credential as credentials
-from models.credential import ALL_SCOPES
+from models.credential import ALL_SCOPES, Scope
 
 USERNAME = "ops"
 
@@ -41,7 +42,9 @@ def fast_hasher(monkeypatch):
 
 @pytest.fixture
 def app():
-    test_app = FastAPI(exception_handlers=app_module.app.exception_handlers)
+    test_app = FastAPI()
+    for exc_class, handler in app_module.app.exception_handlers.items():
+        test_app.add_exception_handler(exc_class, handler)
     test_app.include_router(routes.router, prefix="/v1")
     return test_app
 
@@ -52,9 +55,11 @@ def client(app):
     return TestClient(app, base_url="https://testserver")
 
 
-def create_credential(username: str, scopes=ALL_SCOPES) -> str:
+def create_credential(username: str, scopes: Iterable[str] = ALL_SCOPES) -> str:
     with db.get_session() as session:
-        _, password = credentials.create(session, username, scopes)
+        _, password = credentials.create(
+            session, username, frozenset(Scope(s) for s in scopes)
+        )
     return password
 
 

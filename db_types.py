@@ -3,7 +3,7 @@
 
 import datetime
 import json
-from typing import Optional
+from typing import overload
 
 from sqlalchemy import DateTime, LargeBinary, Text, TypeDecorator, cast, func
 from sqlalchemy.exc import CompileError
@@ -21,16 +21,20 @@ DATE_BUCKET_UNITS = ("day", "week", "month", "year")
 
 
 def utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
-def as_utc(value: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
+@overload
+def as_utc(value: datetime.datetime) -> datetime.datetime: ...
+@overload
+def as_utc(value: None) -> None: ...
+def as_utc(value: datetime.datetime | None) -> datetime.datetime | None:
     """Naive values are assumed to be UTC."""
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=datetime.timezone.utc)
-    return value.astimezone(datetime.timezone.utc)
+        return value.replace(tzinfo=datetime.UTC)
+    return value.astimezone(datetime.UTC)
 
 
 class UTCDateTime(TypeDecorator):
@@ -46,13 +50,13 @@ class UTCDateTime(TypeDecorator):
         return as_utc(value)
 
 
-class date_bucket(FunctionElement):
+class date_bucket(FunctionElement):  # noqa: N801  (called like a SQL function)
     """Start of the day, week (Monday), month or year containing a datetime."""
 
     type = UTCDateTime()
     name = "date_bucket"
     inherit_cache = True
-    _traverse_internals = FunctionElement._traverse_internals + [
+    _traverse_internals = FunctionElement._traverse_internals + [  # noqa: RUF005
         ("unit", InternalTraversal.dp_string)
     ]
 

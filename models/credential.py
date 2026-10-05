@@ -1,17 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Credential model, scopes and related functions."""
 
+import contextlib
 import datetime
 import re
 import secrets
 import uuid
+from collections.abc import Iterable
 from enum import StrEnum
 from functools import lru_cache
-from typing import TYPE_CHECKING, Iterable, List, Optional
+from typing import TYPE_CHECKING, cast
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from sqlalchemy import ForeignKey, Index, String, Uuid, select
+from sqlalchemy import CursorResult, ForeignKey, Index, String, Uuid, select
 from sqlalchemy import update as sql_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
@@ -83,7 +85,7 @@ class Credential(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         UTCDateTime, default=utc_now, onupdate=utc_now
     )
-    last_login_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    last_login_at: Mapped[datetime.datetime | None] = mapped_column(
         UTCDateTime, default=None
     )
     # Bumped on every change to detect concurrent changes.
@@ -91,10 +93,10 @@ class Credential(Base):
     # Bumping this ends every session of the credential.
     session_version: Mapped[int] = mapped_column(default=1)
 
-    sessions: Mapped[List["CredentialSession"]] = relationship(
+    sessions: Mapped[list[CredentialSession]] = relationship(
         "CredentialSession", back_populates="credential", cascade="all, delete-orphan"
     )
-    scope_rows: Mapped[List[CredentialScope]] = relationship(
+    scope_rows: Mapped[list[CredentialScope]] = relationship(
         CredentialScope, cascade="all, delete-orphan", lazy="selectin"
     )
 
@@ -108,7 +110,7 @@ class Credential(Base):
 
     @property
     def is_administrator(self) -> bool:
-        return ALL_SCOPES <= self.scopes
+        return self.scopes >= ALL_SCOPES
 
 
 class CredentialExistsError(ValueError):
@@ -170,11 +172,16 @@ def _dummy_hash() -> str:
 
 def _claim(session: Session, credential: Credential) -> None:
     """Bump the version, failing if the credential changed since it was read."""
-    result = session.execute(
-        sql_update(Credential)
-        .where(Credential.id == credential.id, Credential.version == credential.version)
-        .values(version=Credential.version + 1)
-        .execution_options(synchronize_session=False)
+    result = cast(
+        CursorResult,
+        session.execute(
+            sql_update(Credential)
+            .where(
+                Credential.id == credential.id, Credential.version == credential.version
+            )
+            .values(version=Credential.version + 1)
+            .execution_options(synchronize_session=False)
+        ),
     )
     if result.rowcount != 1:
         raise CredentialConflictError(
@@ -196,8 +203,8 @@ def _end_sessions(session: Session, credential: Credential) -> int:
 
 def _authorize_change(
     session: Session,
-    actor: Optional[Credential],
-    target: Optional[Credential],
+    actor: Credential | None,
+    target: Credential | None,
     scopes: Iterable[Scope] = (),
 ) -> None:
     # No actor means the CLI, which is trusted.
@@ -209,7 +216,7 @@ def _authorize_change(
         _claim(session, target)
 
 
-def get_by_username(session: Session, username: str) -> Optional[Credential]:
+def get_by_username(session: Session, username: str) -> Credential | None:
     return session.scalars(
         select(Credential).filter_by(username=username.strip().lower())
     ).first()
@@ -222,13 +229,13 @@ def get_or_raise(session: Session, username: str) -> Credential:
     return credential
 
 
-def list_credentials(session: Session) -> List[Credential]:
+def list_credentials(session: Session) -> list[Credential]:
     return list(session.scalars(select(Credential).order_by(Credential.username)))
 
 
 def check_can_manage(
     actor: Credential,
-    target: Optional[Credential] = None,
+    target: Credential | None = None,
     scopes: Iterable[Scope] = (),
 ) -> None:
     """Check that actor may change target and grant scopes.
@@ -256,7 +263,7 @@ def create(
     session: Session,
     username: str,
     scopes: Iterable[str],
-    actor: Optional[Credential] = None,
+    actor: Credential | None = None,
 ) -> tuple[Credential, str]:
     username = _normalize_username(username)
     scopes = parse_scopes(scopes)
@@ -279,9 +286,9 @@ def update(
     session: Session,
     credential: Credential,
     *,
-    scopes: Optional[Iterable[str]] = None,
-    active: Optional[bool] = None,
-    actor: Optional[Credential] = None,
+    scopes: Iterable[str] | None = None,
+    active: bool | None = None,
+    actor: Credential | None = None,
 ) -> None:
     new_scopes = parse_scopes(scopes) if scopes is not None else None
     _authorize_change(session, actor, credential, new_scopes or ())
@@ -295,7 +302,7 @@ def update(
 
 
 def reset_password(
-    session: Session, credential: Credential, actor: Optional[Credential] = None
+    session: Session, credential: Credential, actor: Credential | None = None
 ) -> str:
     _authorize_change(session, actor, credential)
     password = _generate_password()
@@ -305,35 +312,31 @@ def reset_password(
 
 
 def revoke_sessions(
-    session: Session, credential: Credential, actor: Optional[Credential] = None
+    session: Session, credential: Credential, actor: Credential | None = None
 ) -> int:
     _authorize_change(session, actor, credential)
     return _end_sessions(session, credential)
 
 
 def delete(
-    session: Session, credential: Credential, actor: Optional[Credential] = None
+    session: Session, credential: Credential, actor: Credential | None = None
 ) -> None:
     _authorize_change(session, actor, credential)
     session.delete(credential)
     session.flush()
 
 
-def authenticate(
-    session: Session, username: str, password: str
-) -> Optional[Credential]:
+def authenticate(session: Session, username: str, password: str) -> Credential | None:
     credential = get_by_username(session, username)
     if credential is None:
         # Hash anyway so response timing doesn't reveal which usernames exist.
-        try:
+        with contextlib.suppress(VerificationError):
             password_hasher.verify(_dummy_hash(), password)
-        except VerificationError:
-            pass
         return None
 
     try:
         password_hasher.verify(credential.password_hash, password)
-    except (VerificationError, InvalidHashError):
+    except VerificationError, InvalidHashError:
         return None
 
     if not credential.is_active:

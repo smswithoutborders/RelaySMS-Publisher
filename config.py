@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self, overload
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
@@ -49,6 +49,10 @@ class _Reader:
     def fail(self, name: str, message: str) -> None:
         self.errors.append(f"{name}: {message}")
 
+    @overload
+    def get_str(self, name: str, default: str) -> str: ...
+    @overload
+    def get_str(self, name: str, default: None = None) -> str | None: ...
     def get_str(self, name: str, default: str | None = None) -> str | None:
         value = self.env.get(name, "").strip()
         # Drop one pair of surrounding quotes, since docker run --env-file keeps them.
@@ -113,6 +117,10 @@ class _Reader:
             return default
         return value
 
+    @overload
+    def get_key(self, name: str, required: Literal[True]) -> bytes: ...
+    @overload
+    def get_key(self, name: str, required: bool) -> bytes | None: ...
     def get_key(self, name: str, required: bool) -> bytes | None:
         raw = self.get_str(name)
         if raw is None:
@@ -195,9 +203,9 @@ class LoggingConfig(Section):
 class ServerDatabaseConfig:
     host: str
     port: int
-    user: str | None
-    password: str | None = field(repr=False)
-    database: str | None
+    user: str
+    password: str = field(repr=False)
+    database: str
 
     @property
     def complete(self) -> bool:
@@ -208,9 +216,9 @@ def _server_database(read: _Reader, prefix: str, port: int) -> ServerDatabaseCon
     return ServerDatabaseConfig(
         host=read.get_str(f"{prefix}_HOST", "localhost"),
         port=read.get_int(f"{prefix}_PORT", port, minimum=1),
-        user=read.get_str(f"{prefix}_USER"),
-        password=read.get_str(f"{prefix}_PASSWORD"),
-        database=read.get_str(f"{prefix}_DATABASE"),
+        user=read.get_str(f"{prefix}_USER", ""),
+        password=read.get_str(f"{prefix}_PASSWORD", ""),
+        database=read.get_str(f"{prefix}_DATABASE", ""),
     )
 
 

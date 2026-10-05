@@ -3,9 +3,9 @@
 
 import re
 from email.message import Message
-from typing import Optional
 
 import authres
+import authres.core
 import dkim
 
 from config import SmtpConfig
@@ -28,7 +28,7 @@ def is_sender_allowed(email_address: str) -> bool:
     return address in allowed or domain in allowed
 
 
-def _trusted_result(msg: Message) -> Optional[authres.AuthenticationResultsHeader]:
+def _trusted_result(msg: Message) -> authres.core.AuthenticationResultsHeader | None:
     """First Authentication-Results header matching SMTP_TRUSTED_AUTHSERV_ID, if any.
 
     Headers from any other (or missing) authserv-id are ignored, since a
@@ -71,7 +71,7 @@ def evaluate_authentication(msg: Message) -> tuple[bool, str]:
 
 
 def verify_dkim_independently(raw_bytes: bytes, from_email: str) -> tuple[bool, str]:
-    """Re-verify the DKIM signature against DNS, independent of the mailbox's own verdict."""
+    """Re-verify the DKIM signature against DNS, ignoring the mailbox's verdict."""
     try:
         d = dkim.DKIM(raw_bytes)
         verified = d.verify()

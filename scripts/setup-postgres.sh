@@ -3,6 +3,7 @@
 # Re-runnable: an existing install or database/role is left as-is.
 set -Eeuo pipefail
 
+# shellcheck source=scripts/lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"

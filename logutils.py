@@ -17,5 +17,5 @@ _LOG_FORMAT = (
 logging.basicConfig(level=LoggingConfig.get().log_level, format=_LOG_FORMAT)
 
 
-def get_logger(name: str = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     return logging.getLogger(name)

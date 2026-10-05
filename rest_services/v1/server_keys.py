@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-from typing import List
 
 from fastapi import APIRouter, HTTPException, Path
 
@@ -10,7 +9,7 @@ from rest_services.v1.schemas import ServerStaticPublicKey
 router = APIRouter(prefix="/server-keys", tags=["Server Keys"])
 
 
-@router.get("", response_model=List[ServerStaticPublicKey], summary="List server keys")
+@router.get("", response_model=list[ServerStaticPublicKey], summary="List server keys")
 def list_server_static_keys():
     return get_public_keys()
 

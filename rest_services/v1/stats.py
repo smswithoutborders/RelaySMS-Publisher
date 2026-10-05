@@ -2,7 +2,6 @@
 
 import dataclasses
 import datetime
-from typing import List, Optional
 
 from fastapi import (
     APIRouter,
@@ -23,6 +22,7 @@ from rest_services.v1.params import filter_query
 from rest_services.v1.schemas import (
     PublicationStatsPage,
     PublicationStatsSummary,
+    PublicationStatsSummaryGroup,
     StatsGroupBy,
     StatsInterval,
 )
@@ -33,15 +33,15 @@ STATS_SUMMARY_DEFAULT_WINDOW = datetime.timedelta(days=30)
 
 
 def stats_filters(
-    status: Optional[str] = filter_query(20, "Filter by status"),
-    platform_name: Optional[str] = filter_query(100, "Filter by platform name"),
-    protocol: Optional[str] = filter_query(20, "Filter by ingestion protocol"),
-    country_code: Optional[str] = filter_query(10, "Filter by ISO country code"),
-    since: Optional[datetime.datetime] = Query(
+    status: str | None = filter_query(20, "Filter by status"),
+    platform_name: str | None = filter_query(100, "Filter by platform name"),
+    protocol: str | None = filter_query(20, "Filter by ingestion protocol"),
+    country_code: str | None = filter_query(10, "Filter by ISO country code"),
+    since: datetime.datetime | None = Query(
         None,
         description="Created at or after (ISO-8601, UTC if no offset)",
     ),
-    until: Optional[datetime.datetime] = Query(
+    until: datetime.datetime | None = Query(
         None,
         description="Created before (ISO-8601, UTC if no offset)",
     ),
@@ -60,7 +60,7 @@ def stats_filters(
     )
 
 
-def _page_link(request: Request, cursor: Optional[str]) -> Optional[str]:
+def _page_link(request: Request, cursor: str | None) -> str | None:
     return str(request.url.include_query_params(cursor=cursor)) if cursor else None
 
 
@@ -72,7 +72,7 @@ def list_publication_stats(
     context: AuthContext = Security(authorize, scopes=[Scope.STATS_PUBLICATIONS_READ]),
     filters: publication_stats.StatsFilters = Depends(stats_filters),
     limit: int = Query(50, ge=1, le=200, description="Page size"),
-    cursor: Optional[str] = Query(
+    cursor: str | None = Query(
         None, max_length=512, description="Set by the next and prev links"
     ),
     db: Session = Depends(get_db),
@@ -104,11 +104,11 @@ def list_publication_stats(
 def summarize_publication_stats(
     context: AuthContext = Security(authorize, scopes=[Scope.STATS_PUBLICATIONS_READ]),
     filters: publication_stats.StatsFilters = Depends(stats_filters),
-    group_by: List[StatsGroupBy] = Query(
+    group_by: list[StatsGroupBy] = Query(
         [StatsGroupBy.status],
         description="Columns to group by. Repeatable.",
     ),
-    interval: Optional[StatsInterval] = Query(
+    interval: StatsInterval | None = Query(
         None, description="Also group by period start, in UTC. Weeks start Monday."
     ),
     db: Session = Depends(get_db),
@@ -132,7 +132,7 @@ def summarize_publication_stats(
     return PublicationStatsSummary(
         since=since,
         until=until,
-        interval=unit,
+        interval=interval,
         total=sum(group["count"] for group in groups),
-        groups=groups,
+        groups=[PublicationStatsSummaryGroup.model_validate(g) for g in groups],
     )

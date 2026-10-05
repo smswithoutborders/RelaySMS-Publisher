@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-from typing import List, Optional
 
 from fastapi import APIRouter, Query, Request
 
@@ -21,10 +20,10 @@ ALLOWED_GATEWAY_CLIENT_MANIFEST_KEYS = [
 @router.get("", summary="List gateway clients")
 def get_gateway_clients(
     request: Request,
-    msisdn: Optional[str] = Query(None, description="Filter by MSISDN"),
-    country: Optional[str] = Query(None, description="Filter by country"),
-    operator: Optional[str] = Query(None, description="Filter by operator"),
-) -> List[GatewayClientManifest]:
+    msisdn: str | None = Query(None, description="Filter by MSISDN"),
+    country: str | None = Query(None, description="Filter by country"),
+    operator: str | None = Query(None, description="Filter by operator"),
+) -> list[GatewayClientManifest]:
     manager: GatewayClientManager = request.app.state.gateway_client_manager
     manifests = manager.list_clients(msisdn=msisdn, country=country, operator=operator)
 

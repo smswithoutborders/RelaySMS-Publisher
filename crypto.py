@@ -2,7 +2,7 @@
 """Cryptographic functions for database field encryption."""
 
 import os
-from typing import Callable
+from collections.abc import Callable
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 

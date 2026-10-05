@@ -5,9 +5,14 @@ import datetime
 import pytest
 
 from db import get_session
-from db_types import utc_now
-from models.publication_stats import PublicationStats, encode_cursor
-from tests.creds_fixtures import *  # noqa: F401,F403
+from db_types import DATE_BUCKET_UNITS, utc_now
+from models.publication_stats import (
+    GROUPABLE_COLUMNS,
+    PublicationStats,
+    encode_cursor,
+)
+from rest_services.v1.schemas import StatsGroupBy, StatsInterval
+from tests.creds_fixtures import *  # noqa: F403
 from tests.creds_fixtures import USERNAME, basic_auth, create_credential, login
 
 BASE_TIME = datetime.datetime(2026, 9, 1, 12, 0, 0)
@@ -178,7 +183,9 @@ def test_backward_paging_returns_the_same_pages(authed_client, seeded):
     forward = _follow(authed_client, "/v1/stats/publications?limit=4", "next")
     backward = _follow(authed_client, forward[-1]["prev"], "prev")
 
-    as_ids = lambda pages: [[item["id"] for item in p["data"]] for p in pages]
+    def as_ids(pages):
+        return [[item["id"] for item in p["data"]] for p in pages]
+
     assert as_ids(reversed(backward)) == as_ids(forward[:-1])
     assert all(page["next"] for page in backward)
 
@@ -357,3 +364,8 @@ def test_summary_interval_with_multiple_group_by(authed_client):
         ("2026-08-01T00:00:00Z", "CM", 1),
         ("2026-08-01T00:00:00Z", "NG", 1),
     ]
+
+
+def test_query_enums_match_the_model():
+    assert set(StatsGroupBy) == set(GROUPABLE_COLUMNS)
+    assert set(StatsInterval) == set(DATE_BUCKET_UNITS)

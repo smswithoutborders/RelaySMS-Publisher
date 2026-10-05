@@ -9,7 +9,6 @@ from pathlib import Path
 
 import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
-from grpc_interceptor import ServerInterceptor
 
 from config import GrpcConfig
 from db import dispose_engine, get_session
@@ -30,7 +29,7 @@ grpc_config = GrpcConfig.get()
 V3_SERVICE = "publisher.v3.Publisher"
 
 
-def interceptors() -> list[ServerInterceptor]:
+def interceptors() -> list[grpc.ServerInterceptor]:
     """Outermost first: logging wraps error mapping, which wraps auth."""
     return [
         LoggingInterceptor(),
@@ -49,7 +48,7 @@ def _load_ssl_credentials(cert_path: Path, key_path: Path) -> grpc.ServerCredent
 
     cert = cert_path.read_bytes()
     key = key_path.read_bytes()
-    return grpc.ssl_server_credentials(((key, cert),))
+    return grpc.ssl_server_credentials([(key, cert)])
 
 
 def _build_server(max_workers: int) -> grpc.Server:
@@ -82,10 +81,10 @@ def _bind_port(grpc_server: grpc.Server) -> None:
         logger.info("Serving without TLS: %s", address)
         return
 
+    cert_file, key_file = grpc_config.tls_cert_file, grpc_config.tls_key_file
+    assert cert_file and key_file  # config requires both when TLS is on
     try:
-        credentials = _load_ssl_credentials(
-            Path(grpc_config.tls_cert_file), Path(grpc_config.tls_key_file)
-        )
+        credentials = _load_ssl_credentials(Path(cert_file), Path(key_file))
     except FileNotFoundError as e:
         logger.critical("TLS certificate or key file not found: %s", e)
         raise

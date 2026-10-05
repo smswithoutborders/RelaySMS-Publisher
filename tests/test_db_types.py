@@ -64,7 +64,7 @@ def test_sqlite_buckets(value, expected):
         ).one()
 
     assert [bucket.date().isoformat() for bucket in row] == expected
-    assert all(bucket.tzinfo == datetime.timezone.utc for bucket in row)
+    assert all(bucket.tzinfo == datetime.UTC for bucket in row)
 
 
 def test_each_unit_gets_its_own_cached_statement():

@@ -85,7 +85,7 @@ def fetch_server_identity_public_key(rest_api_url: str, key_id: int) -> bytes:
 def build_v1_request_metadata(
     rest_api: str, method_name: str, payload: bytes | None = None
 ) -> tuple[bytes, bytes, list[tuple]]:
-    """Fetch a random server identity key, encrypt the request, return metadata headers."""
+    """Encrypt a request to a random server identity key; return its headers."""
     key_id = secrets.randbelow(256)
     ss_pk_bytes = fetch_server_identity_public_key(rest_api, key_id)
 
@@ -145,7 +145,7 @@ def select_token_interactively(tokens: dict) -> str | None:
             idx = int(choice) - 1
             if 0 <= idx < len(identifiers):
                 return identifiers[idx]
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             pass
         print(f"Enter 1-{len(identifiers)} or 'q'.")
 

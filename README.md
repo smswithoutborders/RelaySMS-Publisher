@@ -67,7 +67,8 @@ See [INSTALL.md](INSTALL.md) for manual installation and detailed configuration.
 # Setup environment
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pre-commit install
 
 # Configure
 cp template.env .env
@@ -264,7 +265,12 @@ Logins for the REST API, each with scopes. One holding every scope is an adminis
 
 ## Testing
 
-See [Test Documentation](tests/README.md) for running tests.
+```bash
+python -m pytest                 # test suite, also run by the pre-push hook
+pre-commit run --all-files       # formatting, lint, types and shell checks
+```
+
+CI runs both on every pull request. For the manual gRPC/REST client, see [tests/README.md](tests/README.md).
 
 ## License
 

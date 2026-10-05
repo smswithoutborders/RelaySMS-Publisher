@@ -8,7 +8,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlsplit
 
 import msgspec
@@ -51,10 +51,10 @@ class PlatformManifest(msgspec.Struct, forbid_unknown_fields=False):
     assets_path: str
     cat_id: int
     proto_id: int
-    auth_provider: Optional[str] = None
-    supports_offline_first: Optional[bool] = None
-    icon_svg: Optional[str] = None
-    icon_png: Optional[str] = None
+    auth_provider: str | None = None
+    supports_offline_first: bool | None = None
+    icon_svg: str | None = None
+    icon_png: str | None = None
 
 
 class CloneProgress(RemoteProgress):
@@ -67,7 +67,10 @@ class CloneProgress(RemoteProgress):
     def update(self, op_code, cur_count, max_count=None, message=""):
         if max_count and not self.pbar:
             self.pbar = tqdm(
-                total=max_count, unit="objects", desc="Cloning repository", leave=False
+                total=float(max_count),
+                unit="objects",
+                desc="Cloning repository",
+                leave=False,
             )
         if self.pbar:
             self.pbar.n = cur_count
@@ -84,10 +87,10 @@ class AdapterManager:
 
     def __init__(self, registry_file: Path | None = None):
         self.registry_file = registry_file or platforms_config.registry_file
-        self._app_registry: Dict[str, PlatformManifest] = {}
+        self._app_registry: dict[str, PlatformManifest] = {}
         self._last_modified: float = 0.0
 
-    def _load_registry(self) -> Dict[str, PlatformManifest]:
+    def _load_registry(self) -> dict[str, PlatformManifest]:
         try:
             current_mtime = os.stat(self.registry_file).st_mtime
         except FileNotFoundError:
@@ -99,7 +102,7 @@ class AdapterManager:
         try:
             with open(self.registry_file, "rb") as f:
                 registry = msgspec.json.decode(
-                    f.read(), type=Dict[str, PlatformManifest]
+                    f.read(), type=dict[str, PlatformManifest]
                 )
             self._app_registry = registry
             self._last_modified = current_mtime
@@ -108,7 +111,7 @@ class AdapterManager:
             logger.error("Failed to read registry: %s", e)
             return self._app_registry
 
-    def _save_registry(self, data: Dict[str, PlatformManifest]):
+    def _save_registry(self, data: dict[str, PlatformManifest]):
         try:
             self.registry_file.parent.mkdir(parents=True, exist_ok=True)
             self.registry_file.write_bytes(msgspec.json.encode(data))
@@ -128,11 +131,11 @@ class AdapterManager:
                 base_folder.resolve() in target_path.resolve().parents
                 or base_folder.resolve() == target_path.resolve()
             )
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return False
 
     @classmethod
-    def _load_ini_file(cls, path: Path, *sections: str) -> Optional[dict]:
+    def _load_ini_file(cls, path: Path, *sections: str) -> dict | None:
         """Reads and merges specified INI sections into a flat dict."""
         if not path.is_file():
             logger.error("Missing file: %s", path)
@@ -213,10 +216,10 @@ class AdapterManager:
 
     def find_adapter_ids(
         self,
-        name: Optional[str] = None,
-        proto_id: Optional[Any] = None,
-        cat_id: Optional[Any] = None,
-    ) -> List[str]:
+        name: str | None = None,
+        proto_id: Any | None = None,
+        cat_id: Any | None = None,
+    ) -> list[str]:
         """Return registry keys matching any combination of optional filters."""
         registry = self._load_registry()
         if not registry:
@@ -236,10 +239,10 @@ class AdapterManager:
 
     def list_adapters(
         self,
-        name: Optional[str] = None,
-        proto_id: Optional[Any] = None,
-        cat_id: Optional[Any] = None,
-    ) -> List[PlatformManifest]:
+        name: str | None = None,
+        proto_id: Any | None = None,
+        cat_id: Any | None = None,
+    ) -> list[PlatformManifest]:
         """Return manifests matching any combination of optional filters."""
         registry = self._load_registry()
         if not registry:
@@ -262,8 +265,8 @@ class AdapterManager:
         adapter = self.list_adapters(name=platform.lower(), proto_id=0)
         if not adapter:
             raise NotImplementedError(
-                f"Platform '{platform.lower()}' with protocol 'oauth2' is not supported. "
-                "Contact the developers for implementation status."
+                f"Platform '{platform.lower()}' with protocol 'oauth2' is not "
+                "supported. Contact the developers for implementation status."
             )
         return adapter[0]
 
@@ -293,7 +296,7 @@ class AdapterManager:
 
         progress = CloneProgress()
         try:
-            Repo.clone_from(url, dest_path, progress=progress)
+            Repo.clone_from(url, dest_path, progress=progress.update)
             logger.info("Cloned repository to %s", dest_path)
         except Exception as e:
             logger.error("Failed to clone repository %s: %s", url, e)
@@ -371,7 +374,7 @@ class AdapterManager:
         self._save_registry(registry)
         logger.info("Removed adapter entry: %s", adapter_id)
 
-    def update_adapter(self, adapter_id: Optional[str] = None, install: bool = False):
+    def update_adapter(self, adapter_id: str | None = None, install: bool = False):
         """Pull updates and refresh registry entries for targeted adapters."""
         registry = self._load_registry()
         if not registry:

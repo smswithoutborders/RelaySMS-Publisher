@@ -34,7 +34,7 @@ logger = get_logger("test_cli")
 
 
 def shared_options(f):
-    """A blanket decorator supplying all parameters used across various gRPC/REST endpoints."""
+    """Add every option shared by the gRPC and REST commands."""
     f = click.option(
         "--host", default="127.0.0.1", show_default=True, help="gRPC host."
     )(f)
@@ -836,8 +836,7 @@ def cmd_send(
     tag,
     **_,
 ):
-    """Publish an encrypted message to any platform (online or offline) via the REST API."""
-
+    """Publish an encrypted message, online or offline, via the REST API."""
     attachment_bytes = read_attachment(attachment)
     has_attachment = attachment_bytes is not None
 
@@ -896,8 +895,8 @@ def cmd_send(
             click.echo(f"    send order : {order}")
         for pos, idx in enumerate(order):
             req_body = {"address": address, "text": segments_b64[idx]}
-        if tag:
-            req_body["tag"] = tag
+            if tag:
+                req_body["tag"] = tag
             click.echo(f"  segment [{pos + 1}/{len(order)}] (seg_num={idx}):")
             click.echo(json.dumps(req_body, indent=4))
         return

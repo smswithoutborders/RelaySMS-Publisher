@@ -111,7 +111,8 @@ def update(name, proto_id, cat_id, install):
                 raise click.BadParameter("No adapter found matching criteria.")
             if len(matched_ids) > 1:
                 raise click.UsageError(
-                    "Multiple matches found. Clarify target using --proto-id or --cat-id."
+                    "Multiple matches found. "
+                    "Clarify target using --proto-id or --cat-id."
                 )
 
             manager.update_adapter(adapter_id=matched_ids[0], install=install)
@@ -160,7 +161,7 @@ def list_command(name, proto_id, cat_id):
         ]
 
         widths = [
-            max(len(str(row[i])) for row in [headers] + rows)
+            max(len(str(row[i])) for row in [headers, *rows])
             for i in range(len(headers))
         ]
 

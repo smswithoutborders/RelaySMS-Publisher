@@ -3,7 +3,6 @@
 import html
 import json
 from pathlib import Path as PathLib
-from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse
@@ -33,10 +32,10 @@ ALLOWED_PLATFORMS_WITH_CLIENT_METADATA = ["bluesky"]
 @router.get("", summary="List platforms")
 def get_platforms(
     request: Request,
-    name: Optional[str] = filter_query(50, "Filter by platform name"),
-    proto_id: Optional[int] = Query(None, description="Filter by protocol ID"),
-    cat_id: Optional[int] = Query(None, description="Filter by category ID"),
-) -> List[PlatformManifest]:
+    name: str | None = filter_query(50, "Filter by platform name"),
+    proto_id: int | None = Query(None, description="Filter by protocol ID"),
+    cat_id: int | None = Query(None, description="Filter by category ID"),
+) -> list[PlatformManifest]:
     manager: AdapterManager = request.app.state.adapter_manager
     manifests = manager.list_adapters(name=name, proto_id=proto_id, cat_id=cat_id)
 
@@ -81,7 +80,7 @@ def get_platform_oauth_client_metadata(
         )
 
     try:
-        with open(adapter_credentials, "r", encoding="utf-8") as f:
+        with open(adapter_credentials, encoding="utf-8") as f:
             return OAuthClientMetadata(**json.loads(f.read()))
     except FileNotFoundError as exc:
         logger.error("OAuth client metadata file not found")
@@ -114,7 +113,8 @@ async def oauth_callback(
     )
     platform_display_name = platform_name.capitalize()
 
-    return HTMLResponse(content=f"""
+    return HTMLResponse(
+        content=f"""
     <html>
         <head><title>{platform_display_name} OAuth Callback Params</title></head>
         <body>
@@ -125,4 +125,5 @@ async def oauth_callback(
             </table>
         </body>
     </html>
-    """)
+    """
+    )

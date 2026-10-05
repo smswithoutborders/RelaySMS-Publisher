@@ -11,7 +11,7 @@ from models import credential as credentials
 from models import credential_session as credential_sessions
 from models.credential import ALL_SCOPES, CredentialConflictError, CredentialScope
 from models.credential_session import CredentialSession
-from tests.creds_fixtures import *  # noqa: F401,F403
+from tests.creds_fixtures import *  # noqa: F403
 from tests.creds_fixtures import USERNAME, can_log_in, create_credential
 
 MAX_AGE = datetime.timedelta(hours=1)
@@ -21,7 +21,7 @@ class ResettingHasher(PasswordHasher):
     """Has a reset commit while the first rehash is being computed."""
 
     resetting = False
-    reset_password = None
+    reset_password: str | None = None
 
     def hash(self, password, *, salt=None):
         # The reset hashes its new password too, which must not reset again.
@@ -43,6 +43,7 @@ def test_rehash_does_not_undo_a_concurrent_reset(monkeypatch):
         assert credentials.authenticate(db, USERNAME, old_password) is not None
 
     assert not can_log_in(USERNAME, old_password)
+    assert hasher.reset_password is not None
     assert can_log_in(USERNAME, hasher.reset_password)
 
 

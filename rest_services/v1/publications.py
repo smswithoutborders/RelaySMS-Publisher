@@ -49,7 +49,7 @@ async def twilio_incoming_sms(request: Request) -> Response:
     sender_address = params.get("From")
     text_payload = params.get("Body")
 
-    if not sender_address or not text_payload:
+    if not isinstance(sender_address, str) or not isinstance(text_payload, str):
         raise HTTPException(
             status_code=400, detail="Missing required field 'From' or 'Body'."
         )

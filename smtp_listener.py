@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""SMTP transport: polls a relay mailbox over IMAP and hands each message
-to the publication pipeline."""
+"""SMTP transport.
+
+Polls a relay mailbox over IMAP and hands each message to the publication pipeline.
+"""
 
 import imaplib
 import json
@@ -21,8 +23,8 @@ from imap_tools import (
 )
 from pydantic import ValidationError
 
-from config import SmtpConfig
 import smtp_auth
+from config import SmtpConfig
 from logutils import get_logger
 from publications import (
     PayloadMalformedError,
@@ -128,6 +130,10 @@ def main() -> None:
         )
         return
 
+    server = smtp_config.imap_server
+    username, password = smtp_config.imap_username, smtp_config.imap_password
+    assert server and username and password  # config requires them when enabled
+
     ssl_context = ssl.create_default_context()
     if smtp_config.tls_client_certificate:
         ssl_context.load_cert_chain(
@@ -140,9 +146,9 @@ def main() -> None:
         connection_start_time = time.monotonic()
         connection_live_time = 0.0
         try:
-            with MailBox(
-                smtp_config.imap_server, smtp_config.imap_port, ssl_context=ssl_context
-            ).login(smtp_config.imap_username, smtp_config.imap_password) as mailbox:
+            with MailBox(server, smtp_config.imap_port, ssl_context=ssl_context).login(
+                username, password
+            ) as mailbox:
                 logger.info(
                     "Connected to mailbox %s on %s",
                     smtp_config.imap_server,
@@ -195,7 +201,6 @@ def main() -> None:
             MailboxLogoutError,
             socket.herror,
             socket.gaierror,
-            socket.timeout,
         ) as e:
             logger.error("Error occurred: %s", e)
             logger.error(traceback.format_exc())

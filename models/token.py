@@ -3,7 +3,7 @@
 
 import datetime
 import secrets
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import BigInteger, SmallInteger, String, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
@@ -18,7 +18,7 @@ def _generate_uint32_token() -> int:
 
 
 def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 class Token(Base):
@@ -36,12 +36,12 @@ class Token(Base):
     platform: Mapped[str] = mapped_column(String(100), index=True)
     cat_id: Mapped[int] = mapped_column(SmallInteger)
     proto_id: Mapped[int] = mapped_column(SmallInteger)
-    token_data: Mapped[Dict[str, Any]] = mapped_column(EncryptedJSON)
+    token_data: Mapped[dict[str, Any]] = mapped_column(EncryptedJSON)
     created_at: Mapped[datetime.datetime] = mapped_column(default=_utc_now)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=_utc_now, onupdate=_utc_now
     )
-    token_hash: Mapped["TokenHash"] = relationship(
+    token_hash: Mapped[TokenHash] = relationship(
         "TokenHash", back_populates="token", cascade="all, delete-orphan", uselist=False
     )
 
@@ -50,7 +50,7 @@ def create(
     platform: str,
     cat_id: int,
     proto_id: int,
-    token_data: Dict[str, Any],
+    token_data: dict[str, Any],
     session: Session,
 ) -> Token:
     """Create and persist a new token."""
@@ -71,7 +71,7 @@ def update_token_data(
     return token
 
 
-def get_idle(older_than: datetime.datetime, session: Session) -> List[Token]:
+def get_idle(older_than: datetime.datetime, session: Session) -> list[Token]:
     return list(
         session.scalars(
             select(Token)

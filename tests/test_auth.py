@@ -16,7 +16,7 @@ from models.credential import Scope
 from models.credential_session import CredentialSession
 from rest_services.v1 import auth
 from rest_services.v1.auth import authenticate_request
-from tests.creds_fixtures import *  # noqa: F401,F403
+from tests.creds_fixtures import *  # noqa: F403
 from tests.creds_fixtures import USERNAME, basic_auth, login
 
 WEB_ORIGIN = "https://web.example.net"

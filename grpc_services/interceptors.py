@@ -47,7 +47,7 @@ class LoggingInterceptor(ServerInterceptor):
         try:
             return method(request_or_iterator, context)
         finally:
-            code = context.code()
+            code = context.code()  # pyright: ignore[reportAttributeAccessIssue]  (missing from grpc's stubs)
             if code in (None, grpc.StatusCode.OK):
                 logger.info("%s %s - OK -", method_name, self.server_protocol)
             else:
@@ -68,7 +68,7 @@ class ErrorInterceptor(ExceptionToStatusInterceptor):
         if isinstance(ex, GrpcException):
             span.add_event("grpc_error", {"message": ex.details})
         else:
-            logger.exception("Unhandled error in %s", method_name)
+            logger.error("Unhandled error in %s", method_name, exc_info=ex)
             span.record_exception(ex)
             ex = Internal(INTERNAL_ERROR)
 

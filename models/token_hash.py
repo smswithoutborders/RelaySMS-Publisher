@@ -4,7 +4,7 @@
 import datetime
 import hashlib
 import secrets
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Index, LargeBinary
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 class TokenHash(Base):
@@ -31,13 +31,13 @@ class TokenHash(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=_utc_now, onupdate=_utc_now
     )
-    last_used_at: Mapped[Optional[datetime.datetime]] = mapped_column(default=None)
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(default=None)
 
-    token: Mapped["Token"] = relationship("Token", back_populates="token_hash")
-    server_keys: Mapped[List["ServerEphemeralKey"]] = relationship(
+    token: Mapped[Token] = relationship("Token", back_populates="token_hash")
+    server_keys: Mapped[list[ServerEphemeralKey]] = relationship(
         "ServerEphemeralKey", back_populates="token_hash", cascade="all, delete-orphan"
     )
-    client_keys: Mapped[List["ClientEphemeralKey"]] = relationship(
+    client_keys: Mapped[list[ClientEphemeralKey]] = relationship(
         "ClientEphemeralKey", back_populates="token_hash", cascade="all, delete-orphan"
     )
 

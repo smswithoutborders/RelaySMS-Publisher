@@ -6,8 +6,9 @@ import binascii
 import datetime
 import json
 import operator
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, Literal
 
 from sqlalchemy import Index, String, and_, func, or_, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
@@ -28,11 +29,11 @@ class PublicationStats(Base):
     __tablename__ = "publication_stats"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    platform_name: Mapped[Optional[str]] = mapped_column(String(100), default=None)
-    protocol: Mapped[Optional[str]] = mapped_column(String(20), default=None)
+    platform_name: Mapped[str | None] = mapped_column(String(100), default=None)
+    protocol: Mapped[str | None] = mapped_column(String(20), default=None)
     status: Mapped[str] = mapped_column(String(20))
-    country_code: Mapped[Optional[str]] = mapped_column(String(10), default=None)
-    failure_reason: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    country_code: Mapped[str | None] = mapped_column(String(10), default=None)
+    failure_reason: Mapped[str | None] = mapped_column(String(255), default=None)
     created_at: Mapped[datetime.datetime] = mapped_column(UTCDateTime, default=utc_now)
 
     # (created_at, id) serves keyset pagination; id breaks timestamp ties.
@@ -75,10 +76,10 @@ def record(
     session: Session,
     *,
     status: str,
-    protocol: Optional[str] = None,
-    platform_name: Optional[str] = None,
-    country_code: Optional[str] = None,
-    failure_reason: Optional[str] = None,
+    protocol: str | None = None,
+    platform_name: str | None = None,
+    country_code: str | None = None,
+    failure_reason: str | None = None,
 ) -> PublicationStats:
     """Record the outcome of a publish attempt."""
     stats = PublicationStats(
@@ -102,19 +103,19 @@ class Cursor:
 
 @dataclass(frozen=True)
 class StatsFilters:
-    status: Optional[str] = None
-    platform_name: Optional[str] = None
-    protocol: Optional[str] = None
-    country_code: Optional[str] = None
-    since: Optional[datetime.datetime] = None
-    until: Optional[datetime.datetime] = None
+    status: str | None = None
+    platform_name: str | None = None
+    protocol: str | None = None
+    country_code: str | None = None
+    since: datetime.datetime | None = None
+    until: datetime.datetime | None = None
 
 
 @dataclass(frozen=True)
 class StatsPage:
     data: list[dict[str, Any]]
-    next_cursor: Optional[str]
-    prev_cursor: Optional[str]
+    next_cursor: str | None
+    prev_cursor: str | None
 
 
 def encode_cursor(
@@ -134,7 +135,7 @@ def decode_cursor(cursor: str) -> Cursor:
         created_at = as_utc(datetime.datetime.fromisoformat(data["t"]))
         row_id = data["i"]
         direction = data["d"]
-    except (binascii.Error, UnicodeDecodeError, ValueError, KeyError, TypeError):
+    except binascii.Error, UnicodeDecodeError, ValueError, KeyError, TypeError:
         raise InvalidCursorError("Invalid cursor.") from None
 
     if type(row_id) is not int or row_id < 1 or direction not in ("next", "prev"):
@@ -160,7 +161,7 @@ def list_stats(
     *,
     filters: StatsFilters,
     limit: int,
-    cursor: Optional[Cursor] = None,
+    cursor: Cursor | None = None,
 ) -> StatsPage:
     created_at, row_id = PublicationStats.created_at, PublicationStats.id
     backward = cursor is not None and cursor.direction == "prev"
@@ -184,7 +185,7 @@ def list_stats(
     rows = session.execute(stmt.order_by(*order).limit(limit + 1)).mappings().all()
 
     has_more = len(rows) > limit
-    rows = rows[:limit]
+    rows = list(rows[:limit])
     if backward:
         rows.reverse()
 
@@ -215,7 +216,7 @@ def summarize(
     *,
     group_by: Sequence[str],
     filters: StatsFilters,
-    interval: Optional[str] = None,
+    interval: str | None = None,
 ) -> list[dict[str, Any]]:
     unknown = [name for name in group_by if name not in GROUPABLE_COLUMNS]
     if unknown:

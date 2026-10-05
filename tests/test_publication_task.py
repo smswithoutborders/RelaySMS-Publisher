@@ -102,8 +102,7 @@ def test_success_records_published_stat(monkeypatch):
 
 
 def test_incomplete_segment_session_skips_recording(monkeypatch):
-    """service.publish() returns None while awaiting more segments; the task
-    must return early without recording any outcome."""
+    """Return early without recording an outcome while awaiting more segments."""
     _stub_service(monkeypatch, publish_return=None)
 
     publication_task.publish_message("text", "+12025550123", "smtp")

@@ -2,7 +2,7 @@
 """Payload session model and related functions."""
 
 import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 class PayloadSession(Base):
@@ -28,7 +28,7 @@ class PayloadSession(Base):
         default=_utc_now, onupdate=_utc_now
     )
 
-    segments: Mapped[List["PayloadSegment"]] = relationship(
+    segments: Mapped[list[PayloadSegment]] = relationship(
         "PayloadSegment", back_populates="session", cascade="all, delete-orphan"
     )
 
@@ -49,7 +49,7 @@ def create(sender_id: str, session_id: int, session: Session) -> PayloadSession:
 
 def get_by_sender_and_session(
     sender_id: str, session_id: int, session: Session
-) -> Optional[PayloadSession]:
+) -> PayloadSession | None:
     """Retrieve a payload session by sender_id and session_id."""
     return session.scalar(
         select(PayloadSession).filter_by(sender_id=sender_id, session_id=session_id)

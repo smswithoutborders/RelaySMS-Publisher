@@ -3,10 +3,10 @@
 
 import base64
 import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy import LargeBinary, select, update
+from sqlalchemy import CursorResult, LargeBinary, select, update
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from db import Base, get_session
@@ -14,7 +14,7 @@ from db_types import PrivateEncryptedBinary
 
 
 def _utc_now() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+    return datetime.datetime.now(datetime.UTC)
 
 
 class ServerIdentityKey(Base):
@@ -30,11 +30,11 @@ class ServerIdentityKey(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=_utc_now, onupdate=_utc_now
     )
-    last_used_at: Mapped[Optional[datetime.datetime]] = mapped_column(default=None)
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(default=None)
     used_count: Mapped[int] = mapped_column(default=0)
 
 
-def get_public_keys() -> List[Dict[str, Any]]:
+def get_public_keys() -> list[dict[str, Any]]:
     """Get all public keys for API responses."""
     with get_session() as s:
         keys = s.scalars(
@@ -49,7 +49,7 @@ def get_public_keys() -> List[Dict[str, Any]]:
         ]
 
 
-def get_public_key(key_id: int) -> Dict[str, Any]:
+def get_public_key(key_id: int) -> dict[str, Any]:
     """Get a single public key for API response."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
@@ -81,13 +81,16 @@ def mark_key_used(key_id: int, session: Session) -> None:
     """Mark a server identity key as used after a successful operation."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
-    result = session.execute(
-        update(ServerIdentityKey)
-        .where(ServerIdentityKey.key_index == key_id)
-        .values(
-            last_used_at=_utc_now(),
-            used_count=ServerIdentityKey.used_count + 1,
-        )
+    result = cast(
+        CursorResult,
+        session.execute(
+            update(ServerIdentityKey)
+            .where(ServerIdentityKey.key_index == key_id)
+            .values(
+                last_used_at=_utc_now(),
+                used_count=ServerIdentityKey.used_count + 1,
+            )
+        ),
     )
     if result.rowcount == 0:
         raise ValueError(f"Server identity key {key_id} not found")

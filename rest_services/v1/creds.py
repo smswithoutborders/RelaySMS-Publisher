@@ -3,7 +3,6 @@
 
 import hashlib
 from contextlib import contextmanager
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response, Security
 from sqlalchemy.orm import Session
@@ -100,11 +99,11 @@ def _respond(db: Session, response: Response, credential: Credential) -> Credent
     return _info(credential, credential_sessions.count_active(db, credential.id))
 
 
-@router.get("", response_model=List[CredentialInfo], summary="List credentials")
+@router.get("", response_model=list[CredentialInfo], summary="List credentials")
 def list_credentials(
     context: AuthContext = Security(authorize, scopes=[Scope.CREDS_READ]),
     db: Session = Depends(get_db),
-) -> List[CredentialInfo]:
+) -> list[CredentialInfo]:
     """Scope: creds:read."""
     sessions = credential_sessions.count_active_by_credential(db)
     return [

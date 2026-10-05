@@ -47,7 +47,9 @@ class KeyManager:
 
     def initialize_server_identity_keys(self, count: int = 256) -> None:
         """Create database identity keys if they don't exist yet."""
-        existing = self.session.scalar(select(func.count(ServerIdentityKey.id)))
+        existing = self.session.execute(
+            select(func.count(ServerIdentityKey.id))
+        ).scalar_one()
         if existing > 0:
             logger.info("Server identity keys exist (%d found), skipping", existing)
             return

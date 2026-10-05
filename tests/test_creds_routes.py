@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.creds_fixtures import *  # noqa: F401,F403
+from tests.creds_fixtures import *  # noqa: F403
 from tests.creds_fixtures import USERNAME, basic_auth, create_credential, login
 
 

@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import datetime
-from enum import Enum
-from typing import List, Literal, Optional
+from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from db_types import DATE_BUCKET_UNITS
 from models.credential import MAX_USERNAME_LENGTH
-from models.publication_stats import GROUPABLE_COLUMNS
 
 
 class PlatformManifest(BaseModel):
@@ -16,10 +14,10 @@ class PlatformManifest(BaseModel):
     name: str
     proto_id: int
     cat_id: int
-    auth_provider: Optional[str] = None
-    supports_offline_first: Optional[bool] = None
-    icon_svg: Optional[str] = None
-    icon_png: Optional[str] = None
+    auth_provider: str | None = None
+    supports_offline_first: bool | None = None
+    icon_svg: str | None = None
+    icon_png: str | None = None
 
 
 class GatewayClientManifest(BaseModel):
@@ -61,43 +59,50 @@ class PublishContentRequest(BaseModel):
 
 
 class PublishRestContentRequest(PublishContentRequest):
-    tag: Optional[str] = Field(
+    tag: str | None = Field(
         None,
         description="Shared secret for offline payloads, if the server sets one.",
     )
 
 
 class PublishContentResponse(BaseModel):
-    message: Optional[str] = None
-    error: Optional[str] = None
+    message: str | None = None
+    error: str | None = None
 
 
 class PublicationStat(BaseModel):
     id: int
-    platform_name: Optional[str] = None
-    protocol: Optional[str] = None
+    platform_name: str | None = None
+    protocol: str | None = None
     status: str
-    country_code: Optional[str] = None
-    failure_reason: Optional[str] = None
+    country_code: str | None = None
+    failure_reason: str | None = None
     created_at: datetime.datetime
 
 
 class PublicationStatsPage(BaseModel):
-    data: List[PublicationStat]
-    next: Optional[str] = Field(
+    data: list[PublicationStat]
+    next: str | None = Field(
         None, description="URL of the next (older) page; null on the last page."
     )
-    prev: Optional[str] = Field(
+    prev: str | None = Field(
         None, description="URL of the previous (newer) page; null on the first page."
     )
 
 
-StatsGroupBy = Enum(
-    "StatsGroupBy", {name: name for name in GROUPABLE_COLUMNS}, type=str
-)
-StatsInterval = Enum(
-    "StatsInterval", {unit: unit for unit in DATE_BUCKET_UNITS}, type=str
-)
+class StatsGroupBy(StrEnum):
+    status = "status"
+    platform_name = "platform_name"
+    protocol = "protocol"
+    country_code = "country_code"
+    failure_reason = "failure_reason"
+
+
+class StatsInterval(StrEnum):
+    day = "day"
+    week = "week"
+    month = "month"
+    year = "year"
 
 
 class PublicationStatsSummaryGroup(BaseModel):
@@ -110,9 +115,9 @@ class PublicationStatsSummaryGroup(BaseModel):
 class PublicationStatsSummary(BaseModel):
     since: datetime.datetime
     until: datetime.datetime
-    interval: Optional[StatsInterval] = None
+    interval: StatsInterval | None = None
     total: int
-    groups: List[PublicationStatsSummaryGroup]
+    groups: list[PublicationStatsSummaryGroup]
 
 
 class LoginRequest(BaseModel):
@@ -122,10 +127,10 @@ class LoginRequest(BaseModel):
 
 class CurrentCredential(BaseModel):
     username: str
-    scopes: List[str]
+    scopes: list[str]
     administrator: bool = Field(..., description="Holds every scope.")
     auth_method: Literal["session", "basic"]
-    expires_at: Optional[datetime.datetime] = Field(
+    expires_at: datetime.datetime | None = Field(
         None, description="Session expiry (session auth only)."
     )
 
@@ -133,22 +138,22 @@ class CurrentCredential(BaseModel):
 class CredentialCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     username: str = Field(..., max_length=MAX_USERNAME_LENGTH)
-    scopes: List[str] = Field(..., min_length=1, max_length=32)
+    scopes: list[str] = Field(..., min_length=1, max_length=32)
 
 
 class CredentialUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scopes: Optional[List[str]] = Field(None, min_length=1, max_length=32)
-    active: Optional[bool] = None
+    scopes: list[str] | None = Field(None, min_length=1, max_length=32)
+    active: bool | None = None
 
 
 class CredentialInfo(BaseModel):
     username: str
     active: bool
-    scopes: List[str]
+    scopes: list[str]
     administrator: bool = Field(..., description="Holds every scope.")
     created_at: datetime.datetime
-    last_login_at: Optional[datetime.datetime] = None
+    last_login_at: datetime.datetime | None = None
     active_sessions: int
 
 

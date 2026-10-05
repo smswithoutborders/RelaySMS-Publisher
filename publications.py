@@ -4,7 +4,8 @@
 import base64
 import secrets
 import uuid
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import magic
 from sqlalchemy.orm import Session
@@ -64,6 +65,13 @@ class OfflineTagInvalidError(OfflineTagError):
     pass
 
 
+def _recipient(content: rrs.V1ContentsContainer) -> str:
+    to = content.get_to()
+    if to is None:
+        raise PayloadMalformedError("Content has no recipient.")
+    return to.decode()
+
+
 class PublicationService:
     """Assembles, decrypts, and routes payloads to platform adapters."""
 
@@ -95,9 +103,9 @@ class PublicationService:
         sender_address: str,
         raw_segment: bytes,
         payload_type: rrs.V1PayloadsTypes,
-        protocol: Optional[str] = None,
-        tag: Optional[str] = None,
-    ) -> Optional[str]:
+        protocol: str | None = None,
+        tag: str | None = None,
+    ) -> str | None:
         """Processes incoming payload and publishes to target platform."""
         payload = self._assemble(
             payload_raw=payload_raw,
@@ -117,7 +125,7 @@ class PublicationService:
         sender_address: str,
         raw_segment: bytes,
         payload_type: rrs.V1PayloadsTypes,
-    ) -> Optional[rrs.V1Payloads]:
+    ) -> rrs.V1Payloads | None:
         match payload_type:
             case rrs.V1PayloadsTypes.WITHOUT_ATTACHMENT:
                 try:
@@ -143,8 +151,8 @@ class PublicationService:
     def _dispatch(
         self,
         payload: rrs.V1Payloads,
-        protocol: Optional[str] = None,
-        tag: Optional[str] = None,
+        protocol: str | None = None,
+        tag: str | None = None,
     ) -> str:
         token_id = payload.get_t_id()
 
@@ -239,11 +247,11 @@ class PublicationService:
             content = rrs.V1ContentsContainer.deserialize(
                 data=content_bytes, cat_id=cat_id, len_att=len_att
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Failed to deserialize content for token %d.", token_id)
             raise PayloadMalformedError(
                 "Online content deserialization failed.", platform_name=token.platform
-            )
+            ) from exc
 
         try:
             proto_id = rrs.v1_payload_support_protocols_from_u8(token.proto_id)
@@ -333,7 +341,7 @@ class PublicationService:
     def _maybe_refresh_token_data(
         self,
         token,
-        new_value: Optional[dict],
+        new_value: dict | None,
         *,
         label: str,
         compare_key: Callable[[dict], Any] = lambda v: v,
@@ -369,12 +377,12 @@ class PublicationService:
             content_obj = rrs.OfflineFirst.decrypt(
                 ss=ss_kid, offline_first=offline_first
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Failed to decrypt offline payload with key %d.", key_id)
             raise PayloadMalformedError(
                 "Offline payload decryption failed.",
                 platform_name=OFFLINE_CONTENT_PLATFORM,
-            )
+            ) from exc
 
         self.key_manager.mark_identity_key_used(key_id)
 
@@ -383,12 +391,12 @@ class PublicationService:
             content = rrs.V1ContentsContainer.deserialize(
                 data=content_obj.get_payload(), cat_id=cat_id, len_att=len_att
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Failed to deserialize offline content")
             raise PayloadMalformedError(
                 "Offline content deserialization failed.",
                 platform_name=OFFLINE_CONTENT_PLATFORM,
-            )
+            ) from exc
 
         adapter = self.adapter_manager.get_pnba_adapter(OFFLINE_CONTENT_PLATFORM)
         params = self._get_adapter_params(
@@ -413,7 +421,7 @@ class PublicationService:
 
     def _store_segment_and_try_join(
         self, *, sender_id: str, payload_raw: bytes, raw_segment: bytes
-    ) -> Optional[rrs.V1Payloads]:
+    ) -> rrs.V1Payloads | None:
         sess_id = rrs.v1_get_payload_session_id(payload_raw)
 
         payload_session = get_by_sender_and_session(
@@ -482,12 +490,12 @@ class PublicationService:
                 params["message"] = message
 
             case rrs.V1ContentCategories.MESSAGE:
-                params["recipient"] = content.get_to().decode()
+                params["recipient"] = _recipient(content)
                 params["message"] = message
 
             case rrs.V1ContentCategories.EMAIL:
-                params["to_email"] = content.get_to().decode()
-                params["subject"] = content.get_subject().decode()
+                params["to_email"] = _recipient(content)
+                params["subject"] = (content.get_subject() or b"").decode()
                 params["message"] = message
 
             case _:

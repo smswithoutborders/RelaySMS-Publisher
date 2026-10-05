@@ -16,7 +16,7 @@ def _db():
         with get_session() as db:
             yield db
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
 
 
 def _print_table(headers, rows, empty="No credentials found."):
@@ -25,7 +25,7 @@ def _print_table(headers, rows, empty="No credentials found."):
         return
 
     widths = [
-        max(len(str(row[i])) for row in [headers] + rows) for i in range(len(headers))
+        max(len(str(row[i])) for row in [headers, *rows]) for i in range(len(headers))
     ]
 
     header_str = " | ".join(f"{headers[i]:<{widths[i]}}" for i in range(len(headers)))
@@ -34,7 +34,7 @@ def _print_table(headers, rows, empty="No credentials found."):
     click.echo(f"| {header_str} |")
     click.echo(f"| {sep_str} |")
     for row in rows:
-        row_str = " | ".join(f"{str(row[i]):<{widths[i]}}" for i in range(len(row)))
+        row_str = " | ".join(f"{row[i]!s:<{widths[i]}}" for i in range(len(row)))
         click.echo(f"| {row_str} |")
 
 

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Database connection and session management."""
 
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Optional
 from urllib.parse import quote, quote_plus
 
 from sqlalchemy import create_engine, event, text
@@ -17,24 +17,27 @@ from logutils import get_logger
 logger = get_logger(__name__)
 Base = declarative_base()
 
-_engine: Optional[Engine] = None
-_session_factory: Optional[sessionmaker] = None
+_engine: Engine | None = None
+_session_factory: sessionmaker | None = None
 
 
 def _make_sqlcipher3_creator(db_path: str, key: bytes):
     """Return a function that opens the encrypted SQLCipher database."""
+    # sqlcipher3 re-exports its C extension with import *, which pyright can't follow.
     import sqlcipher3
 
     def connect():
-        conn = sqlcipher3.connect(db_path, check_same_thread=False, timeout=30)
+        conn = sqlcipher3.connect(  # pyright: ignore[reportAttributeAccessIssue]
+            db_path, check_same_thread=False, timeout=30
+        )
         conn.execute("PRAGMA cipher_compatibility = 4;")
         conn.execute(f"PRAGMA key = \"x'{key.hex()}'\";")
 
         try:
             conn.execute("SELECT count(*) FROM sqlite_master;")
-        except sqlcipher3.DatabaseError:
+        except sqlcipher3.DatabaseError:  # pyright: ignore[reportAttributeAccessIssue]
             conn.close()
-            raise ValueError("Invalid hex key or database file is corrupted.")
+            raise ValueError("Invalid hex key or database file is corrupted.") from None
 
         return conn
 
@@ -158,6 +161,7 @@ def _create_engine() -> Engine:
     else:
         _ensure_sqlite_parent_dir(database.sqlite_path)
         if database.encryption_enabled:
+            assert database.encryption_key is not None  # config requires it here
             logger.info("Using SQLCipher3 encryption for SQLite")
             engine = create_engine(
                 "sqlite://",
@@ -217,7 +221,7 @@ def get_session_factory() -> sessionmaker:
 
 
 @contextmanager
-def get_session() -> Generator[Session, None, None]:
+def get_session() -> Generator[Session]:
     """Yield a session that commits on success and rolls back on error."""
     session = get_session_factory()()
     try:
@@ -230,6 +234,6 @@ def get_session() -> Generator[Session, None, None]:
         session.close()
 
 
-def get_db() -> Generator[Session, None, None]:
+def get_db() -> Generator[Session]:
     with get_session() as session:
         yield session

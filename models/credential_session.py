@@ -5,9 +5,19 @@ import datetime
 import hashlib
 import secrets
 import uuid
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import ForeignKey, Index, String, delete, func, or_, select, update
+from sqlalchemy import (
+    CursorResult,
+    ForeignKey,
+    Index,
+    String,
+    delete,
+    func,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.orm import Mapped, Session, joinedload, mapped_column, relationship
 
 from config import AuthConfig
@@ -48,9 +58,9 @@ class CredentialSession(Base):
     expires_at: Mapped[datetime.datetime] = mapped_column(UTCDateTime)
     # Valid only while it matches the credential's.
     session_version: Mapped[int] = mapped_column()
-    user_agent: Mapped[Optional[str]] = mapped_column(String(255), default=None)
+    user_agent: Mapped[str | None] = mapped_column(String(255), default=None)
 
-    credential: Mapped["Credential"] = relationship(
+    credential: Mapped[Credential] = relationship(
         "Credential", back_populates="sessions"
     )
 
@@ -63,10 +73,10 @@ class CredentialSession(Base):
 
 def create(
     session: Session,
-    credential: "Credential",
+    credential: Credential,
     *,
     max_age: datetime.timedelta,
-    user_agent: Optional[str] = None,
+    user_agent: str | None = None,
 ) -> tuple[CredentialSession, str]:
     raw_token = secrets.token_urlsafe(32)
     now = utc_now()
@@ -85,7 +95,7 @@ def create(
     return credential_session, raw_token
 
 
-def get_active(session: Session, raw_token: str) -> Optional[CredentialSession]:
+def get_active(session: Session, raw_token: str) -> CredentialSession | None:
     credential_session = session.scalars(
         select(CredentialSession)
         .options(joinedload(CredentialSession.credential))
@@ -114,21 +124,24 @@ def get_active(session: Session, raw_token: str) -> Optional[CredentialSession]:
 
 
 def revoke_all(session: Session, credential_id: uuid.UUID) -> int:
-    result = session.execute(
-        delete(CredentialSession).where(
-            CredentialSession.credential_id == credential_id
-        )
+    result = cast(
+        CursorResult,
+        session.execute(
+            delete(CredentialSession).where(
+                CredentialSession.credential_id == credential_id
+            )
+        ),
     )
     session.flush()
     return result.rowcount
 
 
 def count_active(session: Session, credential_id: uuid.UUID) -> int:
-    return session.scalar(
+    return session.execute(
         select(func.count(CredentialSession.id)).where(
             CredentialSession.credential_id == credential_id, ~_expired_clause()
         )
-    )
+    ).scalar_one()
 
 
 def count_active_by_credential(session: Session) -> dict[uuid.UUID, int]:
@@ -141,6 +154,9 @@ def count_active_by_credential(session: Session) -> dict[uuid.UUID, int]:
 
 
 def delete_expired(session: Session) -> int:
-    result = session.execute(delete(CredentialSession).where(_expired_clause()))
+    result = cast(
+        CursorResult,
+        session.execute(delete(CredentialSession).where(_expired_clause())),
+    )
     session.flush()
     return result.rowcount

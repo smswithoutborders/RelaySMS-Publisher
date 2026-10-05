@@ -3,6 +3,7 @@
 # Brings up SigNoz + Uptime Kuma and turns on OTel tracing. Re-runnable.
 set -Eeuo pipefail
 
+# shellcheck source=scripts/lib.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"

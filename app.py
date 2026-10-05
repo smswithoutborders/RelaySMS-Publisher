@@ -143,7 +143,7 @@ def validation_error_handler(request: Request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    logger.exception(exc)
+    logger.error("Unhandled error", exc_info=exc)
     return JSONResponse(
         status_code=500,
         content={"error": "Something went wrong. Please try again later."},

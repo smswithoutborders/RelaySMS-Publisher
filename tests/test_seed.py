@@ -8,7 +8,7 @@ import seed
 from db import get_session
 from models import credential as credentials
 from models.publication_stats import PublicationStats
-from tests.creds_fixtures import *  # noqa: F401,F403
+from tests.creds_fixtures import *  # noqa: F403
 
 
 def test_stats_adds_realistic_rows_in_batches(monkeypatch):

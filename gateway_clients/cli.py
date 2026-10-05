@@ -14,7 +14,7 @@ def _print_table(headers, rows):
         return
 
     widths = [
-        max(len(str(row[i])) for row in [headers] + rows) for i in range(len(headers))
+        max(len(str(row[i])) for row in [headers, *rows]) for i in range(len(headers))
     ]
 
     header_str = " | ".join(f"{headers[i]:<{widths[i]}}" for i in range(len(headers)))
@@ -56,7 +56,7 @@ def cli():
     help="PLMN (MCC+MNC) code, if it can't be resolved from the MSISDN.",
 )
 def create(msisdn, protocols, country, operator, operator_code):
-    """Register a new gateway client, resolving country/operator/PLMN from the MSISDN."""
+    """Register a gateway client, resolving country/operator/PLMN from the MSISDN."""
     try:
         manifest = manager.create_client(
             msisdn,

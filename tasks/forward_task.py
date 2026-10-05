@@ -3,7 +3,7 @@
 """Fan out inbound Twilio SMS webhooks to additional configured URLs."""
 
 import concurrent.futures
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -36,7 +36,7 @@ def forward_twilio_webhook(
     normalized_payload = {
         "sender": sender_address,
         "text": text_payload,
-        "received_at": datetime.now(timezone.utc).isoformat(),
+        "received_at": datetime.now(UTC).isoformat(),
     }
 
     futures = [
