@@ -393,6 +393,42 @@ def test_exchange_oauth2_code_needs_256_client_keys(stub, adapter):
     assert "exactly 256 keys" in error.details()
 
 
+def test_exchange_oauth2_code_accepts_client_keys_in_any_order(stub, adapter):
+    adapter.results["exchange_code_and_fetch_user_info"] = OAUTH2_EXCHANGE
+    keypairs, public_keys = client_keys()
+    request = publisher_pb2.ExchangeOAuth2CodeAndStoreRequest(
+        platform="gmail",
+        authorization_code="auth-code",
+        client_ephemeral_public_keys=reversed(public_keys),
+    )
+
+    response = call(stub, "ExchangeOAuth2CodeAndStore", request)
+
+    raw_token = decrypt_token(response, keypairs)
+    assert hashlib.sha256(raw_token).digest() == stored_token(response.token_id).hash
+
+
+@pytest.mark.parametrize(
+    "key_ids",
+    [list(range(256, 512)), [0] * 256],
+    ids=["out_of_range", "duplicate"],
+)
+def test_exchange_oauth2_code_needs_client_key_ids_0_to_255(stub, adapter, key_ids):
+    _, public_keys = client_keys()
+    for key, key_id in zip(public_keys, key_ids, strict=True):
+        key.key_id = key_id
+    request = publisher_pb2.ExchangeOAuth2CodeAndStoreRequest(
+        platform="gmail",
+        authorization_code="auth-code",
+        client_ephemeral_public_keys=public_keys,
+    )
+
+    error = rpc_error(stub, "ExchangeOAuth2CodeAndStore", request)
+
+    assert error.code() == grpc.StatusCode.INVALID_ARGUMENT
+    assert "each key_id 0-255 exactly once" in error.details()
+
+
 def test_revoke_oauth2_token(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
     adapter.results["revoke_token"] = {"result": {}}

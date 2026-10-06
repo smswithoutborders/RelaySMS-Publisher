@@ -87,7 +87,9 @@ def create_token_pools_and_encrypt(
     token_ciphertext = rrs.v1_token_encrypt_server(
         ss_kid=get_private_key(session, kid_index).private_bytes_raw(),
         es_kid=server_keypairs[kid_index].private_bytes_raw(),
-        ec_kid_pk=client_public_keys[kid_index].public_key,
+        ec_kid_pk=next(
+            k.public_key for k in client_public_keys if k.key_id == kid_index
+        ),
         key_id=kid_index,
         token=raw_token,
     )

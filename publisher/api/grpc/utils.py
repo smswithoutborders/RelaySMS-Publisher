@@ -27,6 +27,10 @@ def validate_client_ephemeral_public_keys(keys) -> None:
             "client_ephemeral_public_keys must contain exactly 256 keys, "
             f"got {len(keys)}"
         )
+    if {k.key_id for k in keys} != set(range(256)):
+        raise InvalidArgument(
+            "client_ephemeral_public_keys must have each key_id 0-255 exactly once"
+        )
     for key_obj in keys:
         if len(key_obj.public_key) != 32:
             raise InvalidArgument(
