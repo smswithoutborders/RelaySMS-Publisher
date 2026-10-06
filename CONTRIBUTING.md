@@ -1,7 +1,5 @@
 # Contributing
 
-Thanks for helping improve RelaySMS Publisher. This guide covers how to report problems, set up a development environment, find your way around the code and get a pull request merged.
-
 ## Contents
 
 - [Ways to contribute](#ways-to-contribute)
@@ -73,11 +71,17 @@ make build      # gRPC code and payload-specs bindings
 ### Run locally
 
 ```bash
-cp template.env .env            # then edit as needed
-python -m publisher config check
+cp template.env .env
+for key in DATABASE_ENCRYPTION_KEY DATABASE_FIELD_ENCRYPTION_KEY DATA_ENCRYPTION_KEY; do
+  sed -i "s/^$key=$/$key=$(openssl rand -hex 32)/" .env
+done
+python -m publisher config check    # names any setting still missing or invalid
 make migrate
-make run                        # gRPC, REST, SMTP, worker and beat in the foreground
+python -m publisher creds create --username dev --administrator   # prints the password once
+make run                            # gRPC, REST, SMTP, worker and beat in the foreground
 ```
+
+Log in to the REST API with that username and password, e.g. `curl -u dev:<password> http://127.0.0.1:16000/v1/auth/me` with the default `PORT`.
 
 Each service can also run on its own:
 
@@ -102,6 +106,7 @@ Each service can also run on its own:
 | `make run` | Start every service |
 | `make test` | Run pytest |
 | `make coverage` | Run pytest and list the lines no test runs |
+| `make docs` | Regenerate `docs/openapi.json` from the REST app |
 | `make test-e2e` | Install, update and uninstall in a systemd container (podman) |
 | `make check` | Run every pre-commit hook on all files |
 | `make clean` | Remove generated code |
@@ -191,7 +196,7 @@ A maintainer reviews every PR. Address comments with new commits; they're squash
 | `migrations/` | Alembic migrations |
 | `protos/` | gRPC service definitions |
 | `tools/` | The reference client |
-| `data/` | Runtime data: installed adapters, registries (not tracked) |
+| `data/` | Runtime data: adapter files and the gateway client registry (not tracked) |
 | `tests/` | Tests, see [Testing](#testing) |
 
 Each code row may import only the rows below it, never the other way round, and entry points don't import each other. import-linter enforces this in `make check`.
@@ -215,7 +220,7 @@ The hooks enforce formatting, lint, types and commit messages. These rules are c
 - **The entry point owns the transaction.** A route, gRPC handler, task or CLI command opens the session; code below it never opens a session or commits.
 - **Domain errors subclass `PublisherError`** (`publisher/errors.py`). Each interface maps them to its own responses: HTTP status codes, gRPC status codes, SMTP replies.
 - **Loggers are `logging.getLogger(__name__)`.** Each entry point calls `publisher.log.setup_logging()` once. Never log tokens, keys, passwords or decrypted content.
-- **Comments explain why, not what.** Docstrings are one line unless callers need a `Raises:` section.
+- **Comments explain why, not what.** Docstrings are one line unless callers need a `Raises:` section. REST route docstrings become the API reference, so describe what a client needs there.
 - **Mark overridden framework methods with `@typing.override`.**
 - **Code must run on Python 3.12.** Quote `TYPE_CHECKING` forward references (`Mapped["Token"]`) and avoid syntax newer than 3.12.
 - **Every `.py` file starts with** `# SPDX-License-Identifier: GPL-3.0-only`.
@@ -260,9 +265,12 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 | `test_db` | `tests/fixtures.py` | A fresh in-memory database with every table |
 | `fast_hasher` | `tests/fixtures.py` | A cheap password hasher, for credential tests |
 | `app`, `client` | `tests/fixtures.py` | The FastAPI app and a `TestClient` for it |
-| `password` | `tests/fixtures.py` | A valid credential password |
-| `set_config` | `tests/conftest.py` | Changes a config section for one test |
+| `password`, `admin` | `tests/fixtures.py` | The administrator `USERNAME`'s password, and Basic auth headers for it |
+| `platforms_config` | `tests/fixtures.py` | Adapter directories under `tmp_path`; call it to change other `PlatformsConfig` fields |
+| `set_config` | `tests/conftest.py` | Changes a config section bound in a module, for one test |
 | `USERNAME`, `create_credential`, `basic_auth`, `login`, `can_log_in` | `tests/helpers.py` | Credential and auth helpers |
+| `get_etag` | `tests/helpers.py` | GETs a URL and returns its `ETag`, for `If-Match` |
+| `add_adapter`, `link_account` | `tests/helpers.py` | An adapter row, and a token linked through it |
 
 Modules that touch the database opt in at the top:
 
@@ -290,15 +298,17 @@ make build test PYTHON=.venv312/bin/python
 
 ### Change the database schema
 
-1. Change the model in `publisher/models/`.
+1. Change the model in `publisher/models/`. Import a new model in `publisher/models/__init__.py`, or tests won't create its table.
 2. Add `migrations/versions/NNN_short_slug.py` with the next number as `revision` and the previous one as `down_revision` (`"042"` after `"041"`). Write both `upgrade` and `downgrade`.
-3. Run `make migrate` on SQLite, and on MySQL or PostgreSQL if the migration uses dialect-specific features.
+3. Run `make migrate`, then `python -m alembic downgrade -1` and `make migrate` again, on SQLite, and on MySQL or PostgreSQL if the migration uses dialect-specific features.
+4. Put `[migrate]` in the commit message so the staging deploy applies it.
 
 ### Add a REST endpoint
 
 1. Add the route to the matching module in `publisher/api/rest/v1/` (or a new module with its own `APIRouter`, registered in `routes.py`).
-2. Put request and response models in `schemas.py`. Use `Depends(get_db)` for the session and map domain errors to `HTTPException`.
-3. Test it in `tests/api/rest/`, describe it in its docstring and run `make docs`. Update [docs/rest.md](docs/rest.md) only for what the reference doesn't show.
+2. Put request and response models in `schemas.py`. Use `Depends(get_db)` for the session, and `Security(authorize, scopes=[...])` if it needs a login. A new scope goes in `Scope` in `publisher/models/credential.py`.
+3. Map domain errors to `ApiError` (`errors.py`) with a message a client can show, and put ids and other detail in its `log=`.
+4. Test it in `tests/api/rest/`, describe it in its docstring and run `make docs`. Update [docs/rest.md](docs/rest.md) only for what the reference doesn't show.
 
 ### Change the gRPC API
 
@@ -320,7 +330,7 @@ Add it under `publisher/tasks/`. Keep the explicit `tasks.*` name so queued mess
 
 ### Platform adapters
 
-Adapters live outside this repository and are installed with `python -m publisher platforms`. See [platforms/README.md](platforms/README.md).
+Adapters live in their own repositories. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [platforms/README.md](platforms/README.md).
 
 ## Documentation
 
@@ -336,6 +346,7 @@ Adapters live outside this repository and are installed with `python -m publishe
 - **Pyright:** fix the type, or narrow it with an `assert`. Use `# pyright: ignore[rule]` only with a reason.
 - **import-linter:** a lower layer imports a higher one. Move the code down a layer or pass the dependency in as an argument.
 - **Tests pass on newer Pythons but fail on 3.12:** look for newer syntax or an unquoted forward reference.
+- **e2e:** run `make test-e2e`, or `PYTEST_ARGS="-k debian" make test-e2e` for the failing distro.
 - **Requirements check:** the pinned dependencies conflict. Run `pip install --dry-run -r requirements.txt -r requirements-observability.txt` to see the conflict.
 
 ## AI-assisted contributions
