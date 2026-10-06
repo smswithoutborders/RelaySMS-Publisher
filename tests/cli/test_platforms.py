@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import sys
+
 import pytest
 from click.testing import CliRunner
+from git import Repo
 
 from publisher import db
 from publisher.cli import platforms as platforms_cli
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.platform_adapter import OAUTH2, PNBA
-from tests.helpers import add_adapter, link_account
+from tests.helpers import adapter_repo, add_adapter, link_account
 
 pytestmark = pytest.mark.usefixtures("platforms_config")
 
@@ -58,3 +61,50 @@ def test_update_reports_each_failure_and_carries_on():
     assert result.exit_code == 1
     assert "gmail-0" in result.output and "telegram-1" in result.output
     assert "not a git clone" in result.output
+
+
+def _run(*args):
+    return CliRunner().invoke(platforms_cli.cli, list(args))
+
+
+def test_add_list_and_import(tmp_path):
+    url = str(adapter_repo(tmp_path / "src" / "mastodon", "mastodon").working_tree_dir)
+
+    added = _run("add", url)
+    assert added.exit_code == 0, added.output
+    assert "Adapter 'mastodon' added" in added.output
+
+    source = adapter_repo(tmp_path / "src" / "telegram", "telegram", PNBA)
+    Repo.clone_from(str(source.working_tree_dir), tmp_path / "adapters" / "tg-id")
+    imported = _run("import")
+    assert imported.output.strip() == "Imported 1 adapter(s). telegram"
+
+    listed = _run("list")
+    names = [line.split("|")[2].strip() for line in listed.output.splitlines()[2:]]
+    assert names == ["gmail", "mastodon", "telegram"]
+
+
+@pytest.mark.parametrize(
+    "args, error",
+    [
+        (["remove", "nope"], "No registered adapter"),
+        (["disable", "gmail"], "Multiple matches"),
+    ],
+)
+def test_commands_need_exactly_one_match(args, error):
+    add_adapter("gmail", PNBA)
+
+    result = _run(*args)
+
+    assert result.exit_code == 2
+    assert error in result.output
+
+
+def test_exec_runs_the_adapter_cli_in_its_venv(tmp_path):
+    adapter_dir = tmp_path / "adapters" / "gmail-0"
+    adapter_dir.mkdir(parents=True)
+    (adapter_dir / "cli.py").write_text("import sys; sys.exit(int(sys.argv[1]))")
+    (tmp_path / "venvs" / "gmail-0" / "bin").mkdir(parents=True)
+    (tmp_path / "venvs" / "gmail-0" / "bin" / "python3").symlink_to(sys.executable)
+
+    assert _run("exec", "gmail", "--", "3").exit_code == 3

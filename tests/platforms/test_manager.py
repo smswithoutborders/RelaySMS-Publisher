@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import shutil
+
 import pytest
 from git import Repo
 from sqlalchemy import select
@@ -9,7 +11,7 @@ from publisher.models import platform_adapter as platform_adapters
 from publisher.models.audit_event import AuditEvent
 from publisher.models.platform_adapter import OAUTH2, PNBA, PlatformAdapter
 from publisher.platforms import manager
-from tests.helpers import add_adapter
+from tests.helpers import MANIFEST, adapter_repo, add_adapter, commit_manifest
 
 
 @pytest.fixture(autouse=True)
@@ -57,32 +59,6 @@ def test_empty_allowlist_rejects_everything(platforms_config):
     )
 
 
-MANIFEST = """[platform]
-name = {name}
-display_name = {name}
-proto_id = {proto_id}
-cat_id = 0
-"""
-
-
-def _source_repo(path, name="gmail", proto_id=OAUTH2):
-    """A local git repo laid out like an adapter, with no requirements.txt."""
-    path.mkdir(parents=True)
-    repo = Repo.init(path)
-    for file in ("main.py", "config.ini"):
-        (path / file).write_text("")
-    _commit_manifest(repo, name, proto_id)
-    return repo
-
-
-def _commit_manifest(repo, name, proto_id):
-    path = repo.working_tree_dir
-    with open(f"{path}/manifest.ini", "w") as f:
-        f.write(MANIFEST.format(name=name, proto_id=proto_id))
-    repo.index.add(["main.py", "config.ini", "manifest.ini"])
-    return repo.index.commit(f"{name} {proto_id}").hexsha
-
-
 def _rows():
     with db.get_session() as session:
         return [(a.name, a.proto_id) for a in platform_adapters.find(session)]
@@ -107,7 +83,7 @@ def test_adapters_resolve_by_platform_and_protocol():
 
 @pytest.mark.usefixtures("test_db")
 def test_add_update_and_remove(tmp_path):
-    source = _source_repo(tmp_path / "src")
+    source = adapter_repo(tmp_path / "src")
     url = str(source.working_tree_dir)
 
     with db.get_session() as session:
@@ -116,7 +92,7 @@ def test_add_update_and_remove(tmp_path):
     assert _rows() == [("gmail", OAUTH2)]
     assert (tmp_path / "adapters" / adapter_id / "manifest.ini").is_file()
 
-    second_commit = _commit_manifest(source, "gmail", PNBA)
+    second_commit = commit_manifest(source, "gmail", PNBA)
     with db.get_session() as session:
         manager.update(session, session.get(PlatformAdapter, adapter_id))
     with db.get_session() as session:
@@ -133,7 +109,7 @@ def test_add_update_and_remove(tmp_path):
 @pytest.mark.usefixtures("test_db")
 def test_add_rejects_a_second_adapter_for_the_same_platform(tmp_path):
     add_adapter("gmail", OAUTH2)
-    url = str(_source_repo(tmp_path / "src").working_tree_dir)
+    url = str(adapter_repo(tmp_path / "src").working_tree_dir)
 
     with (
         pytest.raises(manager.AdapterError, match="already installed"),
@@ -148,11 +124,11 @@ def test_add_rejects_a_second_adapter_for_the_same_platform(tmp_path):
 def test_import_registers_unregistered_clones_only(tmp_path):
     adapters_dir = tmp_path / "adapters"
     for name, proto_id in (("gmail", OAUTH2), ("telegram", PNBA), ("twin", OAUTH2)):
-        source = _source_repo(tmp_path / "src" / name, name, proto_id)
+        source = adapter_repo(tmp_path / "src" / name, name, proto_id)
         Repo.clone_from(str(source.working_tree_dir), adapters_dir / f"{name}-id")
     # Same platform and protocol as gmail, so it's skipped.
     twin = Repo(adapters_dir / "twin-id")
-    _commit_manifest(twin, "gmail", OAUTH2)
+    commit_manifest(twin, "gmail", OAUTH2)
     (adapters_dir / "not-an-adapter").mkdir()
     add_adapter("telegram", PNBA)
 
@@ -176,3 +152,118 @@ def test_a_concurrent_change_is_a_conflict():
         with db.get_session() as other:
             manager.set_enabled(other, other.get(PlatformAdapter, "gmail-0"), False)
         manager.set_enabled(stale, adapter, False)
+
+
+def _repo_with_requirements(tmp_path):
+    repo = adapter_repo(tmp_path / "src")
+    (tmp_path / "src" / "requirements.txt").write_text("requests\n")
+    repo.index.add(["requirements.txt"])
+    repo.index.commit("add requirements")
+    return str(repo.working_tree_dir)
+
+
+def _add(url):
+    with db.get_session() as session:
+        return manager.add_from_github(session, url).id
+
+
+@pytest.mark.usefixtures("test_db")
+def test_a_failed_clone_names_the_reason_and_leaves_nothing(tmp_path):
+    with pytest.raises(manager.AdapterError, match="does not exist"):
+        _add(str(tmp_path / "missing"))
+
+    assert list((tmp_path / "adapters").iterdir()) == []
+    assert _rows() == []
+
+
+@pytest.mark.usefixtures("test_db")
+def test_the_same_url_cant_be_added_twice(tmp_path):
+    url = str(adapter_repo(tmp_path / "src").working_tree_dir)
+    _add(url)
+
+    with pytest.raises(manager.AdapterError, match="already installed"):
+        _add(url)
+
+
+@pytest.mark.parametrize(
+    "manifest, error",
+    [
+        ("[other]\nname = x\n", "Invalid manifest.ini"),
+        ("[platform]\nname = gmail\n", "needs name, display_name"),
+        (MANIFEST.format(name="gmail", proto_id="oauth2"), "Invalid manifest value"),
+    ],
+)
+@pytest.mark.usefixtures("test_db")
+def test_a_bad_manifest_is_rejected_and_rolled_back(tmp_path, manifest, error):
+    repo = adapter_repo(tmp_path / "src")
+    (tmp_path / "src" / "manifest.ini").write_text(manifest)
+    repo.index.add(["manifest.ini"])
+    repo.index.commit("break the manifest")
+
+    with pytest.raises(manager.AdapterError, match=error):
+        _add(str(repo.working_tree_dir))
+
+    assert list((tmp_path / "adapters").iterdir()) == []
+
+
+@pytest.mark.usefixtures("test_db")
+def test_dependencies_install_into_the_adapter_venv(tmp_path, monkeypatch):
+    url = _repo_with_requirements(tmp_path)
+    commands = []
+    monkeypatch.setattr(manager.subprocess, "check_call", commands.append)
+
+    adapter_id = _add(url)
+
+    venv = tmp_path / "venvs" / adapter_id
+    assert commands[0][1:] == ["-m", "venv", str(venv)]
+    assert commands[1][0] == str(venv / "bin/pip3")
+    assert commands[1][-1] == str(
+        tmp_path / "adapters" / adapter_id / "requirements.txt"
+    )
+
+
+@pytest.mark.usefixtures("test_db")
+def test_a_failed_dependency_install_rolls_back(tmp_path, monkeypatch):
+    url = _repo_with_requirements(tmp_path)
+
+    def fail(command):
+        raise manager.subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(manager.subprocess, "check_call", fail)
+
+    with pytest.raises(manager.AdapterError, match="Dependency installation failed"):
+        _add(url)
+    assert list((tmp_path / "adapters").iterdir()) == []
+    assert _rows() == []
+
+
+@pytest.mark.usefixtures("test_db")
+def test_a_failed_pull_leaves_the_adapter_unchanged(tmp_path):
+    source = adapter_repo(tmp_path / "src")
+    adapter_id = _add(str(source.working_tree_dir))
+    shutil.rmtree(tmp_path / "src")
+
+    with (
+        pytest.raises(manager.AdapterError, match="Pulling 'gmail' failed"),
+        db.get_session() as session,
+    ):
+        manager.update(session, session.get(PlatformAdapter, adapter_id))
+    assert _actions() == ["platforms.add"]
+
+
+@pytest.mark.usefixtures("test_db")
+def test_remove_refuses_an_id_that_points_outside_the_adapters_dir():
+    with db.get_session() as session:
+        adapter = PlatformAdapter(id="..", name="x", proto_id=OAUTH2)
+        with pytest.raises(manager.AdapterError, match="Unsafe adapter id"):
+            manager.remove(session, adapter)
+
+
+@pytest.mark.usefixtures("test_db")
+def test_enabling_an_enabled_adapter_changes_nothing():
+    add_adapter("gmail", OAUTH2)
+
+    with db.get_session() as session:
+        manager.set_enabled(session, session.get(PlatformAdapter, "gmail-0"), True)
+
+    assert _actions() == []
