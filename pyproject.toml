@@ -74,6 +74,8 @@ reportOperatorIssue = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# make test-e2e runs these on their own.
+norecursedirs = ["e2e"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"

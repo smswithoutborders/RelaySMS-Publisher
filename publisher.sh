@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
 
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
 source "$SCRIPT_DIR/scripts/lib.sh"
 
 INSTALL_DIR="$SCRIPT_DIR"

@@ -66,6 +66,7 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: pre-commit-
 
       - name: Run hooks
         if: matrix.python-version == '3.14'
@@ -74,8 +75,12 @@ jobs:
       - name: Run tests
         run: venv/bin/python -m pytest
 
+  e2e:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/e2e.yml
+
   deploy-staging:
-    needs: checks
+    needs: [checks, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     uses: ./.github/workflows/deploy.staging.yml
     secrets: inherit

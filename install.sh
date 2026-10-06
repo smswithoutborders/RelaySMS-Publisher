@@ -1,6 +1,39 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
 
 set -Eeuo pipefail
+
+REPO_URL="${REPO_URL:-https://github.com/smswithoutborders/RelaySMS-Publisher.git}"
+
+# Piped through curl there is no checkout to source lib.sh from, so clone one
+# and run its install.sh with the same arguments.
+if [ ! -f "${BASH_SOURCE[0]:-}" ]; then
+  [ "$EUID" -eq 0 ] || {
+    echo "Run with sudo" >&2
+    exit 1
+  }
+  branch="${BRANCH:-main}"
+  for ((i = 1; i <= $#; i++)); do
+    case "${!i}" in
+    --branch)
+      next=$((i + 1))
+      branch="${!next:-}"
+      ;;
+    --branch=*) branch="${!i#*=}" ;;
+    esac
+  done
+  command -v git &>/dev/null || { apt-get update -qq && apt-get install -y -qq git; }
+  INSTALL_BOOTSTRAP_DIR="$(mktemp -d)"
+  export INSTALL_BOOTSTRAP_DIR
+  git clone -q --depth 1 -b "$branch" "$REPO_URL" "$INSTALL_BOOTSTRAP_DIR"
+  exec bash "$INSTALL_BOOTSTRAP_DIR/install.sh" "$@"
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
+source "$SCRIPT_DIR/scripts/lib.sh"
+# Only the clone made above is removed, never a checkout install.sh ran from.
+[ "$SCRIPT_DIR" != "${INSTALL_BOOTSTRAP_DIR:-}" ] || trap 'rm -rf "$SCRIPT_DIR"' EXIT
 
 DEFAULT_INSTALL_DIR="/opt/relaysms/relaysms-publisher"
 if [ -n "${INSTALL_DIR:-}" ]; then
@@ -15,11 +48,9 @@ else
   INSTANCE_NAME_SET=0
 fi
 INSTANCE_NAME="${INSTANCE_NAME:-}"
-REPO_URL="https://github.com/smswithoutborders/RelaySMS-Publisher.git"
 BRANCH="${BRANCH:-main}"
 CARGO_BIN="$HOME/.cargo/bin"
 DEPS_MARKER="/var/lib/relaysms-publisher-deps-installed"
-NGINX_CONF_TEMPLATE="deploy/nginx/relaysms-publisher-nginx.conf.template"
 SITE_NAME="${SITE_NAME:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 SKIP_NGINX="${SKIP_NGINX:-0}"
@@ -54,64 +85,11 @@ OBSERVABILITY_SITE_NAME="${OBSERVABILITY_SITE_NAME:-}"
 OBSERVABILITY_KUMA_SITE_NAME="${OBSERVABILITY_KUMA_SITE_NAME:-}"
 OBSERVABILITY_LETSENCRYPT_EMAIL="${OBSERVABILITY_LETSENCRYPT_EMAIL:-}"
 
-UNIT_TEMPLATE_DIR="deploy/systemd"
-TARGET_UNIT_TEMPLATE="relaysms-publisher.target"
-SERVICE_UNIT_TEMPLATES=(
-  relaysms-publisher-rest.service
-  relaysms-publisher-grpc.service
-  relaysms-publisher-worker.service
-  relaysms-publisher-beat.service
-  relaysms-publisher-smtp.service
-)
-ALL_UNIT_TEMPLATES=("$TARGET_UNIT_TEMPLATE" "${SERVICE_UNIT_TEMPLATES[@]}")
-
-unit_name_for() {
-  local template="$1"
-  if [ -z "$INSTANCE_NAME" ]; then
-    echo "$template"
-  else
-    echo "$template" | sed -E "s/^relaysms-publisher/relaysms-publisher-$INSTANCE_NAME/"
-  fi
-}
-
 if [ -n "${SUDO_USER:-}" ] && id "$SUDO_USER" &>/dev/null; then
   SERVICE_USER="$SUDO_USER"
 else
   SERVICE_USER="relaysms"
 fi
-
-# Colors are skipped when the relevant stream isn't a terminal.
-_no_color="${NO_COLOR:-}"
-if [[ -t 1 && -z "$_no_color" ]]; then
-  _grn=$'\033[0;32m'
-else
-  _grn=''
-fi
-if [[ -t 2 && -z "$_no_color" ]]; then
-  _red=$'\033[0;31m'
-  _ylw=$'\033[0;33m'
-else
-  _red=''
-  _ylw=''
-fi
-
-# $1=color $2=symbol $3=fd (1 or 2) $4=message. Reset code is derived from
-# whether $1 is set, so callers don't have to track a matching "off" value.
-_log_line() {
-  local now off=''
-  printf -v now '%(%Y-%m-%d %H:%M:%S)T' -1
-  [[ -n "$1" ]] && off=$'\033[0m'
-  printf '%s[%s]%s [%s] %s\n' "$1" "$2" "$off" "$now" "$4" >&"$3"
-}
-
-log() { _log_line "$_grn" '*' 1 "$*"; }
-warn() { _log_line "$_ylw" '!' 2 "$*"; }
-error() {
-  _log_line "$_red" 'x' 2 "ERROR: $*"
-  exit 1
-}
-on_err() { _log_line "$_red" 'x' 2 "ERROR: aborted at line $1 (last command: $2)"; }
-trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 usage() {
   cat <<'EOF'
@@ -360,8 +338,6 @@ parse_args() {
   done
 }
 
-check_root() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
-
 configure_install_dir() {
   if [ "$INSTALL_DIR_SET" != "1" ]; then
     prompt INSTALL_DIR "Installation directory [$INSTALL_DIR]: " "$INSTALL_DIR"
@@ -374,7 +350,7 @@ configure_install_dir() {
 
   # Blocks top-level dirs (so a later `rm -rf "$INSTALL_DIR"` can't wipe a
   # system directory) and sed-special characters (which would corrupt the
-  # unit-file templating in install_services()).
+  # unit-file templating in render_units).
   [[ "$INSTALL_DIR" =~ ^(/[A-Za-z0-9_.-]+){2,}/?$ ]] ||
     error "$INSTALL_DIR is not a safe install location; use an absolute path with at least two segments, letters/digits/._- only (e.g. /opt/relaysms/relaysms-publisher)"
 
@@ -393,8 +369,8 @@ configure_install_dir() {
         fi
       fi
       # manage.sh has no --instance-name flag, so persist it here for reuse.
-      local existing_instance=""
-      [ -f "$INSTALL_DIR/.instance-name" ] && existing_instance=$(<"$INSTALL_DIR/.instance-name")
+      local existing_instance
+      existing_instance="$(read_instance_name)"
       if [ -n "$existing_instance" ]; then
         if [ "$INSTANCE_NAME_SET" = "1" ] && [ "$INSTANCE_NAME" != "$existing_instance" ]; then
           error "$INSTALL_DIR was previously configured as instance '$existing_instance'. Pass --instance-name $existing_instance (or omit the flag) to reuse it, or use --install-dir to target a different directory for a new instance."
@@ -409,42 +385,10 @@ configure_install_dir() {
     log "Installation directory: $INSTALL_DIR"
   fi
 
-  TARGET_UNIT=$(unit_name_for "$TARGET_UNIT_TEMPLATE")
-  SERVICE_UNITS=()
-  local template
-  for template in "${SERVICE_UNIT_TEMPLATES[@]}"; do
-    SERVICE_UNITS+=("$(unit_name_for "$template")")
-  done
+  set_unit_names
   if [ -n "$INSTANCE_NAME" ]; then
     log "Instance: $INSTANCE_NAME (target unit: $TARGET_UNIT)"
   fi
-}
-
-# `|| true` on the grep stops a no-match from tripping pipefail.
-read_env_var() {
-  local key="$1" file="$2" val
-  val=$( (grep -E "^(export[[:space:]]+)?${key}[[:space:]]*=" "$file" 2>/dev/null || true) |
-    tail -1 | sed -E 's/^(export[[:space:]]+)?[^=]*=//; s/^[[:space:]]*//; s/[[:space:]]*$//')
-  val="${val%\"}"
-  val="${val#\"}"
-  val="${val%\'}"
-  val="${val#\'}"
-  echo "$val"
-}
-
-# Reads from the controlling terminal even when piped via `curl | sudo
-# bash` (stdin is the script itself there). Falls back to $default if no
-# tty is reachable.
-prompt() {
-  local __resultvar="$1" question="> $2" default="${3:-}" reply=""
-  if [ -t 0 ]; then
-    read -r -p "$question" reply
-  elif [ -r /dev/tty ]; then
-    # -r only means the device node exists, not that a terminal is
-    # attached; || true stops a failed open from aborting the install.
-    read -r -p "$question" reply </dev/tty || true
-  fi
-  printf -v "$__resultvar" '%s' "${reply:-$default}"
 }
 
 # Same as prompt(), but a numbered menu instead of free text. Options are
@@ -478,30 +422,6 @@ prompt_menu() {
     fi
     echo "Invalid choice: '$menu_sel'. Enter a number between 1 and $menu_n."
   done
-}
-
-# Same as prompt(), but the value isn't echoed to the terminal as it's typed.
-prompt_secret() {
-  local __resultvar="$1" question="> $2" reply=""
-  if [ -t 0 ]; then
-    read -rs -p "$question" reply
-    echo
-  elif [ -r /dev/tty ]; then
-    read -rs -p "$question" reply </dev/tty || true
-    echo
-  fi
-  printf -v "$__resultvar" '%s' "$reply"
-}
-
-_resolve_dir() {
-  local dir="$1"
-  [ -z "$dir" ] && return
-  [[ "$dir" = /* ]] || dir="$INSTALL_DIR/$dir"
-  local existing
-  for existing in "${RW_DIRS[@]}"; do
-    [ "$existing" = "$dir" ] && return
-  done
-  RW_DIRS+=("$dir")
 }
 
 install_system_deps() {
@@ -613,51 +533,10 @@ setup_env() {
   chmod 640 .env
 }
 
-resolve_app_directories() {
-  local envfile="$INSTALL_DIR/.env"
-  [ -f "$envfile" ] || error ".env not found"
-
-  local sqlite_path celery_broker_path celery_result_path celery_beat_path
-  local adapters_dir adapters_venv adapters_assets registry_file
-  local gateway_clients_registry_file
-  sqlite_path=$(read_env_var "SQLITE_DATABASE_PATH" "$envfile")
-  celery_broker_path=$(read_env_var "CELERY_BROKER_DB_PATH" "$envfile")
-  celery_result_path=$(read_env_var "CELERY_RESULT_DB_PATH" "$envfile")
-  celery_beat_path=$(read_env_var "CELERY_BEAT_SCHEDULE_PATH" "$envfile")
-  adapters_dir=$(read_env_var "PLATFORMS_ADAPTERS_DIR" "$envfile")
-  adapters_venv=$(read_env_var "PLATFORMS_ADAPTERS_VENV_DIR" "$envfile")
-  adapters_assets=$(read_env_var "PLATFORMS_ADAPTERS_ASSETS_DIR" "$envfile")
-  registry_file=$(read_env_var "PLATFORMS_REGISTRY_FILE" "$envfile")
-  gateway_clients_registry_file=$(read_env_var "GATEWAY_CLIENTS_REGISTRY_FILE" "$envfile")
-
-  RW_DIRS=()
-
-  if [ -n "$sqlite_path" ] && [ "$sqlite_path" != ":memory:" ]; then
-    _resolve_dir "$(dirname "$sqlite_path")"
-  fi
-  [ -n "$celery_broker_path" ] && _resolve_dir "$(dirname "$celery_broker_path")"
-  [ -n "$celery_result_path" ] && _resolve_dir "$(dirname "$celery_result_path")"
-  [ -n "$celery_beat_path" ] && _resolve_dir "$(dirname "$celery_beat_path")"
-  _resolve_dir "$adapters_dir"
-  _resolve_dir "$adapters_venv"
-  _resolve_dir "$adapters_assets"
-  [ -n "$registry_file" ] && _resolve_dir "$(dirname "$registry_file")"
-  [ -n "$gateway_clients_registry_file" ] && _resolve_dir "$(dirname "$gateway_clients_registry_file")"
-
-  return 0
-}
-
 create_app_directories() {
   log "Creating application directories"
-  resolve_app_directories
-
-  local dir
-  for dir in "${RW_DIRS[@]}"; do
-    mkdir -p "$dir"
-    chown "$SERVICE_USER:" "$dir"
-    chmod 750 "$dir"
-    log "  $dir"
-  done
+  [ -f "$INSTALL_DIR/.env" ] || error ".env not found"
+  ensure_app_directories "$SERVICE_USER"
 }
 
 run_config_check() {
@@ -675,41 +554,7 @@ install_services() {
   log "Installing systemd services"
   cd "$INSTALL_DIR"
 
-  resolve_app_directories
-  local rw_paths
-  rw_paths=$(
-    IFS=' '
-    echo "${RW_DIRS[*]}"
-  )
-  [ -n "$rw_paths" ] || error "No application directories resolved for ReadWritePaths"
-
-  # Only matches unit-name references (PartOf=, WantedBy=, ...), never
-  # Description=/Documentation=: those read "RelaySMS Publisher" (space,
-  # capitalized), not this lowercase-hyphenated pattern.
-  local instance_sed_args=()
-  if [ -n "$INSTANCE_NAME" ]; then
-    instance_sed_args+=(-e "s/relaysms-publisher\.target/$TARGET_UNIT/g")
-    local svc_name
-    for svc_name in rest grpc worker beat smtp; do
-      instance_sed_args+=(
-        -e "s/relaysms-publisher-$svc_name\.service/relaysms-publisher-$INSTANCE_NAME-$svc_name.service/g"
-        -e "s/relaysms-publisher-$svc_name\$/relaysms-publisher-$INSTANCE_NAME-$svc_name/g"
-      )
-    done
-  fi
-
-  local template dest
-  for template in "${ALL_UNIT_TEMPLATES[@]}"; do
-    [ -f "$UNIT_TEMPLATE_DIR/$template" ] || error "Service file not found: $UNIT_TEMPLATE_DIR/$template"
-    dest=$(unit_name_for "$template")
-    # rw_paths/INSTALL_DIR are absolute paths, so / can't be the sed delimiter.
-    sed \
-      -e "s/User=relaysms/User=$SERVICE_USER/" \
-      -e "s#/opt/relaysms/relaysms-publisher#$INSTALL_DIR#g" \
-      -e "s#__RW_PATHS__#$rw_paths#" \
-      "${instance_sed_args[@]}" \
-      "$UNIT_TEMPLATE_DIR/$template" >"/etc/systemd/system/$dest"
-  done
+  render_units "$SERVICE_USER"
 
   systemctl daemon-reload
   systemctl enable "$TARGET_UNIT"
@@ -717,22 +562,6 @@ install_services() {
     systemctl restart "$svc"
   done
   systemctl start "$TARGET_UNIT"
-}
-
-# gRPC needs HTTP/2, which certbot never enables. nginx 1.25.1+ takes
-# "http2 on;"; below 1.25.1 only "listen ... http2" works.
-enable_nginx_http2() {
-  local conf="$1" version
-  version=$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9.]*\).*#\1#p')
-  if printf '%s\n' 1.25.1 "$version" | sort -V -C; then
-    sed -i 's/^\(\s*\)listen 443 ssl;.*/&\n\1http2 on;/' "$conf"
-  else
-    sed -i \
-      -e "s/listen 443 ssl;/listen 443 ssl http2;/" \
-      -e "s/listen \\[::\\]:443 ssl;/listen [::]:443 ssl http2;/" \
-      -e "s/listen \\[::\\]:443 ssl ipv6only=on;/listen [::]:443 ssl http2 ipv6only=on;/" \
-      "$conf"
-  fi
 }
 
 configure_nginx() {
@@ -759,39 +588,20 @@ configure_nginx() {
       return
     }
   fi
-  # Rejects path separators (path traversal into conf_dest below) and
-  # anything that could be read as a certbot flag instead of a domain.
-  [[ "$site" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]] ||
-    error "'$site' is not a valid hostname"
+  validate_hostname "--site-name" "$site"
 
-  if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
-    log "Installing nginx and certbot"
-    apt-get install -y --no-install-recommends nginx certbot python3-certbot-nginx
-  fi
-  mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-
-  local envfile="$INSTALL_DIR/.env" rest_port grpc_port
-  rest_port=$(read_env_var "PORT" "$envfile")
-  grpc_port=$(read_env_var "GRPC_PORT" "$envfile")
+  install_nginx_certbot
 
   local conf_dest="/etc/nginx/sites-available/${site}.conf"
   if [ -f "$conf_dest" ]; then
     log "nginx site $conf_dest already exists, leaving it untouched"
   else
-    [ -f "$INSTALL_DIR/$NGINX_CONF_TEMPLATE" ] || error "$NGINX_CONF_TEMPLATE not found"
-    sed \
-      -e "s/__SERVER_NAME__/$site/g" \
-      -e "s/__REST_PORT__/${rest_port:-16000}/g" \
-      -e "s/__GRPC_PORT__/${grpc_port:-6000}/g" \
-      "$INSTALL_DIR/$NGINX_CONF_TEMPLATE" >"$conf_dest"
+    render_nginx_site "$site" "$conf_dest"
     log "Wrote $conf_dest"
   fi
   ln -sf "$conf_dest" "/etc/nginx/sites-enabled/${site}.conf"
 
-  nginx -t || error "nginx config test failed"
-  # Boot persistence is a nicety, not required for this run to succeed.
-  systemctl enable nginx &>/dev/null || true
-  systemctl reload nginx 2>/dev/null || systemctl restart nginx
+  reload_nginx
 
   if [ -f "/etc/letsencrypt/live/${site}/fullchain.pem" ]; then
     log "Certificate for $site already exists, skipping certbot"
@@ -814,15 +624,7 @@ configure_nginx() {
     prompt email "Email for Let's Encrypt renewal notices (optional): " ""
   fi
 
-  local certbot_args=(--nginx -d "$site" --redirect --agree-tos --non-interactive)
-  if [ -n "$email" ]; then
-    certbot_args+=(-m "$email")
-  else
-    certbot_args+=(--register-unsafely-without-email)
-  fi
-
-  log "Requesting certificate for $site"
-  certbot "${certbot_args[@]}" || error "certbot failed to obtain a certificate for $site"
+  request_certificate "$site" "$email" || error "certbot failed to obtain a certificate for $site"
   log "Certificate installed for $site"
 
   enable_nginx_http2 "$conf_dest"
@@ -1006,7 +808,7 @@ configure_observability() {
 
 main() {
   parse_args "$@"
-  check_root
+  require_root
   git check-ref-format --branch "$BRANCH" &>/dev/null ||
     error "--branch '$BRANCH' is not a valid branch name"
   log "Installing RelaySMS Publisher (service user: $SERVICE_USER)"

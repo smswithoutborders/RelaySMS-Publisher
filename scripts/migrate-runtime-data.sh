@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
 # Moves runtime data from platforms/ and gateway_clients/ into data/. Safe to
 # rerun: paths already moved, or set in .env to somewhere else, are left alone.

@@ -1,0 +1,44 @@
+name: E2E
+
+# Installs, updates and uninstalls in a systemd container on each supported distro.
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    permissions:
+      contents: read
+
+    concurrency:
+      group: e2e-${{ github.ref }}-${{ matrix.distro }}
+      cancel-in-progress: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [ubuntu, debian]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # The e2e tests only need pytest, not the app's test environment.
+      - name: Install pytest
+        run: pip install --disable-pip-version-check "$(grep -i '^pytest==' requirements-dev.txt)"
+
+      - name: Run e2e tests
+        run: make test-e2e PYTHON=python PYTEST_ARGS="-k ${{ matrix.distro }} -v"

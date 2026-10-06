@@ -1,18 +1,20 @@
+# dclint disable no-build-and-image service-image-require-explicit-tag no-unbound-port-interfaces
+# The image is built here, and the ports are meant to be reachable from outside.
 services:
   publisher:
-    build: .
     image: relaysms-publisher:latest
+    build: .
     container_name: relaysms-publisher
-    restart: unless-stopped
-    env_file: .env
+    volumes:
+      - ./data:/publisher/data
     # HOST/GRPC_HOST default to 127.0.0.1 in .env, which would make the
     # container unreachable from outside. Override regardless of what .env
     # has, since inside a container 0.0.0.0 is the only sensible bind.
     environment:
       HOST: 0.0.0.0
       GRPC_HOST: 0.0.0.0
+    env_file: .env
     ports:
-      - "${PORT:-16000}:${PORT:-16000}"
       - "${GRPC_PORT:-6000}:${GRPC_PORT:-6000}"
-    volumes:
-      - ./data:/publisher/data
+      - "${PORT:-16000}:${PORT:-16000}"
+    restart: unless-stopped

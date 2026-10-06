@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
 # Usage: ./sync-env.sh [env-file] [template-file]
 #
@@ -8,81 +8,69 @@
 
 set -Eeuo pipefail
 
-on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
-trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
+source "$SCRIPT_DIR/scripts/lib.sh"
+
 ENV_FILE="${1:-$SCRIPT_DIR/.env}"
 TEMPLATE_FILE="${2:-$SCRIPT_DIR/template.env}"
 
-[ -f "$TEMPLATE_FILE" ] || {
-  echo "Template not found: $TEMPLATE_FILE" >&2
-  exit 1
-}
-
-if [ -e "$ENV_FILE" ]; then
-  [ -w "$ENV_FILE" ] || {
-    echo "No write permission on $ENV_FILE. Try: sudo $0 $*" >&2
-    exit 1
-  }
-else
-  [ -w "$(dirname "$ENV_FILE")" ] || {
-    echo "No write permission in $(dirname "$ENV_FILE") to create $ENV_FILE. Try: sudo $0 $*" >&2
-    exit 1
-  }
-  : >"$ENV_FILE"
-fi
-
-mapfile -t env_lines <"$ENV_FILE"
-
-# Inserts $2 right after the line in env_lines matching $1 (exact text), or
-# appends both (as a new block) if $1 is empty or not found.
+# Inserts $2 after the env_lines entry for anchor $1: the same variable for a
+# KEY=value anchor (its value may differ), the same text for a comment. A
+# comment anchor that isn't there yet starts a new block.
 insert_after_or_append() {
   local anchor="$1" new_line="$2" i
-  if [ -n "$anchor" ]; then
-    for i in "${!env_lines[@]}"; do
-      if [ "${env_lines[$i]}" = "$anchor" ]; then
-        env_lines=("${env_lines[@]:0:$((i + 1))}" "$new_line" "${env_lines[@]:$((i + 1))}")
-        return
-      fi
-    done
-    env_lines+=("" "$anchor" "$new_line")
-    return
-  fi
+  for i in "${!env_lines[@]}"; do
+    if [ -n "$anchor" ] && { [ "${env_lines[$i]}" = "$anchor" ] ||
+      [[ "$anchor" != \#* && "${env_lines[$i]}" == "${anchor%%=*}="* ]]; }; then
+      env_lines=("${env_lines[@]:0:$((i + 1))}" "$new_line" "${env_lines[@]:$((i + 1))}")
+      return
+    fi
+  done
+  [[ "$anchor" != \#* ]] || env_lines+=("" "$anchor")
   env_lines+=("$new_line")
 }
 
-added=0
-last_comment=""
-while IFS= read -r line; do
-  if [[ "$line" =~ ^[[:space:]]*$ ]]; then
-    last_comment=""
-    continue
+main() {
+  [ -f "$TEMPLATE_FILE" ] || error "Template not found: $TEMPLATE_FILE"
+  if [ -e "$ENV_FILE" ]; then
+    [ -w "$ENV_FILE" ] || error "No write permission on $ENV_FILE. Try: sudo $0 $*"
+  else
+    [ -w "$(dirname "$ENV_FILE")" ] ||
+      error "No write permission in $(dirname "$ENV_FILE") to create $ENV_FILE. Try: sudo $0 $*"
+    : >"$ENV_FILE"
   fi
-  if [[ "$line" =~ ^[[:space:]]*# ]]; then
+
+  local env_lines line key added=0 last_comment=""
+  mapfile -t env_lines <"$ENV_FILE"
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*$ ]]; then
+      last_comment=""
+      continue
+    fi
+    if [[ "$line" =~ ^[[:space:]]*# ]]; then
+      last_comment="$line"
+      continue
+    fi
+    [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)= ]] || continue
+
+    key="${BASH_REMATCH[1]}"
+    if ! printf '%s\n' "${env_lines[@]}" | grep -qE "^${key}[[:space:]]*="; then
+      insert_after_or_append "$last_comment" "$line"
+      log "Added: $key"
+      added=$((added + 1))
+    fi
     last_comment="$line"
-    continue
+  done <"$TEMPLATE_FILE"
+
+  if [ "$added" -eq 0 ]; then
+    log "Nothing to add; $ENV_FILE already has every variable from $TEMPLATE_FILE."
+    return
   fi
-  [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)= ]] || continue
-
-  key="${BASH_REMATCH[1]}"
-  if printf '%s\n' "${env_lines[@]}" | grep -qE "^${key}[[:space:]]*="; then
-    last_comment="$line"
-    continue
-  fi
-
-  insert_after_or_append "$last_comment" "$line"
-  echo "Added: $key"
-  added=$((added + 1))
-  last_comment="$line"
-done <"$TEMPLATE_FILE"
-
-if [ "$added" -eq 0 ]; then
-  echo "Nothing to add; $ENV_FILE already has every variable from $TEMPLATE_FILE."
-else
-  BACKUP_FILE="$ENV_FILE.bak"
-  cp -p "$ENV_FILE" "$BACKUP_FILE"
+  cp -p "$ENV_FILE" "$ENV_FILE.bak"
   printf '%s\n' "${env_lines[@]}" >"$ENV_FILE"
-  echo "Added $added variable(s) to $ENV_FILE"
-  echo "Previous file backed up to $BACKUP_FILE; delete it once you've confirmed the sync looks right."
-fi
+  log "Added $added variable(s) to $ENV_FILE"
+  log "Previous file backed up to $ENV_FILE.bak; delete it once you've confirmed the sync looks right."
+}
+
+main "$@"

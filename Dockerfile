@@ -11,15 +11,16 @@ RUN --mount=type=cache,sharing=locked,target=/var/cache/apt \
   pkg-config \
   curl \
   git \
-  make && \
-  apt-get clean && rm -rf /var/lib/apt/lists/*
+  make \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
   | sh -s -- -y --no-modify-path
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN python3 -m venv /venv
-COPY requirements.txt requirements-observability.txt .
+COPY requirements.txt requirements-observability.txt ./
 RUN --mount=type=cache,sharing=locked,target=/root/.cache/pip \
   /venv/bin/pip install --disable-pip-version-check \
   -r requirements.txt -r requirements-observability.txt
@@ -45,8 +46,8 @@ RUN --mount=type=cache,sharing=locked,target=/var/cache/apt \
   apt-get update && apt-get install -y --no-install-recommends \
   libsqlcipher0 \
   libmagic1 \
-  git && \
-  apt-get clean && rm -rf /var/lib/apt/lists/*
+  git \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /venv /venv
 COPY --from=builder /publisher /publisher

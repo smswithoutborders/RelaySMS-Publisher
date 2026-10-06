@@ -7,15 +7,15 @@ services:
   uptime-kuma:
     image: louislam/uptime-kuma:2
     container_name: uptime-kuma
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    ports:
-      - "127.0.0.1:3001:3001"
     volumes:
       - uptime-kuma-data:/app/data
+    ports:
+      - "127.0.0.1:3001:3001"
+    restart: unless-stopped
     mem_limit: 256m
     mem_reservation: 64m
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   uptime-kuma-data:

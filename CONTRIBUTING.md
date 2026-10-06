@@ -101,6 +101,7 @@ Each service can also run on its own:
 | `make migrate` | Apply Alembic migrations |
 | `make run` | Start every service |
 | `make test` | Run pytest |
+| `make test-e2e` | Install, update and uninstall in a systemd container (podman) |
 | `make check` | Run every pre-commit hook on all files |
 | `make clean` | Remove generated code |
 
@@ -150,7 +151,7 @@ Common types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` and `c
 
 `pre-commit install` sets up three stages:
 
-- **pre-commit:** whitespace and line-ending fixes, YAML/TOML checks, ruff lint and format, shellcheck, pyright and import-linter;
+- **pre-commit:** whitespace and line-ending fixes, YAML/TOML checks, ruff lint and format, shellcheck and shfmt for shell scripts, hadolint and dockerfmt for Dockerfiles, dclint for Compose files, pyright and import-linter;
 - **commit-msg:** commitizen;
 - **pre-push:** the test suite.
 
@@ -183,7 +184,7 @@ A maintainer reviews every PR. Address comments with new commits; they're squash
 | `protos/` | gRPC service definitions |
 | `tools/` | The reference client |
 | `data/` | Runtime data: installed adapters, registries (not tracked) |
-| `tests/` | Tests, mirroring `publisher/` |
+| `tests/` | Tests, see [Testing](#testing) |
 
 Each code row may import only the rows below it, never the other way round, and entry points don't import each other. import-linter enforces this in `make check`.
 
@@ -211,6 +212,8 @@ The hooks enforce formatting, lint, types and commit messages. These rules are c
 - **Code must run on Python 3.12.** Quote `TYPE_CHECKING` forward references (`Mapped["Token"]`) and avoid syntax newer than 3.12.
 - **Every `.py` file starts with** `# SPDX-License-Identifier: GPL-3.0-only`.
 
+Shell scripts follow one layout: `#!/usr/bin/env bash`, the SPDX line, `set -Eeuo pipefail`, then `source` `scripts/lib.sh` for logging, errors and shared helpers. Scripts with options parse them in `parse_args` and run from `main "$@"`. `install.sh` is the one exception: piped through curl, it clones the repo first and re-runs from the clone.
+
 > [!WARNING]
 > `platforms/protocol_interfaces.py` is excluded from every tool because adapters copy it verbatim. Keep changes to it backwards compatible.
 
@@ -223,6 +226,14 @@ python -m pytest -k token_id -x              # by name, stop at first failure
 ```
 
 Tests run against in-memory SQLite. `tests/conftest.py` sets the environment before `publisher.config` is imported, so your local `.env` is ignored.
+
+| Directory | Covers | Runs in |
+| --- | --- | --- |
+| `tests/` (mirroring `publisher/`) | The Python package | `make test` |
+| `tests/scripts` | The shell scripts, run with bash | `make test` |
+| `tests/e2e` | Install, update and uninstall on Ubuntu 24.04 and Debian 13 | `make test-e2e` |
+
+`make test-e2e` installs the working tree, uncommitted changes included, into systemd containers. It needs rootless podman and network access, and takes a few minutes; `PYTEST_ARGS="-k debian"` runs one distro. The staging deploy waits for it.
 
 ### Writing tests
 

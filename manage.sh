@@ -1,112 +1,56 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
 
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
 source "$SCRIPT_DIR/scripts/lib.sh"
 
 INSTALL_DIR="$SCRIPT_DIR"
 CARGO_BIN="$HOME/.cargo/bin"
 
 INSTANCE_NAME="$(read_instance_name)"
-TARGET_UNIT="$(unit_name_for "$TARGET_UNIT_TEMPLATE")"
-SERVICE_UNITS=()
-for _template in "${SERVICE_UNIT_TEMPLATES[@]}"; do
-  SERVICE_UNITS+=("$(unit_name_for "$_template")")
-done
-unset _template
+set_unit_names
 ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
+SERVICE_USER="$(installed_service_user)"
 
-check_sudo() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
-
-# Reads the installed unit only. Prints nothing when the service isn't installed,
-# so callers can report it.
-detect_service_user() {
-  local unit
-  unit="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
-  [ -f "$unit" ] || return 0
-  awk -F= '/^User=/ { print $2; exit }' "$unit"
-}
-
-# git pull doesn't fix ownership for directories .env added since the last run.
-sync_app_directories() {
-  local service_user
-  service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || return
-
-  local envfile="$INSTALL_DIR/.env"
-  local dirs=(
-    "$(dirname "$(read_env_var SQLITE_DATABASE_PATH "$envfile")")"
-    "$(dirname "$(read_env_var CELERY_BROKER_DB_PATH "$envfile")")"
-    "$(dirname "$(read_env_var CELERY_RESULT_DB_PATH "$envfile")")"
-    "$(dirname "$(read_env_var CELERY_BEAT_SCHEDULE_PATH "$envfile")")"
-    "$(read_env_var PLATFORMS_ADAPTERS_DIR "$envfile")"
-    "$(read_env_var PLATFORMS_ADAPTERS_VENV_DIR "$envfile")"
-    "$(read_env_var PLATFORMS_ADAPTERS_ASSETS_DIR "$envfile")"
-    "$(dirname "$(read_env_var PLATFORMS_REGISTRY_FILE "$envfile")")"
-    "$(dirname "$(read_env_var GATEWAY_CLIENTS_REGISTRY_FILE "$envfile")")"
-  )
-
-  local dir
-  for dir in "${dirs[@]}"; do
-    [ -n "$dir" ] && [ "$dir" != "." ] || continue
-    [[ "$dir" = /* ]] || dir="$INSTALL_DIR/$dir"
-    mkdir -p "$dir"
-    chown "$service_user:" "$dir"
-    chmod 750 "$dir"
-  done
-}
-
-# Re-renders the units from the templates, so updates pick up new ExecStart lines.
-# Keeps the installed User= and ReadWritePaths=.
-update_units() {
-  local installed service_user rw_paths
-  installed="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
-  [ -f "$installed" ] || error "No installed units found at $installed. Run install.sh first."
-  service_user="$(awk -F= '/^User=/ { print $2; exit }' "$installed")"
-  rw_paths="$(awk -F= '/^ReadWritePaths=/ { print $2; exit }' "$installed")"
-  [ -n "$service_user" ] && [ -n "$rw_paths" ] ||
-    error "Couldn't read User= and ReadWritePaths= from $installed"
-  render_units "$service_user" "$rw_paths"
+require_installed() {
+  [ -n "$SERVICE_USER" ] ||
+    error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher config check"
 }
 
 run_migrations() {
-  local service_user
-  service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher config check"
-
+  require_installed
   log "Running database migrations"
-  (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m alembic upgrade head)
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
 }
 
 run_config_check() {
-  local service_user
-  service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher config check"
-
+  require_installed
   log "Checking configuration"
   # config reads .env itself the same way systemd does, so it is not sourced here.
-  (cd "$INSTALL_DIR" && sudo -u "$service_user" venv/bin/python -m publisher config check)
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
 }
 
 cmd_check() {
-  check_sudo
+  require_root
   run_config_check
 }
 
 cmd_migrate() {
-  check_sudo
+  require_root
   run_migrations
 }
 
 cmd_start() {
-  check_sudo
+  require_root
   systemctl start "$TARGET_UNIT"
   log "Services started"
 }
 
 cmd_stop() {
-  check_sudo
+  require_root
   local svc
   for svc in "${SERVICE_UNITS[@]}"; do
     systemctl stop "$svc"
@@ -116,7 +60,7 @@ cmd_stop() {
 }
 
 cmd_restart() {
-  check_sudo
+  require_root
   # Pick up unit files edited since the last reload.
   systemctl daemon-reload
   local svc
@@ -215,13 +159,13 @@ cmd_logs() {
 }
 
 cmd_enable() {
-  check_sudo
+  require_root
   systemctl enable "$TARGET_UNIT"
   log "Services enabled on boot"
 }
 
 cmd_disable() {
-  check_sudo
+  require_root
   systemctl disable "$TARGET_UNIT"
   log "Services disabled on boot"
 }
@@ -258,7 +202,7 @@ cmd_update() {
     esac
   done
 
-  check_sudo
+  require_root
   cd "$INSTALL_DIR"
   local svc
   if [ "$pulled" = "0" ]; then
@@ -283,9 +227,11 @@ cmd_update() {
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
   make build
 
+  # Directories and units follow .env, which the migration may have just changed.
   "$INSTALL_DIR/scripts/migrate-runtime-data.sh"
-  sync_app_directories
-  update_units
+  require_installed
+  ensure_app_directories "$SERVICE_USER"
+  render_units "$SERVICE_USER"
 
   # Each service fails only on the settings it uses, so restart all and report after.
   local config_ok=1
@@ -324,42 +270,16 @@ detect_nginx_site() {
   basename "${sites[0]}" .conf
 }
 
-# gRPC needs HTTP/2, which certbot never enables. nginx 1.25.1+ takes
-# "http2 on;"; below 1.25.1 only "listen ... http2" works.
-enable_nginx_http2() {
-  local conf="$1" version
-  version=$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9.]*\).*#\1#p')
-  if printf '%s\n' 1.25.1 "$version" | sort -V -C; then
-    sed -i 's/^\(\s*\)listen 443 ssl;.*/&\n\1http2 on;/' "$conf"
-  else
-    sed -i \
-      -e "s/listen 443 ssl;/listen 443 ssl http2;/" \
-      -e "s/listen \\[::\\]:443 ssl;/listen [::]:443 ssl http2;/" \
-      -e "s/listen \\[::\\]:443 ssl ipv6only=on;/listen [::]:443 ssl http2 ipv6only=on;/" \
-      "$conf"
-  fi
-}
-
 install_nginx_site() {
-  local site="$1" conf="$2" envfile="$INSTALL_DIR/.env" rest_port grpc_port
-  rest_port=$(read_env_var PORT "$envfile")
-  grpc_port=$(read_env_var GRPC_PORT "$envfile")
-
-  sed \
-    -e "s/__SERVER_NAME__/$site/g" \
-    -e "s/__REST_PORT__/${rest_port:-16000}/g" \
-    -e "s/__GRPC_PORT__/${grpc_port:-6000}/g" \
-    "$INSTALL_DIR/deploy/nginx/relaysms-publisher-nginx.conf.template" >"$conf" || return 1
+  local site="$1" conf="$2"
+  render_nginx_site "$site" "$conf" || return 1
   ln -sf "$conf" "/etc/nginx/sites-enabled/${site}.conf" || return 1
 
   # Re-adds the 443 block that re-rendering dropped.
   if [ -f "/etc/letsencrypt/live/${site}/fullchain.pem" ]; then
     certbot install --nginx --cert-name "$site" --redirect --non-interactive || return 1
   else
-    local email_args=(--register-unsafely-without-email)
-    [ -n "${LETSENCRYPT_EMAIL:-}" ] && email_args=(-m "$LETSENCRYPT_EMAIL")
-    certbot --nginx -d "$site" --redirect --agree-tos --non-interactive \
-      "${email_args[@]}" || return 1
+    request_certificate "$site" "${LETSENCRYPT_EMAIL:-}" || return 1
   fi
 
   enable_nginx_http2 "$conf" || return 1
@@ -373,7 +293,7 @@ cmd_nginx() {
     return
     ;;
   esac
-  check_sudo
+  require_root
   if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
     error "nginx and certbot must be installed"
   fi
@@ -397,7 +317,7 @@ cmd_nginx() {
 }
 
 cmd_uninstall() {
-  check_sudo
+  require_root
   local confirm
   read -r -p "Remove all services and data? (yes/no): " confirm || confirm="no"
   if [ "$confirm" != "yes" ]; then
@@ -413,7 +333,7 @@ cmd_uninstall() {
   systemctl disable "$TARGET_UNIT" 2>/dev/null || true
 
   for unit in "${ALL_UNITS[@]}"; do
-    rm -f "/etc/systemd/system/$unit"
+    rm -f "$SYSTEMD_DIR/$unit"
   done
   systemctl daemon-reload
 
