@@ -5,7 +5,7 @@ import datetime
 import secrets
 from typing import Any
 
-from sqlalchemy import BigInteger, SmallInteger, String, func, select
+from sqlalchemy import BigInteger, Index, SmallInteger, String, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from publisher.db import Base
@@ -26,7 +26,7 @@ class Token(Base):
     token_id: Mapped[int] = mapped_column(
         BigInteger, default=_generate_uint32_token, unique=True
     )
-    platform: Mapped[str] = mapped_column(String(100), index=True)
+    platform: Mapped[str] = mapped_column(String(100))
     cat_id: Mapped[int] = mapped_column(SmallInteger)
     proto_id: Mapped[int] = mapped_column(SmallInteger)
     token_data: Mapped[dict[str, Any]] = mapped_column(EncryptedJSON)
@@ -37,6 +37,8 @@ class Token(Base):
     token_hash: Mapped[TokenHash] = relationship(
         "TokenHash", back_populates="token", cascade="all, delete-orphan", uselist=False
     )
+
+    __table_args__ = (Index("ix_tokens_platform_proto_id", "platform", "proto_id"),)
 
 
 def create(
@@ -69,4 +71,15 @@ def get_idle(session: Session, older_than: datetime.datetime) -> list[Token]:
             .join(TokenHash)
             .where(func.coalesce(TokenHash.last_used_at, Token.created_at) < older_than)
         )
+    )
+
+
+def count_for_platform(session: Session, platform: str, proto_id: int) -> int:
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(Token)
+            .where(Token.platform == platform, Token.proto_id == proto_id)
+        )
+        or 0
     )

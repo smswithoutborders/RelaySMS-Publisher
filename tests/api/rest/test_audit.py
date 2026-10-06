@@ -7,7 +7,16 @@ import pytest
 from publisher import db
 from publisher.models import audit_event
 from publisher.models.audit_event import AREA_SCOPES, AuditAction, AuditEvent
-from tests.helpers import USERNAME, basic_auth, create_credential, get_etag, login
+from publisher.models.platform_adapter import OAUTH2, PlatformAdapter
+from publisher.platforms import manager
+from tests.helpers import (
+    USERNAME,
+    add_adapter,
+    basic_auth,
+    create_credential,
+    get_etag,
+    login,
+)
 
 pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
 
@@ -40,11 +49,11 @@ def test_records_credential_changes_newest_first(client, admin):
     client.patch(
         "/v1/creds/analyst",
         json={"scopes": ["stats:publications:read"], "active": False},
-        headers={**admin, "If-Match": get_etag(client, admin, "analyst")},
+        headers={**admin, "If-Match": get_etag(client, admin, "/v1/creds/analyst")},
     )
     client.delete(
         "/v1/creds/analyst",
-        headers={**admin, "If-Match": get_etag(client, admin, "analyst")},
+        headers={**admin, "If-Match": get_etag(client, admin, "/v1/creds/analyst")},
     )
 
     data = _events(client, admin, target="analyst")["data"]
@@ -113,12 +122,20 @@ def test_logins_and_logouts(client, admin, password):
     assert _events(client, admin, target="nobody")["data"] == []
 
 
-def test_events_need_the_area_read_scope(client, admin):
-    create_credential("analyst", ["gc:read"])
-    auditor = basic_auth("auditor", create_credential("auditor", ["audit:read"]))
+def test_each_area_needs_its_read_scope(client):
+    adapter = add_adapter("gmail", OAUTH2)
+    with db.get_session() as session:
+        manager.set_enabled(session, session.get(PlatformAdapter, adapter.id), False)
 
-    assert _events(client, auditor)["data"] == []
-    assert _events(client, admin)["data"]
+    def actions(*scopes):
+        name = "-".join(scope.replace(":", "-") for scope in scopes)
+        headers = basic_auth(name, create_credential(name, scopes))
+        return {e["action"] for e in _events(client, headers)["data"]}
+
+    # Each credential created here is itself a creds.create event.
+    assert actions("audit:read") == set()
+    assert actions("audit:read", "platforms:read") == {"platforms.disable"}
+    assert "platforms.disable" not in actions("audit:read", "creds:read")
 
 
 def test_pages_link_both_ways(client, admin):

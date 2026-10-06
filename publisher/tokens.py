@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 def revoke_oauth2_token_upstream(session: Session, token: Token) -> str | None:
     """Revoke an OAuth2 token at its platform; return the adapter's error, if any."""
-    adapter = platform_adapters.get_for_protocol(session, token.platform, OAUTH2)
+    # Disabled adapters still revoke, so users can always unlink.
+    adapter = platform_adapters.get_for_protocol(
+        session, token.platform, OAUTH2, include_disabled=True
+    )
     pipe = ipc.invoke(
         adapter_path=adapter.path,
         venv_path=adapter.venv_path,
@@ -32,7 +35,9 @@ def revoke_oauth2_token_upstream(session: Session, token: Token) -> str | None:
 
 def revoke_pnba_token_upstream(session: Session, token: Token) -> str | None:
     """End a PNBA session at its platform; return the adapter's error, if any."""
-    adapter = platform_adapters.get_for_protocol(session, token.platform, PNBA)
+    adapter = platform_adapters.get_for_protocol(
+        session, token.platform, PNBA, include_disabled=True
+    )
     pipe = ipc.invoke(
         adapter_path=adapter.path,
         venv_path=adapter.venv_path,

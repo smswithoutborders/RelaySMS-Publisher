@@ -3,11 +3,12 @@
 
 import datetime
 import uuid
+from collections.abc import Iterable
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, String, Uuid
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import ForeignKey, Index, String, Uuid, select
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from publisher.db import Base
 from publisher.db.types import UTCDateTime, utc_now
@@ -91,3 +92,16 @@ class Credential(Base):
     @property
     def is_administrator(self) -> bool:
         return self.scopes >= ALL_SCOPES
+
+
+def usernames(
+    session: Session, ids: Iterable[uuid.UUID | None]
+) -> dict[uuid.UUID, str]:
+    """Usernames by id, for the ids that still exist."""
+    wanted = {i for i in ids if i is not None}
+    if not wanted:
+        return {}
+    rows = session.execute(
+        select(Credential.id, Credential.username).where(Credential.id.in_(wanted))
+    )
+    return {row.id: row.username for row in rows}

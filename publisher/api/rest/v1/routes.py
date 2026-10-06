@@ -7,6 +7,7 @@ from publisher.api.rest.v1 import (
     auth,
     creds,
     gateway_clients,
+    platform_adapters,
     platforms,
     publications,
     server_keys,
@@ -22,6 +23,7 @@ for module in (
     stats,
     publications,
     platforms,
+    platform_adapters,
     gateway_clients,
     server_keys,
 ):

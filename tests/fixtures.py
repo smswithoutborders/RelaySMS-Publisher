@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Shared fixtures, loaded by conftest.py once the test environment is set."""
 
+import dataclasses
+
 import pytest
 from argon2 import PasswordHasher
 from fastapi import FastAPI
@@ -10,6 +12,7 @@ import publisher.models  # noqa: F401  (registers every table on Base.metadata)
 from publisher import credentials, db
 from publisher.api.rest import app as app_module
 from publisher.api.rest.v1 import routes
+from publisher.config import PlatformsConfig
 from publisher.db import Base
 from tests.helpers import USERNAME, basic_auth, create_credential
 
@@ -61,3 +64,21 @@ def password():
 def admin(password):
     """Basic auth headers for USERNAME."""
     return basic_auth(USERNAME, password)
+
+
+@pytest.fixture
+def platforms_config(tmp_path, monkeypatch):
+    """Points the adapter directories at tmp_path; call it to change other fields."""
+    config = dataclasses.replace(
+        PlatformsConfig.get(),
+        adapters_dir=tmp_path / "adapters",
+        adapters_venv_dir=tmp_path / "venvs",
+        adapters_assets_dir=tmp_path / "assets",
+    )
+
+    def change(**changes):
+        updated = dataclasses.replace(config, **changes)
+        monkeypatch.setattr(PlatformsConfig, "get", classmethod(lambda cls: updated))
+
+    change()
+    return change

@@ -211,7 +211,9 @@ Use `publisher.sh` instead of calling `python3 -m publisher` directly. It automa
 
 ```bash
 ./publisher.sh platforms add <GITHUB_URL>          # Add an adapter
-./publisher.sh platforms remove <NAME>             # Remove an adapter
+./publisher.sh platforms remove <NAME> [--force]   # Remove an adapter; --force even with linked accounts
+./publisher.sh platforms disable <NAME>            # Hide an adapter from users
+./publisher.sh platforms enable <NAME>             # Offer it again
 ./publisher.sh platforms update [NAME] [--install] # Update one or all adapters
 ./publisher.sh platforms list                      # List registered adapters
 ./publisher.sh platforms import                    # Register adapter directories not yet in the database

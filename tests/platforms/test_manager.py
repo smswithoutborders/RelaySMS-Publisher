@@ -1,13 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import dataclasses
-
 import pytest
 from git import Repo
 from sqlalchemy import select
 
 from publisher import db
-from publisher.config import PlatformsConfig
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.audit_event import AuditEvent
 from publisher.models.platform_adapter import OAUTH2, PNBA, PlatformAdapter
@@ -16,22 +13,8 @@ from tests.helpers import add_adapter
 
 
 @pytest.fixture(autouse=True)
-def platforms_config(tmp_path, monkeypatch):
-    """Points PlatformsConfig at tmp_path; call it to change other fields."""
-    config = dataclasses.replace(
-        PlatformsConfig.get(),
-        adapters_dir=tmp_path / "adapters",
-        adapters_venv_dir=tmp_path / "venvs",
-        adapters_assets_dir=tmp_path / "assets",
-        github_orgs=["smswithoutborders"],
-    )
-
-    def change(**changes):
-        updated = dataclasses.replace(config, **changes)
-        monkeypatch.setattr(PlatformsConfig, "get", classmethod(lambda cls: updated))
-
-    change()
-    return change
+def _platforms_config(platforms_config):
+    platforms_config(github_orgs=["smswithoutborders"])
 
 
 @pytest.mark.parametrize(
@@ -180,3 +163,16 @@ def test_import_registers_unregistered_clones_only(tmp_path):
         assert imported[0].commit
 
     assert _rows() == [("gmail", OAUTH2), ("telegram", PNBA)]
+
+
+@pytest.mark.usefixtures("test_db")
+def test_a_concurrent_change_is_a_conflict():
+    add_adapter("gmail", OAUTH2)
+    with (
+        pytest.raises(manager.AdapterConflictError),
+        db.get_session() as stale,
+    ):
+        adapter = stale.get(PlatformAdapter, "gmail-0")
+        with db.get_session() as other:
+            manager.set_enabled(other, other.get(PlatformAdapter, "gmail-0"), False)
+        manager.set_enabled(stale, adapter, False)

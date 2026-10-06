@@ -23,7 +23,9 @@ def _filter_options(command):
 
 
 def _find_one(db, name, proto_id, cat_id):
-    matched = platform_adapters.find(db, name=name, proto_id=proto_id, cat_id=cat_id)
+    matched = platform_adapters.find(
+        db, name=name, proto_id=proto_id, cat_id=cat_id, include_disabled=True
+    )
     if not matched:
         raise click.BadParameter("No registered adapter found matching criteria.")
     if len(matched) > 1:
@@ -50,11 +52,36 @@ def add(github_url):
 @cli.command()
 @click.argument("name")
 @_filter_options
-def remove(name, proto_id, cat_id):
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Remove even with linked accounts, whose tokens then can't be revoked.",
+)
+def remove(name, proto_id, cat_id, force):
     """Remove an adapter, matched by name and optional IDs."""
     with session() as db:
-        manager.remove(db, _find_one(db, name, proto_id, cat_id))
+        manager.remove(db, _find_one(db, name, proto_id, cat_id), force=force)
     click.echo(f"Adapter {name!r} removed.")
+
+
+@cli.command()
+@click.argument("name")
+@_filter_options
+def enable(name, proto_id, cat_id):
+    """Offer an adapter to users again."""
+    with session() as db:
+        manager.set_enabled(db, _find_one(db, name, proto_id, cat_id), True)
+    click.echo(f"Adapter {name!r} enabled.")
+
+
+@cli.command()
+@click.argument("name")
+@_filter_options
+def disable(name, proto_id, cat_id):
+    """Hide an adapter from users; it can still revoke tokens."""
+    with session() as db:
+        manager.set_enabled(db, _find_one(db, name, proto_id, cat_id), False)
+    click.echo(f"Adapter {name!r} disabled.")
 
 
 @cli.command(
@@ -100,7 +127,7 @@ def update(name, proto_id, cat_id, install):
         if name or proto_id is not None or cat_id is not None:
             adapters = [_find_one(db, name, proto_id, cat_id)]
         else:
-            adapters = platform_adapters.find(db)
+            adapters = platform_adapters.find(db, include_disabled=True)
         ids = [adapter.id for adapter in adapters]
 
     failed = False
@@ -127,7 +154,7 @@ def list_command(name, proto_id, cat_id):
     """List adapters, optionally filtered."""
     with session() as db:
         adapters = platform_adapters.find(
-            db, name=name, proto_id=proto_id, cat_id=cat_id
+            db, name=name, proto_id=proto_id, cat_id=cat_id, include_disabled=True
         )
 
     print_table(
@@ -139,6 +166,7 @@ def list_command(name, proto_id, cat_id):
             "Category ID",
             "Auth Provider",
             "Offline",
+            "Enabled",
             "Commit",
         ],
         [
@@ -150,6 +178,7 @@ def list_command(name, proto_id, cat_id):
                 str(a.cat_id),
                 a.auth_provider or "-",
                 "✓" if a.supports_offline_first else "-",
+                "✓" if a.is_enabled else "-",
                 a.commit[:12],
             ]
             for a in adapters

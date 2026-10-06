@@ -82,7 +82,7 @@ def test_cleanup_idle_tokens_deletes_only_idle_ones(lookups, caplog):
 
     assert _remaining_token_ids() == {fresh_id, active_id}
     assert "Cleaned up 1 idle token(s): {'gmail': 1}" in caplog.text
-    lookups.assert_called_once_with(ANY, "gmail", OAUTH2)
+    lookups.assert_called_once_with(ANY, "gmail", OAUTH2, include_disabled=True)
 
 
 def test_cleanup_idle_tokens_cascades_ephemeral_key_deletes(lookups):
@@ -122,7 +122,7 @@ def test_cleanup_idle_tokens_attempts_pnba_revoke(lookups):
     cleanup_task.cleanup_idle_tokens()
 
     assert idle_id not in _remaining_token_ids()
-    lookups.assert_called_once_with(ANY, "rmail", PNBA)
+    lookups.assert_called_once_with(ANY, "rmail", PNBA, include_disabled=True)
 
 
 def test_cleanup_idle_tokens_noop_when_nothing_idle(lookups, caplog):

@@ -57,7 +57,7 @@ Replace `<ADAPTER_NAME>` with the name of the adapter you want to remove.
 ./publisher.sh platforms remove example-adapter
 ```
 
-This will unregister the adapter and remove it from the system.
+This will unregister the adapter and remove it from the system. It's refused while accounts are linked through the adapter: disable it with `./publisher.sh platforms disable <ADAPTER_NAME>` instead, or use `--force`.
 
 ## Updating Adapters
 

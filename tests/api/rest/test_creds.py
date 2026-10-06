@@ -70,7 +70,7 @@ def test_list_and_get(client, admin, analyst):
 
 def test_etags_are_opaque(client, admin, analyst):
     etags = {
-        username: get_etag(client, admin, username)
+        username: get_etag(client, admin, f"/v1/creds/{username}")
         for username in (USERNAME, "analyst")
     }
 
@@ -87,7 +87,7 @@ def test_create_returns_a_working_password_once(client, admin):
     assert body["username"] == "analyst"
     assert response.headers["cache-control"] == "private, no-store"
     assert response.headers["location"].endswith("/v1/creds/analyst")
-    assert response.headers["etag"] == get_etag(client, admin, "analyst")
+    assert response.headers["etag"] == get_etag(client, admin, "/v1/creds/analyst")
 
     me = client.get("/v1/auth/me", headers=basic_auth("analyst", body["password"]))
     assert me.json()["scopes"] == ["stats:publications:read"]
@@ -129,7 +129,7 @@ def test_managers_cannot_grant_scopes_they_lack(client):
 def test_update_requires_a_current_if_match(client, admin, analyst, caplog):
     url = "/v1/creds/analyst"
     body = {"scopes": ["stats:publications:read", "stats:publications:reasons"]}
-    etag = get_etag(client, admin, analyst)
+    etag = get_etag(client, admin, f"/v1/creds/{analyst}")
 
     missing = client.patch(url, json=body, headers=admin)
     stale = client.patch(url, json=body, headers={**admin, "If-Match": '"999"'})
@@ -154,7 +154,7 @@ def test_update_rejects_bad_bodies(client, admin, analyst, body, status):
     response = client.patch(
         "/v1/creds/analyst",
         json=body,
-        headers={**admin, "If-Match": get_etag(client, admin, analyst)},
+        headers={**admin, "If-Match": get_etag(client, admin, f"/v1/creds/{analyst}")},
     )
 
     assert response.status_code == status
@@ -165,7 +165,7 @@ def test_reset_password_replaces_the_old_one(client, admin):
 
     response = client.post(
         "/v1/creds/analyst/reset-password",
-        headers={**admin, "If-Match": get_etag(client, admin, "analyst")},
+        headers={**admin, "If-Match": get_etag(client, admin, "/v1/creds/analyst")},
     )
 
     assert response.status_code == 200
@@ -191,7 +191,8 @@ def test_delete(client, admin, analyst):
 
     assert client.delete(url, headers=admin).status_code == 428
     response = client.delete(
-        url, headers={**admin, "If-Match": get_etag(client, admin, analyst)}
+        url,
+        headers={**admin, "If-Match": get_etag(client, admin, f"/v1/creds/{analyst}")},
     )
 
     assert response.status_code == 204

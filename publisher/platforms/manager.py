@@ -11,15 +11,23 @@ from pathlib import Path
 from typing import override
 from urllib.parse import urlsplit
 
-from git import GitCommandError, RemoteProgress, Repo
+from git import (
+    GitCommandError,
+    InvalidGitRepositoryError,
+    NoSuchPathError,
+    RemoteProgress,
+    Repo,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 from tqdm import tqdm
 
 from publisher.config import PlatformsConfig
 from publisher.errors import PublisherError
 from publisher.models import audit_event
 from publisher.models import platform_adapter as platform_adapters
+from publisher.models import token as tokens
 from publisher.models.audit_event import AuditAction
 from publisher.models.credential import Credential
 from publisher.models.platform_adapter import PlatformAdapter
@@ -32,6 +40,14 @@ _REQUIRED_MANIFEST_FIELDS = ("name", "display_name", "cat_id", "proto_id")
 
 
 class AdapterError(PublisherError):
+    pass
+
+
+class AdapterConflictError(AdapterError):
+    pass
+
+
+class AdapterInUseError(AdapterError):
     pass
 
 
@@ -136,12 +152,17 @@ def _apply_manifest(adapter: PlatformAdapter, manifest: dict) -> None:
 
 
 def _flush(session: Session, adapter: PlatformAdapter) -> None:
+    # Read before flushing: a failed flush expires the adapter's attributes.
+    name, proto_id = adapter.name, adapter.proto_id
     try:
         session.flush()
     except IntegrityError:
         raise AdapterError(
-            f"An adapter for {adapter.name!r} with protocol {adapter.proto_id} "
-            "is already installed"
+            f"An adapter for {name!r} with protocol {proto_id} is already installed"
+        ) from None
+    except StaleDataError:
+        raise AdapterConflictError(
+            f"Adapter {name!r} was changed concurrently; retry"
         ) from None
 
 
@@ -204,7 +225,10 @@ def update(
 ) -> None:
     """Pull an adapter's latest commit and refresh its manifest."""
     from_commit = adapter.commit
-    repo = Repo(adapter.path)
+    try:
+        repo = Repo(adapter.path)
+    except (InvalidGitRepositoryError, NoSuchPathError) as e:
+        raise AdapterError(f"{adapter.path} is not a git clone") from e
     try:
         repo.git.pull()
     except GitCommandError as e:
@@ -227,22 +251,56 @@ def update(
     )
 
 
-def remove(
-    session: Session, adapter: PlatformAdapter, actor: Credential | None = None
+def set_enabled(
+    session: Session,
+    adapter: PlatformAdapter,
+    enabled: bool,
+    actor: Credential | None = None,
 ) -> None:
-    """Unregister an adapter and delete its files."""
+    if adapter.is_enabled == enabled:
+        return
+    adapter.is_enabled = enabled
+    adapter.updated_by = actor.id if actor else None
+    _flush(session, adapter)
+    action = AuditAction.PLATFORMS_ENABLE if enabled else AuditAction.PLATFORMS_DISABLE
+    audit_event.record(session, action, actor=actor, target=adapter)
+
+
+def remove(
+    session: Session,
+    adapter: PlatformAdapter,
+    actor: Credential | None = None,
+    *,
+    force: bool = False,
+) -> None:
+    """Unregister an adapter and delete its files.
+
+    Raises:
+        AdapterInUseError: When accounts are linked through it and force is off.
+    """
     # The id names its directories; reject one that could point elsewhere.
     if adapter.id in ("", ".", "..") or "/" in adapter.id:
         raise AdapterError(f"Unsafe adapter id {adapter.id!r}")
+    linked = tokens.count_for_platform(session, adapter.name, adapter.proto_id)
+    # Their tokens can only be revoked upstream through the adapter.
+    if linked and not force:
+        raise AdapterInUseError(
+            f"{linked} linked account(s) use {adapter.name!r}. Disable it instead, "
+            "or remove it with the CLI's --force."
+        )
     audit_event.record(
         session,
         AuditAction.PLATFORMS_REMOVE,
         actor=actor,
         target=adapter,
-        details={"source_url": adapter.source_url, "commit": adapter.commit},
+        details={
+            "source_url": adapter.source_url,
+            "commit": adapter.commit,
+            "linked_accounts": linked,
+        },
     )
     session.delete(adapter)
-    session.flush()
+    _flush(session, adapter)
     _rmtree(Path(adapter.path))
     _rmtree(Path(adapter.venv_path))
 
@@ -254,7 +312,10 @@ def import_from_disk(session: Session) -> list[PlatformAdapter]:
         return []
 
     # Checked up front: one clash at flush would fail the whole import.
-    taken = {(a.name, a.proto_id) for a in platform_adapters.find(session)}
+    taken = {
+        (a.name, a.proto_id)
+        for a in platform_adapters.find(session, include_disabled=True)
+    }
     imported = []
     for path in sorted(adapters_dir.iterdir()):
         if not path.is_dir() or session.get(PlatformAdapter, path.name):

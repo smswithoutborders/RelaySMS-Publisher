@@ -1277,6 +1277,214 @@
         }
       }
     },
+    "/v1/platforms/adapters": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "List adapters",
+        "description": "Every installed adapter, disabled ones included. Scope: platforms:read.",
+        "operationId": "list_adapters_v1_platforms_adapters_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformAdapterInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Adapters V1 Platforms Adapters Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:read"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/platforms/adapters/{adapter_id}": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Get adapter",
+        "description": "Returns the ETag to send as If-Match. Scope: platforms:read.",
+        "operationId": "get_adapter_v1_platforms_adapters__adapter_id__get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdapterInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Enable or disable",
+        "description": "Needs If-Match. Scope: platforms:write.\n\nA disabled adapter is hidden from users but still revokes tokens.",
+        "operationId": "update_adapter_v1_platforms_adapters__adapter_id__patch",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformAdapterUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdapterInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Uninstall adapter",
+        "description": "Needs If-Match. Scope: platforms:write.\n\nRefused with 409 while accounts are linked through it; disable it instead.",
+        "operationId": "delete_adapter_v1_platforms_adapters__adapter_id__delete",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/gateway-clients": {
       "get": {
         "tags": [
@@ -1476,7 +1684,9 @@
           "creds.delete",
           "platforms.add",
           "platforms.update",
-          "platforms.remove"
+          "platforms.remove",
+          "platforms.enable",
+          "platforms.disable"
         ],
         "title": "AuditAction",
         "description": "Named <area>.<verb>. Reading an area's events also needs its read scope."
@@ -1950,6 +2160,150 @@
           "client_uri"
         ],
         "title": "OAuthClientMetadata"
+      },
+      "PlatformAdapterInfo": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "proto_id": {
+            "type": "integer",
+            "title": "Proto Id",
+            "description": "0 = oauth2, 1 = pnba"
+          },
+          "cat_id": {
+            "type": "integer",
+            "title": "Cat Id",
+            "description": "0 = email, 1 = message, 2 = text, 3 = bridge"
+          },
+          "auth_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Provider"
+          },
+          "supports_offline_first": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Offline First"
+          },
+          "icon_svg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Svg"
+          },
+          "icon_png": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Png"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "commit": {
+            "type": "string",
+            "title": "Commit"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "Username; null for the CLI or a deleted credential."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Username; null for the CLI or a deleted credential."
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name",
+          "name",
+          "proto_id",
+          "cat_id",
+          "id",
+          "source_url",
+          "commit",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PlatformAdapterInfo"
+      },
+      "PlatformAdapterUpdate": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "PlatformAdapterUpdate"
       },
       "PlatformManifest": {
         "properties": {

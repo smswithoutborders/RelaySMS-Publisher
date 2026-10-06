@@ -29,6 +29,10 @@ A credential can only grant scopes it holds, can't change itself, and can't chan
 
 `GET /v1/creds/{username}` returns an opaque `ETag`. Send it back unchanged as `If-Match` to change, reset or delete that credential: a missing header gets `428`, a stale one `412`. Responses that change a credential return its new `ETag`. Generated passwords appear only in the response that creates them.
 
+## Managing Platform Adapters
+
+`/v1/platforms/adapters` lists every installed adapter, with its source, commit and who last changed it, and takes the same `ETag` and `If-Match` rules as credentials. A disabled adapter disappears from `/v1/platforms` and can't publish or link accounts, but still revokes tokens so users can unlink. Uninstalling is refused with `409` while accounts are linked through the adapter; disable it instead, or remove it with `./publisher.sh platforms remove --force`.
+
 ## Pagination
 
 List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first. Follow `next` and `prev` as they are: they keep your filters and `limit`, and are `null` on the last and first page. Don't build the `cursor` yourself.
@@ -45,6 +49,7 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 | `auth.login` | A web session starts, or a login for an existing username is refused |
 | `auth.logout` | A web session ends |
 | `platforms.add`, `platforms.update`, `platforms.remove` | An adapter is installed, updated or removed. `details` has the source URL and commits. |
+| `platforms.enable`, `platforms.disable` | An adapter is offered to users again, or hidden from them |
 
 `outcome` is `success`, `denied` (the change went beyond the actor's scopes) or `failed` (a refused login for an existing username: wrong password or disabled). Successful HTTP Basic requests aren't recorded, since every request authenticates. `actor` is the username at the time, and null for the CLI or a failed login. Events are kept for `AUDIT_RETENTION_DAYS` (365 by default).
 

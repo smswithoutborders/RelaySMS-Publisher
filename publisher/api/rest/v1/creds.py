@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Credential management endpoints."""
 
-import hashlib
 import logging
 from contextlib import contextmanager
 
@@ -11,6 +10,7 @@ from sqlalchemy.orm import Session
 from publisher import credentials
 from publisher.api.rest.v1.auth import AuthContext, authorize
 from publisher.api.rest.v1.errors import ApiError
+from publisher.api.rest.v1.params import check_if_match, etag
 from publisher.api.rest.v1.schemas import (
     CredentialCreate,
     CredentialInfo,
@@ -37,22 +37,7 @@ USERNAME_PATH = Path(..., max_length=MAX_USERNAME_LENGTH)
 
 
 def _etag(credential: Credential) -> str:
-    # An opaque hash of the internal id and the version.
-    digest = hashlib.sha256(f"{credential.id}:{credential.version}".encode())
-    return f'"{digest.hexdigest()[:32]}"'
-
-
-def _check_if_match(request: Request, credential: Credential) -> None:
-    if_match = request.headers.get("If-Match")
-    if if_match is None:
-        raise ApiError(428, "If-Match header required.")
-    current = _etag(credential)
-    if if_match.strip() != current:
-        raise ApiError(
-            412,
-            "This credential has changed since you loaded it. Reload and try again.",
-            log=f"credential {credential.id}: If-Match {if_match} != ETag {current}",
-        )
+    return etag(credential.id, credential.version)
 
 
 @contextmanager
@@ -193,7 +178,7 @@ def update_credential(
         raise HTTPException(status_code=400, detail="Nothing to change.")
 
     credential = _load(db, username)
-    _check_if_match(request, credential)
+    check_if_match(request, _etag(credential), "credential")
     with _model_errors(db, context.credential, AuditAction.CREDS_UPDATE, credential):
         credentials.update(
             db,
@@ -228,7 +213,7 @@ def reset_credential_password(
 ) -> CredentialWithPassword:
     """New password shown once; sessions end. Needs If-Match. Scope: creds:write."""
     credential = _load(db, username)
-    _check_if_match(request, credential)
+    check_if_match(request, _etag(credential), "credential")
     with _model_errors(
         db, context.credential, AuditAction.CREDS_RESET_PASSWORD, credential
     ):
@@ -275,7 +260,7 @@ def delete_credential(
 ) -> Response:
     """Needs If-Match. Scope: creds:write."""
     credential = _load(db, username)
-    _check_if_match(request, credential)
+    check_if_match(request, _etag(credential), "credential")
     credential_id = credential.id
     with _model_errors(db, context.credential, AuditAction.CREDS_DELETE, credential):
         credentials.delete(db, credential, actor=context.credential)

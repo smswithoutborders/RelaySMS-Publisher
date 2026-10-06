@@ -30,6 +30,8 @@ class AuditAction(StrEnum):
     PLATFORMS_ADD = "platforms.add"
     PLATFORMS_UPDATE = "platforms.update"
     PLATFORMS_REMOVE = "platforms.remove"
+    PLATFORMS_ENABLE = "platforms.enable"
+    PLATFORMS_DISABLE = "platforms.disable"
 
 
 class AuditOutcome(StrEnum):

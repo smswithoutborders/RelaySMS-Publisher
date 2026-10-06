@@ -3,6 +3,7 @@
 
 import datetime
 import uuid
+from typing import ClassVar
 
 from sqlalchemy import Index, SmallInteger, String, Text, Uuid, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
@@ -30,6 +31,8 @@ class PlatformAdapter(Base):
     supports_offline_first: Mapped[bool] = mapped_column(default=False)
     icon_svg: Mapped[str | None] = mapped_column(Text, default=None)
     icon_png: Mapped[str | None] = mapped_column(Text, default=None)
+    is_enabled: Mapped[bool] = mapped_column(default=True)
+    version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime.datetime] = mapped_column(UTCDateTime, default=utc_now)
     # The *_by columns are NULL when the CLI made the change.
     created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
@@ -41,6 +44,9 @@ class PlatformAdapter(Base):
     __table_args__ = (
         Index("uq_platform_adapters_name_proto_id", "name", "proto_id", unique=True),
     )
+    # Every UPDATE and DELETE checks the version it loaded, so a concurrent change
+    # fails with StaleDataError instead of being overwritten.
+    __mapper_args__: ClassVar[dict] = {"version_id_col": version}
 
     # Paths come from config, so moving the data directory needs no rewrite.
     @property
@@ -62,7 +68,9 @@ def find(
     name: str | None = None,
     proto_id: int | None = None,
     cat_id: int | None = None,
+    include_disabled: bool = False,
 ) -> list[PlatformAdapter]:
+    """Enabled adapters only, unless include_disabled."""
     stmt = select(PlatformAdapter).order_by(
         PlatformAdapter.name, PlatformAdapter.proto_id
     )
@@ -72,12 +80,18 @@ def find(
         stmt = stmt.where(PlatformAdapter.proto_id == proto_id)
     if cat_id is not None:
         stmt = stmt.where(PlatformAdapter.cat_id == cat_id)
+    if not include_disabled:
+        stmt = stmt.where(PlatformAdapter.is_enabled)
     return list(session.scalars(stmt))
 
 
-def get_for_protocol(session: Session, platform: str, proto_id: int) -> PlatformAdapter:
+def get_for_protocol(
+    session: Session, platform: str, proto_id: int, *, include_disabled: bool = False
+) -> PlatformAdapter:
     """Raises NotImplementedError when no adapter serves platform over proto_id."""
-    adapters = find(session, name=platform, proto_id=proto_id)
+    adapters = find(
+        session, name=platform, proto_id=proto_id, include_disabled=include_disabled
+    )
     if not adapters:
         protocol = {OAUTH2: "oauth2", PNBA: "pnba"}[proto_id]
         raise NotImplementedError(

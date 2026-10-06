@@ -174,3 +174,23 @@ class AuditEventInfo(BaseModel):
 
 class AuditEventPage(PageLinks):
     data: list[AuditEventInfo]
+
+
+class PlatformAdapterInfo(PlatformManifest):
+    id: str
+    source_url: str
+    commit: str
+    enabled: bool
+    created_at: datetime.datetime
+    created_by: str | None = Field(
+        None, description="Username; null for the CLI or a deleted credential."
+    )
+    updated_at: datetime.datetime
+    updated_by: str | None = Field(
+        None, description="Username; null for the CLI or a deleted credential."
+    )
+
+
+class PlatformAdapterUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
