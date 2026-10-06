@@ -77,6 +77,14 @@ testpaths = ["tests"]
 # make test-e2e runs these on their own.
 norecursedirs = ["e2e"]
 
+[tool.coverage.run]
+source = ["publisher"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
 [tool.commitizen]
 name = "cz_conventional_commits"
 

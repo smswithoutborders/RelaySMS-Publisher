@@ -101,6 +101,7 @@ Each service can also run on its own:
 | `make migrate` | Apply Alembic migrations |
 | `make run` | Start every service |
 | `make test` | Run pytest |
+| `make coverage` | Run pytest and list the lines no test runs |
 | `make test-e2e` | Install, update and uninstall in a systemd container (podman) |
 | `make check` | Run every pre-commit hook on all files |
 | `make clean` | Remove generated code |
@@ -230,7 +231,10 @@ Shell scripts follow one layout: `#!/usr/bin/env bash`, the SPDX line, `set -Eeu
 make test                                    # whole suite
 python -m pytest tests/api/rest -q           # one directory
 python -m pytest -k token_id -x              # by name, stop at first failure
+make coverage                                # whole suite, with untested lines
 ```
+
+Use coverage to find code no test runs, not as a target: a covered line can still have no assertion checking it.
 
 Tests run against in-memory SQLite. `tests/conftest.py` sets the environment before `publisher.config` is imported, so your local `.env` is ignored.
 
@@ -326,7 +330,7 @@ Adapters live outside this repository and are installed with `python -m publishe
 
 ## When CI fails
 
-`.github/workflows/checks.yml` runs the hooks on Python 3.14 and the tests on 3.12, 3.13 and 3.14.
+`.github/workflows/checks.yml` runs the hooks on Python 3.14 and the tests on 3.12, 3.13 and 3.14. The 3.14 job also puts a coverage table on the run's summary page.
 
 - **Hook failures:** run `make check` locally. Ruff and the whitespace hooks fix files in place, so re-add and commit the changes.
 - **Pyright:** fix the type, or narrow it with an `assert`. Use `# pyright: ignore[rule]` only with a reason.
