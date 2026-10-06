@@ -7,7 +7,6 @@ from grpc_interceptor.exceptions import InvalidArgument, Unauthenticated
 
 from protos.v3 import publisher_pb2
 from publisher import keys
-from publisher.api.grpc.utils import require_fields
 from publisher.db import get_session
 from publisher.models.server_identity_key import mark_key_used
 from publisher.platforms.manager import AdapterManager
@@ -21,7 +20,6 @@ def revoke_pnba_token(
 ) -> publisher_pb2.RevokePNBATokenResponse:
     if not payload:
         raise InvalidArgument("token ciphertext is required in the request payload")
-    require_fields(request, "token_id", "key_id")
 
     with get_session() as s:
         try:

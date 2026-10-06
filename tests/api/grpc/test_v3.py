@@ -170,9 +170,11 @@ def decrypt_token(response, keypairs):
     )
 
 
-def encrypt_token(response, keypairs, token):
-    """Encrypt a token with a key pair the server still holds, as revoke does."""
-    key_id = 1 if response.key_id != 1 else 2
+def encrypt_token(response, keypairs, token, key_id=1):
+    """Encrypt a token with a key pair the server still holds, as revoke does.
+
+    Exchange puts the token in a slot from 16-255, so lower slots stay held.
+    """
     ciphertext = rrs.v1_token_encrypt_client(
         ec_kid=keypairs[key_id].private_bytes_raw(),
         ss_kid_pk=client_helpers.fetch_server_identity_public_key("", key_id),
@@ -180,7 +182,7 @@ def encrypt_token(response, keypairs, token):
         key_id=key_id,
         token=token,
     )
-    return key_id, ciphertext
+    return ciphertext
 
 
 def stored_token(token_id):
@@ -194,6 +196,12 @@ def stored_token(token_id):
             hash=token.token_hash.token_hash,
             hash_id=token.token_hash.id,
         )
+
+
+def set_token_id(token_id, new_token_id):
+    with get_session() as s:
+        token = s.scalar(select(Token).where(Token.token_id == token_id))
+        token.token_id = new_token_id
 
 
 def server_key_exists(token_id, key_id):
@@ -388,11 +396,9 @@ def test_exchange_oauth2_code_needs_256_client_keys(stub, adapter):
 def test_revoke_oauth2_token(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
     adapter.results["revoke_token"] = {"result": {}}
-    key_id, payload = encrypt_token(
-        exchanged, keypairs, decrypt_token(exchanged, keypairs)
-    )
+    payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
     request = publisher_pb2.RevokeOAuth2TokenRequest(
-        token_id=exchanged.token_id, key_id=key_id
+        token_id=exchanged.token_id, key_id=1
     )
 
     response = call(stub, "RevokeOAuth2Token", request, payload=payload)
@@ -402,11 +408,26 @@ def test_revoke_oauth2_token(stub, adapter):
     assert adapter.calls[-1][0] == "revoke_token"
 
 
+def test_revoke_oauth2_token_accepts_zero_ids(stub, adapter):
+    exchanged, keypairs = exchange_oauth2(stub, adapter)
+    adapter.results["revoke_token"] = {"result": {}}
+    set_token_id(exchanged.token_id, 0)
+    payload = encrypt_token(
+        exchanged, keypairs, decrypt_token(exchanged, keypairs), key_id=0
+    )
+    request = publisher_pb2.RevokeOAuth2TokenRequest(token_id=0, key_id=0)
+
+    response = call(stub, "RevokeOAuth2Token", request, payload=payload)
+
+    assert response.success
+    assert stored_token(0) is None
+
+
 def test_revoke_oauth2_token_with_wrong_token_is_rejected(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
-    key_id, payload = encrypt_token(exchanged, keypairs, b"not the real token")
+    payload = encrypt_token(exchanged, keypairs, b"not the real token")
     request = publisher_pb2.RevokeOAuth2TokenRequest(
-        token_id=exchanged.token_id, key_id=key_id
+        token_id=exchanged.token_id, key_id=1
     )
 
     error = rpc_error(stub, "RevokeOAuth2Token", request, payload=payload)
@@ -414,16 +435,14 @@ def test_revoke_oauth2_token_with_wrong_token_is_rejected(stub, adapter):
     assert error.code() == grpc.StatusCode.UNAUTHENTICATED
     assert "revocation failed" in error.details()
     assert stored_token(exchanged.token_id) is not None
-    assert server_key_exists(exchanged.token_id, key_id)
+    assert server_key_exists(exchanged.token_id, 1)
 
 
 def test_revoke_keeps_slot_when_a_later_step_fails(stub, adapter, monkeypatch):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
-    key_id, payload = encrypt_token(
-        exchanged, keypairs, decrypt_token(exchanged, keypairs)
-    )
+    payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
     request = publisher_pb2.RevokeOAuth2TokenRequest(
-        token_id=exchanged.token_id, key_id=key_id
+        token_id=exchanged.token_id, key_id=1
     )
 
     def crash(*_args):
@@ -435,7 +454,7 @@ def test_revoke_keeps_slot_when_a_later_step_fails(stub, adapter, monkeypatch):
 
     assert error.code() == grpc.StatusCode.INTERNAL
     assert stored_token(exchanged.token_id) is not None
-    assert server_key_exists(exchanged.token_id, key_id)
+    assert server_key_exists(exchanged.token_id, 1)
 
 
 def test_get_pnba_code(stub, adapter):
@@ -507,11 +526,9 @@ def test_exchange_pnba_code_stores_session(stub, adapter):
 def test_revoke_pnba_token(stub, adapter):
     exchanged, keypairs = exchange_pnba(stub, adapter)
     adapter.results["invalidate_session"] = {"result": {}}
-    key_id, payload = encrypt_token(
-        exchanged, keypairs, decrypt_token(exchanged, keypairs)
-    )
+    payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
     request = publisher_pb2.RevokePNBATokenRequest(
-        token_id=exchanged.token_id, key_id=key_id
+        token_id=exchanged.token_id, key_id=1
     )
 
     response = call(stub, "RevokePNBAToken", request, payload=payload)
@@ -525,13 +542,11 @@ def test_revoke_pnba_token(stub, adapter):
 
 def test_sync_keys_replaces_the_key_pool(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
-    key_id, payload = encrypt_token(
-        exchanged, keypairs, decrypt_token(exchanged, keypairs)
-    )
+    payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
     _, new_public_keys = client_keys()
     request = publisher_pb2.SyncKeysRequest(
         token_id=exchanged.token_id,
-        key_id=key_id,
+        key_id=1,
         client_ephemeral_public_keys=new_public_keys,
     )
 
@@ -552,13 +567,29 @@ def test_sync_keys_replaces_the_key_pool(stub, adapter):
     assert pool_size == 256
 
 
+def test_sync_keys_accepts_zero_ids(stub, adapter):
+    exchanged, keypairs = exchange_oauth2(stub, adapter)
+    set_token_id(exchanged.token_id, 0)
+    payload = encrypt_token(
+        exchanged, keypairs, decrypt_token(exchanged, keypairs), key_id=0
+    )
+    _, new_public_keys = client_keys()
+    request = publisher_pb2.SyncKeysRequest(
+        token_id=0, key_id=0, client_ephemeral_public_keys=new_public_keys
+    )
+
+    response = call(stub, "SyncKeys", request, payload=payload)
+
+    assert response.success
+
+
 def test_sync_keys_with_wrong_token_is_rejected(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
-    key_id, payload = encrypt_token(exchanged, keypairs, b"not the real token")
+    payload = encrypt_token(exchanged, keypairs, b"not the real token")
     _, new_public_keys = client_keys()
     request = publisher_pb2.SyncKeysRequest(
         token_id=exchanged.token_id,
-        key_id=key_id,
+        key_id=1,
         client_ephemeral_public_keys=new_public_keys,
     )
 

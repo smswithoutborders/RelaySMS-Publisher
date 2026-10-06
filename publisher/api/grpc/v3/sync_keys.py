@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def sync_keys(request, payload: bytes) -> publisher_pb2.SyncKeysResponse:
     if not payload:
         raise InvalidArgument("token ciphertext is required in the request payload")
-    require_fields(request, "token_id", "key_id", "client_ephemeral_public_keys")
+    require_fields(request, "client_ephemeral_public_keys")
     validate_client_ephemeral_public_keys(request.client_ephemeral_public_keys)
 
     with get_session() as s:

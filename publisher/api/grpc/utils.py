@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 def require_fields(request, *fields: str) -> None:
+    # Only for string, bytes and repeated fields: proto3 sends 0 and false as unset,
+    # so a valid 0 id would be rejected.
     for field in fields:
         if not getattr(request, field, None):
             raise InvalidArgument(f"Missing required field: {field}")
