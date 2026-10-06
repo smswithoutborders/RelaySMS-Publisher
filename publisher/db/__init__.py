@@ -163,11 +163,16 @@ def _create_engine() -> Engine:
         if database.encryption_enabled:
             assert database.encryption_key is not None  # config requires it here
             logger.info("Using SQLCipher3 encryption for SQLite")
+            from sqlcipher3 import dbapi2 as sqlcipher3_dbapi
+
             engine = create_engine(
                 "sqlite://",
                 creator=_make_sqlcipher3_creator(
                     database.sqlite_path, database.encryption_key
                 ),
+                # Otherwise SQLAlchemy wraps only sqlite3's errors, and sqlcipher3's
+                # escape unwrapped, e.g. past `except IntegrityError`.
+                module=sqlcipher3_dbapi,
                 echo=sql_echo,
                 poolclass=QueuePool,
                 pool_size=5,
