@@ -25,7 +25,6 @@ def _fake_session():
 @pytest.fixture(autouse=True)
 def _patch_infra(monkeypatch):
     monkeypatch.setattr(publication_task, "get_session", _fake_session)
-    monkeypatch.setattr(publication_task, "_get_adapter_manager", lambda: MagicMock())
     monkeypatch.setattr(publication_task, "record_publication", MagicMock())
 
 

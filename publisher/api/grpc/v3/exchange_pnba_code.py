@@ -5,16 +5,17 @@ from protos.v3 import publisher_pb2
 from publisher import keys
 from publisher.api.grpc.utils import (
     call_adapter,
+    find_adapter,
     require_fields,
     validate_client_ephemeral_public_keys,
 )
 from publisher.db import get_session
+from publisher.models.platform_adapter import PNBA
 from publisher.models.token import create as create_token
-from publisher.platforms.manager import AdapterManager
 
 
 def exchange_pnba_code_and_store(
-    request, adapter_manager: AdapterManager
+    request,
 ) -> publisher_pb2.ExchangePNBACodeAndStoreResponse:
     require_fields(
         request,
@@ -25,7 +26,7 @@ def exchange_pnba_code_and_store(
     )
     validate_client_ephemeral_public_keys(request.client_ephemeral_public_keys)
 
-    adapter = adapter_manager.get_pnba_adapter(request.platform)
+    adapter = find_adapter(request.platform, PNBA)
     result = call_adapter(
         adapter,
         (

@@ -25,29 +25,9 @@ from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.server_identity_key import get_public_key
 from publisher.models.token import Token
 from publisher.platforms import ipc
-from publisher.platforms.manager import PlatformManifest
+from tests.helpers import add_adapter
 from tools import client_helpers
 
-OAUTH2_ADAPTER = PlatformManifest(
-    id="gmail-adapter",
-    display_name="Gmail",
-    name="gmail",
-    path="/adapters/gmail",
-    venv_path="/venvs/gmail",
-    assets_path="/assets/gmail",
-    cat_id=1,
-    proto_id=0,
-)
-PNBA_ADAPTER = PlatformManifest(
-    id="telegram-adapter",
-    display_name="Telegram",
-    name="telegram",
-    path="/adapters/telegram",
-    venv_path="/venvs/telegram",
-    assets_path="/assets/telegram",
-    cat_id=2,
-    proto_id=1,
-)
 OAUTH2_EXCHANGE = {
     "result": {
         "userinfo": {"account_identifier": "user@example.org"},
@@ -73,6 +53,8 @@ def server_keys(monkeypatch):
     Base.metadata.create_all(db.get_engine())
     with get_session() as s:
         keys.initialize_server_identity_keys(s)
+    add_adapter("gmail", proto_id=0, cat_id=1)
+    add_adapter("telegram", proto_id=1, cat_id=2)
     # The client helpers fetch server public keys over REST; read them from the db.
     monkeypatch.setattr(
         client_helpers,
@@ -98,20 +80,7 @@ def adapter(monkeypatch):
 
 @pytest.fixture
 def stub():
-    def find(adapter, protocol):
-        def lookup(platform):
-            if platform.lower() != adapter.name:
-                raise NotImplementedError(f"{platform} with {protocol} not supported")
-            return adapter
-
-        return lookup
-
-    service = PublisherServicerV3(
-        adapter_manager=MagicMock(
-            get_oauth2_adapter=find(OAUTH2_ADAPTER, "oauth2"),
-            get_pnba_adapter=find(PNBA_ADAPTER, "pnba"),
-        )
-    )
+    service = PublisherServicerV3()
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=4), interceptors=interceptors()
     )
@@ -363,7 +332,7 @@ def test_get_oauth2_authorization_url(stub, adapter):
     assert params["state"] == "state-1"
     assert params["redirect_url"] == "https://app.example.org/callback"
     assert params["autogenerate_code_verifier"] is True
-    assert params["base_path"] == OAUTH2_ADAPTER.assets_path
+    assert params["base_path"].endswith("/gmail-0")
 
 
 def test_exchange_oauth2_code_stores_token(stub, adapter):

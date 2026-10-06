@@ -12,15 +12,12 @@ source "$SCRIPT_DIR/lib.sh"
 
 INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$INSTALL_DIR/.env"
-PYTHON="$INSTALL_DIR/venv/bin/python"
-[ -x "$PYTHON" ] || PYTHON=python3
 
 # Env var, old default, new default (both relative to INSTALL_DIR).
 MOVES=(
   "PLATFORMS_ADAPTERS_DIR platforms/adapters data/platforms/adapters"
   "PLATFORMS_ADAPTERS_VENV_DIR platforms/adapters_venv data/platforms/venvs"
   "PLATFORMS_ADAPTERS_ASSETS_DIR platforms/adapters_assets data/platforms/assets"
-  "PLATFORMS_REGISTRY_FILE platforms/registry.json data/platforms/registry.json"
   "GATEWAY_CLIENTS_REGISTRY_FILE gateway_clients/registry.json data/gateway_clients/registry.json"
 )
 
@@ -58,32 +55,6 @@ moved_paths() {
   done
 }
 
-# The adapter registry stores each adapter's paths; point them at the new dirs.
-rewrite_registry() {
-  local registry="$INSTALL_DIR/data/platforms/registry.json" renames
-  [ -f "$registry" ] || return 0
-  mapfile -t renames < <(moved_paths)
-  "$PYTHON" - "$registry" "${renames[@]}" <<'EOF'
-import json, sys
-
-path, renames = sys.argv[1], [r.split("=", 1) for r in sys.argv[2:]]
-with open(path) as f:
-    registry = json.load(f)
-changed = False
-for manifest in registry.values():
-    for field in ("path", "venv_path", "assets_path"):
-        for old, new in renames:
-            if manifest.get(field, "").startswith(old + "/"):
-                manifest[field] = new + manifest[field][len(old):]
-                changed = True
-                break
-if changed:
-    with open(path, "w") as f:
-        json.dump(registry, f)
-    print("Updated adapter paths in the registry")
-EOF
-}
-
 # venv scripts hardcode their venv's absolute path in the shebang.
 rewrite_venv_scripts() {
   local venvs="$INSTALL_DIR/data/platforms/venvs" rename old new
@@ -116,7 +87,6 @@ main() {
     # shellcheck disable=SC2086  # entries are space-separated fields
     move_one $entry
   done
-  rewrite_registry
   rewrite_venv_scripts
   move_overrides
 }

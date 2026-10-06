@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import datetime
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from sqlalchemy import select
 
 import publisher.models  # noqa: F401  registers all model classes on Base.metadata
 from publisher import db as db_module
+from publisher.models import platform_adapter as platform_adapters
 from publisher.models.client_ephemeral_key import ClientEphemeralKey
+from publisher.models.platform_adapter import OAUTH2, PNBA
 from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.token import Token
 from publisher.models.token import create as create_token
@@ -16,8 +18,6 @@ from publisher.models.token_hash import create as create_token_hash
 from publisher.tasks import cleanup_task
 
 DAY = datetime.timedelta(days=1)
-OAUTH2 = 0
-PNBA = 1
 
 
 @pytest.fixture(autouse=True)
@@ -29,12 +29,11 @@ def _in_memory_db():
 
 
 @pytest.fixture(autouse=True)
-def _adapter_manager(monkeypatch):
-    manager = MagicMock()
-    manager.get_oauth2_adapter.side_effect = NotImplementedError("no adapter")
-    manager.get_pnba_adapter.side_effect = NotImplementedError("no adapter")
-    monkeypatch.setattr(cleanup_task, "_get_adapter_manager", lambda: manager)
-    return manager
+def lookups(monkeypatch):
+    """No adapter is installed, so upstream revokes are skipped."""
+    lookup = MagicMock(side_effect=NotImplementedError("no adapter"))
+    monkeypatch.setattr(platform_adapters, "get_for_protocol", lookup)
+    return lookup
 
 
 def _make_token(
@@ -63,7 +62,7 @@ def _remaining_token_ids() -> set[int]:
         return set(session.scalars(select(Token.id)).all())
 
 
-def test_cleanup_idle_tokens_deletes_only_idle_ones(_adapter_manager, caplog):
+def test_cleanup_idle_tokens_deletes_only_idle_ones(lookups, caplog):
     caplog.set_level("INFO")
     with db_module.get_session() as session:
         fresh_token, _ = _make_token(
@@ -83,10 +82,10 @@ def test_cleanup_idle_tokens_deletes_only_idle_ones(_adapter_manager, caplog):
 
     assert _remaining_token_ids() == {fresh_id, active_id}
     assert "Cleaned up 1 idle token(s): {'gmail': 1}" in caplog.text
-    _adapter_manager.get_oauth2_adapter.assert_called_once_with("gmail")
+    lookups.assert_called_once_with(ANY, "gmail", OAUTH2)
 
 
-def test_cleanup_idle_tokens_cascades_ephemeral_key_deletes(_adapter_manager):
+def test_cleanup_idle_tokens_cascades_ephemeral_key_deletes(lookups):
     with db_module.get_session() as session:
         _, idle_hash = _make_token(
             session, platform="gmail", proto_id=OAUTH2, created_days_ago=100
@@ -113,7 +112,7 @@ def test_cleanup_idle_tokens_cascades_ephemeral_key_deletes(_adapter_manager):
         assert session.scalars(select(ClientEphemeralKey)).all() == []
 
 
-def test_cleanup_idle_tokens_attempts_pnba_revoke(_adapter_manager):
+def test_cleanup_idle_tokens_attempts_pnba_revoke(lookups):
     with db_module.get_session() as session:
         idle_token, _ = _make_token(
             session, platform="rmail", proto_id=PNBA, created_days_ago=100
@@ -123,10 +122,10 @@ def test_cleanup_idle_tokens_attempts_pnba_revoke(_adapter_manager):
     cleanup_task.cleanup_idle_tokens()
 
     assert idle_id not in _remaining_token_ids()
-    _adapter_manager.get_pnba_adapter.assert_called_once_with("rmail")
+    lookups.assert_called_once_with(ANY, "rmail", PNBA)
 
 
-def test_cleanup_idle_tokens_noop_when_nothing_idle(_adapter_manager, caplog):
+def test_cleanup_idle_tokens_noop_when_nothing_idle(lookups, caplog):
     with db_module.get_session() as session:
         _make_token(session, platform="gmail", proto_id=OAUTH2, created_days_ago=0)
 
@@ -134,4 +133,4 @@ def test_cleanup_idle_tokens_noop_when_nothing_idle(_adapter_manager, caplog):
     cleanup_task.cleanup_idle_tokens()
 
     assert "No idle tokens to clean up" in caplog.text
-    _adapter_manager.get_oauth2_adapter.assert_not_called()
+    lookups.assert_not_called()

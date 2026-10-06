@@ -16,7 +16,6 @@ from publisher.models.server_identity_key import get_private_key
 from publisher.models.token import Token
 from publisher.models.token import create as create_token
 from publisher.platforms import ipc
-from publisher.platforms.manager import PlatformManifest
 from publisher.publications import (
     AdapterIntegrationError,
     OfflineTagInvalidError,
@@ -24,6 +23,7 @@ from publisher.publications import (
     PayloadMalformedError,
     ProtocolNotAllowedError,
 )
+from tests.helpers import add_adapter
 
 
 def _payload(t_id=None):
@@ -36,7 +36,7 @@ def _payload(t_id=None):
 
 
 def _dispatch(payload, **kwargs):
-    return publications._dispatch(MagicMock(), MagicMock(), payload, **kwargs)
+    return publications._dispatch(MagicMock(), payload, **kwargs)
 
 
 @pytest.fixture
@@ -123,33 +123,13 @@ def test_online_payload_bypasses_protocol_and_tag_checks(
 
     assert result == "gmail"
     publish_online.assert_called_once_with(
-        ANY, ANY, token_id=42, key_id=1, len_att=0, content_ciphertext=b"ciphertext"
+        ANY, token_id=42, key_id=1, len_att=0, content_ciphertext=b"ciphertext"
     )
 
 
 # Publishing end to end: real keys and ciphertext; only the adapter process is faked.
 
 SENDER = "+237600000000"
-GMAIL = PlatformManifest(
-    id="gmail-adapter",
-    display_name="Gmail",
-    name="gmail",
-    path="/adapters/gmail",
-    venv_path="/venvs/gmail",
-    assets_path="/assets/gmail",
-    cat_id=0,
-    proto_id=0,
-)
-RMAIL = PlatformManifest(
-    id="rmail-adapter",
-    display_name="RelaySMS Mail",
-    name="rmail",
-    path="/adapters/rmail",
-    venv_path="/venvs/rmail",
-    assets_path="/assets/rmail",
-    cat_id=0,
-    proto_id=1,
-)
 # A 1x1 PNG, padded so the payload spans several SMS segments.
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -157,8 +137,10 @@ PNG = base64.b64decode(
 
 
 @pytest.fixture
-def adapter(monkeypatch):
+def adapter(monkeypatch, test_db):
     """Records adapter calls and answers each with `response`."""
+    add_adapter("gmail", proto_id=0)
+    add_adapter("rmail", proto_id=1)
     fake = SimpleNamespace(calls=[], response={"result": {"success": True}})
 
     def invoke(adapter_path, venv_path, method, params=None):
@@ -239,14 +221,9 @@ def _sms(contents, *, slot, token_id=None, attachment=None, sess_id=None):
 
 def _publish(text, protocol="sms"):
     payload_raw, raw_segment, payload_type = publications.validate(text)
-    adapters = MagicMock(
-        get_oauth2_adapter=lambda platform: GMAIL,
-        get_pnba_adapter=lambda platform: RMAIL,
-    )
     with get_session() as s:
         return publications.publish(
             s,
-            adapters,
             payload_raw=payload_raw,
             sender_address=SENDER,
             raw_segment=raw_segment,
@@ -288,7 +265,7 @@ def test_publish_sends_the_decrypted_email_to_the_adapter(account, adapter):
     assert _publish(text) == "gmail"
 
     path, method, params = adapter.calls[-1]
-    assert (path, method) == (GMAIL.path, "send_message")
+    assert (path.split("/")[-1], method) == ("gmail-0", "send_message")
     assert params["to_email"] == "friend@example.org"
     assert params["subject"] == "Hi"
     assert params["message"] == "Hello"
@@ -359,6 +336,6 @@ def test_offline_payload_goes_to_the_offline_adapter(test_db, adapter):
     assert _publish(text, protocol="smtp") == "rmail"
 
     path, method, params = adapter.calls[-1]
-    assert (path, method) == (RMAIL.path, "send_message")
+    assert (path.split("/")[-1], method) == ("rmail-1", "send_message")
     assert params["to_email"] == "friend@example.org"
     assert params["message"] == "Hello"

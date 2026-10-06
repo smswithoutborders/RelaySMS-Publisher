@@ -1,28 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import msgspec
 import pytest
 
-from publisher.platforms.manager import AdapterManager, PlatformManifest
-
-BLUESKY = PlatformManifest(
-    id="bluesky-adapter",
-    display_name="Bluesky",
-    name="bluesky",
-    path="/srv/adapters/bluesky",
-    venv_path="/srv/venvs/bluesky",
-    assets_path="/srv/assets/bluesky",
-    cat_id=2,
-    proto_id=0,
-    supports_offline_first=False,
-)
+from tests.helpers import add_adapter
 
 
 @pytest.fixture(autouse=True)
-def adapters(app, tmp_path):
-    registry = tmp_path / "registry.json"
-    registry.write_bytes(msgspec.json.encode({BLUESKY.id: BLUESKY}))
-    app.state.adapter_manager = AdapterManager(registry_file=registry)
+def adapters(test_db):
+    add_adapter("bluesky", proto_id=0, cat_id=2)
 
 
 def test_list_hides_server_paths(client):

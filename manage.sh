@@ -24,6 +24,8 @@ run_migrations() {
   require_installed
   log "Running database migrations"
   (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
+  # Registers adapters installed before the registry moved to the database.
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher platforms import)
 }
 
 run_config_check() {

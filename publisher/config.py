@@ -458,7 +458,6 @@ class PlatformsConfig(Section):
     adapters_dir: Path
     adapters_venv_dir: Path
     adapters_assets_dir: Path
-    registry_file: Path
     github_orgs: list[str]
 
     @classmethod
@@ -475,9 +474,6 @@ class PlatformsConfig(Section):
             ),
             adapters_assets_dir=read.get_path(
                 "PLATFORMS_ADAPTERS_ASSETS_DIR", base / "assets"
-            ),
-            registry_file=read.get_path(
-                "PLATFORMS_REGISTRY_FILE", base / "registry.json"
             ),
             github_orgs=github_orgs,
         )

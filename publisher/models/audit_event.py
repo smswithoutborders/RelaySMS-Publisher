@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Who did what to credentials, kept for review."""
+"""Who did what to credentials and platform adapters, kept for review."""
 
 import datetime
 import uuid
@@ -14,10 +14,11 @@ from publisher.db import Base, pagination
 from publisher.db.pagination import Cursor, Page
 from publisher.db.types import UTCDateTime, utc_now
 from publisher.models.credential import MAX_USERNAME_LENGTH, Credential, Scope
+from publisher.models.platform_adapter import PlatformAdapter
 
 
 class AuditAction(StrEnum):
-    """Named <area>.<verb>. Reading an area's events needs its scope in AREA_SCOPES."""
+    """Named <area>.<verb>. Reading an area's events also needs its read scope."""
 
     AUTH_LOGIN = "auth.login"
     AUTH_LOGOUT = "auth.logout"
@@ -26,6 +27,9 @@ class AuditAction(StrEnum):
     CREDS_RESET_PASSWORD = "creds.reset_password"
     CREDS_REVOKE_SESSIONS = "creds.revoke_sessions"
     CREDS_DELETE = "creds.delete"
+    PLATFORMS_ADD = "platforms.add"
+    PLATFORMS_UPDATE = "platforms.update"
+    PLATFORMS_REMOVE = "platforms.remove"
 
 
 class AuditOutcome(StrEnum):
@@ -39,6 +43,7 @@ class AuditOutcome(StrEnum):
 AREA_SCOPES = {
     "auth": Scope.CREDS_READ,
     "creds": Scope.CREDS_READ,
+    "platforms": Scope.PLATFORMS_READ,
 }
 
 
@@ -69,7 +74,7 @@ def record(
     action: AuditAction,
     *,
     actor: Credential | None,
-    target: Credential | None = None,
+    target: Credential | PlatformAdapter | None = None,
     outcome: AuditOutcome = AuditOutcome.SUCCESS,
     details: dict[str, Any] | None = None,
 ) -> None:
@@ -79,7 +84,11 @@ def record(
             actor_username=actor.username if actor else None,
             action=action,
             target_id=str(target.id) if target else None,
-            target_label=target.username if target else None,
+            target_label=(
+                target.username if isinstance(target, Credential) else target.name
+            )
+            if target
+            else None,
             outcome=outcome,
             details=details,
         )

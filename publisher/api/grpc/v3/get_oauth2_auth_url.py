@@ -2,16 +2,16 @@
 """GetOAuth2AuthorizationUrl handler."""
 
 from protos.v3 import publisher_pb2
-from publisher.api.grpc.utils import call_adapter, require_fields
-from publisher.platforms.manager import AdapterManager
+from publisher.api.grpc.utils import call_adapter, find_adapter, require_fields
+from publisher.models.platform_adapter import OAUTH2
 
 
 def get_oauth2_authorization_url(
-    request, adapter_manager: AdapterManager
+    request,
 ) -> publisher_pb2.GetOAuth2AuthorizationUrlResponse:
     require_fields(request, "platform")
 
-    adapter = adapter_manager.get_oauth2_adapter(request.platform)
+    adapter = find_adapter(request.platform, OAUTH2)
     result = call_adapter(
         adapter,
         "get_authorization_url",

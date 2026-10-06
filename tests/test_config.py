@@ -193,9 +193,6 @@ def test_offline_shared_secret_must_be_a_key():
 
 
 def test_registry_paths_default_to_data_dir():
-    assert load(PlatformsConfig).registry_file == (
-        config.ROOT / "data" / "platforms" / "registry.json"
-    )
     assert load(GatewayClientsConfig).registry_file == (
         config.ROOT / "data" / "gateway_clients" / "registry.json"
     )
@@ -214,7 +211,6 @@ def test_template_env_paths_match_defaults():
         "PLATFORMS_ADAPTERS_DIR": platforms.adapters_dir,
         "PLATFORMS_ADAPTERS_VENV_DIR": platforms.adapters_venv_dir,
         "PLATFORMS_ADAPTERS_ASSETS_DIR": platforms.adapters_assets_dir,
-        "PLATFORMS_REGISTRY_FILE": platforms.registry_file,
         "GATEWAY_CLIENTS_REGISTRY_FILE": gateway_clients.registry_file,
     }
 

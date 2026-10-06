@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from publisher import credentials, db
 from publisher.models.credential import ALL_SCOPES, Scope
+from publisher.models.platform_adapter import PlatformAdapter
 
 USERNAME = "ops"
 
@@ -18,6 +19,22 @@ def create_credential(username: str, scopes: Iterable[str] = ALL_SCOPES) -> str:
             session, username, frozenset(Scope(s) for s in scopes)
         )
     return password
+
+
+def add_adapter(name: str, proto_id: int, cat_id: int = 0) -> PlatformAdapter:
+    """Register an adapter row; its id is "<name>-<proto_id>"."""
+    with db.get_session() as session:
+        adapter = PlatformAdapter(
+            id=f"{name}-{proto_id}",
+            source_url=f"https://github.com/smswithoutborders/{name}",
+            commit="0" * 40,
+            name=name,
+            display_name=name.title(),
+            proto_id=proto_id,
+            cat_id=cat_id,
+        )
+        session.add(adapter)
+    return adapter
 
 
 def basic_auth(username: str, password: str) -> dict[str, str]:

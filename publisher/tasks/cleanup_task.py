@@ -2,8 +2,6 @@
 
 import logging
 
-from celery.signals import worker_init
-
 from publisher.config import CleanupConfig
 from publisher.db import get_session
 from publisher.db.types import utc_now
@@ -12,27 +10,11 @@ from publisher.models.credential_session import (
     delete_expired as delete_expired_credential_sessions,
 )
 from publisher.models.payload_session import delete_stale
-from publisher.platforms.manager import AdapterManager
 from publisher.tasks.celery_app import celery_app
 from publisher.tokens import cleanup_idle_tokens as run_idle_token_cleanup
 
 logger = logging.getLogger(__name__)
 cleanup_config = CleanupConfig.get()
-
-_adapter_manager: AdapterManager | None = None
-
-
-@worker_init.connect
-def _on_worker_init(**kwargs):
-    global _adapter_manager
-    _adapter_manager = AdapterManager()
-
-
-def _get_adapter_manager() -> AdapterManager:
-    global _adapter_manager
-    if _adapter_manager is None:
-        _adapter_manager = AdapterManager()
-    return _adapter_manager
 
 
 @celery_app.task(name="tasks.cleanup_task.cleanup_stale_payload_sessions")
@@ -53,7 +35,7 @@ def cleanup_idle_tokens() -> None:
     """Delete tokens (and their keys) idle past the configured max age."""
     cutoff = utc_now() - cleanup_config.token_idle_max_age
     with get_session() as db:
-        counts = run_idle_token_cleanup(db, cutoff, _get_adapter_manager())
+        counts = run_idle_token_cleanup(db, cutoff)
 
     if counts:
         logger.info("Cleaned up %d idle token(s): %s", sum(counts.values()), counts)

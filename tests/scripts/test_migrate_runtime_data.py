@@ -1,14 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import json
-
 import pytest
 
 LEGACY_ENV = (
     "PLATFORMS_ADAPTERS_DIR=platforms/adapters\n"
     "PLATFORMS_ADAPTERS_VENV_DIR={install}/platforms/adapters_venv\n"
     "PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets\n"
-    "PLATFORMS_REGISTRY_FILE=platforms/registry.json\n"
     "GATEWAY_CLIENTS_REGISTRY_FILE=gateway_clients/registry.json\n"
 )
 
@@ -30,7 +27,6 @@ def legacy(install):
     (install / "platforms/adapters/demo/main.py").touch()
     (install / "platforms/adapters_venv/demo/bin").mkdir(parents=True)
     (install / "platforms/adapters_assets").mkdir()
-    (install / "platforms/registry.json").write_text("{}")
     (install / "gateway_clients").mkdir()
     (install / "gateway_clients/registry.json").write_text("{}")
     (install / ".env").write_text(LEGACY_ENV.format(install=install))
@@ -49,7 +45,6 @@ class TestMigrateRuntimeData:
         assert (legacy / "data/platforms/adapters/demo/main.py").is_file()
         assert (legacy / "data/platforms/venvs/demo").is_dir()
         assert (legacy / "data/platforms/assets").is_dir()
-        assert (legacy / "data/platforms/registry.json").is_file()
         assert (legacy / "data/gateway_clients/registry.json").is_file()
         assert not (legacy / "platforms/adapters").exists()
 
@@ -85,29 +80,12 @@ class TestMigrateRuntimeData:
         assert "Moved" not in migrate()
         assert (legacy / ".env").read_text() == env
 
-    def test_points_registry_and_venv_scripts_at_new_paths(self, legacy, migrate):
+    def test_points_venv_scripts_at_new_paths(self, legacy, migrate):
         old_venv = legacy / "platforms/adapters_venv/demo"
-        (legacy / "platforms/registry.json").write_text(
-            json.dumps(
-                {
-                    "demo": {
-                        "path": "platforms/adapters/demo",
-                        "venv_path": str(old_venv),
-                        "assets_path": "platforms/adapters_assets/demo",
-                    }
-                }
-            )
-        )
         (old_venv / "bin/pip").write_text(f"#!{old_venv}/bin/python\n")
 
         migrate()
 
-        registry = json.loads((legacy / "data/platforms/registry.json").read_text())
-        assert registry["demo"] == {
-            "path": "data/platforms/adapters/demo",
-            "venv_path": f"{legacy}/data/platforms/venvs/demo",
-            "assets_path": "data/platforms/assets/demo",
-        }
         pip = (legacy / "data/platforms/venvs/demo/bin/pip").read_text()
         assert pip == f"#!{legacy}/data/platforms/venvs/demo/bin/python\n"
 

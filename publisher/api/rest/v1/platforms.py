@@ -5,12 +5,14 @@ import json
 import logging
 from pathlib import Path as PathLib
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy.orm import Session
 
 from publisher.api.rest.v1.params import NAME_PATTERN, filter_query
 from publisher.api.rest.v1.schemas import OAuthClientMetadata, PlatformManifest
-from publisher.platforms.manager import AdapterManager
+from publisher.db import get_db
+from publisher.models import platform_adapter as platform_adapters
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +33,13 @@ ALLOWED_PLATFORMS_WITH_CLIENT_METADATA = ["bluesky"]
 
 @router.get("", summary="List platforms")
 def get_platforms(
-    request: Request,
     name: str | None = filter_query(50, "Filter by platform name"),
     proto_id: int | None = Query(None, description="Filter by protocol ID"),
     cat_id: int | None = Query(None, description="Filter by category ID"),
+    db: Session = Depends(get_db),
 ) -> list[PlatformManifest]:
     """Platforms with an installed adapter."""
-    manager: AdapterManager = request.app.state.adapter_manager
-    manifests = manager.list_adapters(name=name, proto_id=proto_id, cat_id=cat_id)
+    manifests = platform_adapters.find(db, name=name, proto_id=proto_id, cat_id=cat_id)
 
     return [
         PlatformManifest(
@@ -56,12 +57,11 @@ def get_platforms(
     "/{platform_name}/oauth/client-metadata.json", summary="OAuth client metadata"
 )
 def get_platform_oauth_client_metadata(
-    request: Request,
     platform_name: str = Path(..., description="Platform name", pattern=NAME_PATTERN),
+    db: Session = Depends(get_db),
 ) -> OAuthClientMetadata:
     """Only for platforms with dynamic client registration, such as Bluesky."""
-    manager: AdapterManager = request.app.state.adapter_manager
-    adapters = manager.list_adapters(name=platform_name)
+    adapters = platform_adapters.find(db, name=platform_name)
 
     if not adapters:
         raise HTTPException(status_code=404, detail="Platform not found")
@@ -94,10 +94,10 @@ def get_platform_oauth_client_metadata(
 async def oauth_callback(
     request: Request,
     platform_name: str = Path(..., description="Platform name", pattern=NAME_PATTERN),
+    db: Session = Depends(get_db),
 ) -> HTMLResponse:
     """Shows the callback query parameters, as a redirect target for OAuth2 testing."""
-    manager: AdapterManager = request.app.state.adapter_manager
-    adapters = manager.list_adapters(name=platform_name)
+    adapters = platform_adapters.find(db, name=platform_name)
 
     if not adapters:
         raise HTTPException(status_code=404, detail="Platform not found")

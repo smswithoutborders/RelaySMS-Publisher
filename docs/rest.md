@@ -37,13 +37,14 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 ## Audit Events
 
-`GET /v1/audit-events` needs `audit:read`, and each area also needs its read scope: `creds:read` for `auth.*` and `creds.*` events. Without it, those events are left out.
+`GET /v1/audit-events` needs `audit:read`, and each area also needs its read scope: `creds:read` for `auth.*` and `creds.*` events, `platforms:read` for `platforms.*`. Events from areas you can't read are left out.
 
 | Action | Recorded when |
 | :--- | :--- |
 | `creds.create`, `creds.update`, `creds.reset_password`, `creds.revoke_sessions`, `creds.delete` | A credential changes, over the API or the CLI. `details` says what changed, never secrets. |
 | `auth.login` | A web session starts, or a login for an existing username is refused |
 | `auth.logout` | A web session ends |
+| `platforms.add`, `platforms.update`, `platforms.remove` | An adapter is installed, updated or removed. `details` has the source URL and commits. |
 
 `outcome` is `success`, `denied` (the change went beyond the actor's scopes) or `failed` (a refused login for an existing username: wrong password or disabled). Successful HTTP Basic requests aren't recorded, since every request authenticates. `actor` is the username at the time, and null for the CLI or a failed login. Events are kept for `AUDIT_RETENTION_DAYS` (365 by default).
 

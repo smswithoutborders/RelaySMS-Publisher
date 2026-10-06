@@ -1473,10 +1473,13 @@
           "creds.update",
           "creds.reset_password",
           "creds.revoke_sessions",
-          "creds.delete"
+          "creds.delete",
+          "platforms.add",
+          "platforms.update",
+          "platforms.remove"
         ],
         "title": "AuditAction",
-        "description": "Named <area>.<verb>. Reading an area's events needs its scope in AREA_SCOPES."
+        "description": "Named <area>.<verb>. Reading an area's events also needs its read scope."
       },
       "AuditEventInfo": {
         "properties": {

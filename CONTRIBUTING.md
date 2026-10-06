@@ -110,16 +110,16 @@ Each service can also run on its own:
 ### Branches
 
 - Branch from `staging` and open pull requests against `staging`.
-- `staging` deploys to the staging server on every push.
+- `staging` deploys to the staging server on every push. Put `[migrate]` in a commit message to also run the migrations, e.g. `feat(reports): add a reports table [migrate]`.
 - `staging` is merged into `main` for a release.
 
-Name branches after the change, such as `fix/token-id-zero` or `feat/grpc-sync-keys`. Start each one from the latest upstream `staging`, push it to your fork and open the pull request from there:
+Name branches after the change, such as `fix/help-text-typo` or `feat/export-csv`. Start each one from the latest upstream `staging`, push it to your fork and open the pull request from there:
 
 ```bash
 git fetch upstream
-git switch -c fix/token-id-zero upstream/staging
+git switch -c fix/help-text-typo upstream/staging
 # ...commit...
-git push -u origin fix/token-id-zero
+git push -u origin fix/help-text-typo
 ```
 
 If `staging` moves on while your PR is open, rebase onto it and force-push:
@@ -145,7 +145,14 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 <optional footer, e.g. BREAKING CHANGE: ...>
 ```
 
-Common types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` and `chore`. Scopes name the area, such as `grpc`, `rest`, `auth`, `keys` or `manage`. Mark breaking changes with `!` (`feat(auth)!: ...`) and explain the migration path in a `BREAKING CHANGE:` footer. Breaking changes include removed or renamed env vars, CLI commands, endpoints, RPC fields and anything an operator must do by hand on update.
+Keep it to the summary line unless the change needs explaining:
+
+```
+fix(cli): show the missing file when a command fails
+feat(reports)!: rename REPORTS_DIR to REPORTS_PATH
+```
+
+Common types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` and `chore`. Scopes name the area, such as `grpc`, `rest`, `auth`, `keys` or `manage`. Mark breaking changes with `!` (`feat(reports)!: ...`) and explain the migration path in a `BREAKING CHANGE:` footer. Breaking changes include removed or renamed env vars, CLI commands, endpoints, RPC fields and anything an operator must do by hand on update.
 
 ### Hooks
 
@@ -164,7 +171,7 @@ Common types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` and `c
 - [ ] `make check` and `make test` pass locally.
 - [ ] New behaviour and bug fixes come with tests. A bug fix has a test that fails without it.
 - [ ] Docs, `template.env` and the README are updated if behaviour, settings or commands changed.
-- [ ] Schema changes include a migration.
+- [ ] Schema changes include a migration, and a commit message with `[migrate]`.
 - [ ] The description says what changed, why, and how it was tested. Link the issue with `Closes #123`.
 - [ ] Anything operators must do on deploy is called out.
 
@@ -203,7 +210,7 @@ The gRPC service handles the account side: storing OAuth2 and PNBA tokens, revok
 The hooks enforce formatting, lint, types and commit messages. These rules are checked in review:
 
 - **Functions by default.** Modules group related behaviour. Use a class only for real state (a cache, a connection) or when a framework needs one (ORM models, structs, interceptors, servicers, config sections).
-- **Dependencies are arguments.** Domain and model functions take the database `session` first, then anything else they need, such as the adapter manager.
+- **Dependencies are arguments.** Domain and model functions take the database `session` first, then anything else they need, such as the acting credential.
 - **The entry point owns the transaction.** A route, gRPC handler, task or CLI command opens the session; code below it never opens a session or commits.
 - **Domain errors subclass `PublisherError`** (`publisher/errors.py`). Each interface maps them to its own responses: HTTP status codes, gRPC status codes, SMTP replies.
 - **Loggers are `logging.getLogger(__name__)`.** Each entry point calls `publisher.log.setup_logging()` once. Never log tokens, keys, passwords or decrypted content.
@@ -238,7 +245,7 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 ### Writing tests
 
 - Put a test where its module lives: `publisher/api/rest/v1/stats.py` is tested in `tests/api/rest/test_stats.py`.
-- Name tests after the behaviour, such as `test_get_rejects_ids_outside_0_255`, not the function.
+- Name tests after the behaviour, such as `test_list_skips_disabled_items`, not the function.
 - Test through the public interface (a route, an RPC, a domain function) and assert on outcomes: responses, rows, raised errors. Patch only what crosses the process boundary, such as adapter IPC or outbound HTTP.
 - A bug fix needs a test that fails before the fix.
 
@@ -280,7 +287,7 @@ make build test PYTHON=.venv312/bin/python
 ### Change the database schema
 
 1. Change the model in `publisher/models/`.
-2. Add `migrations/versions/NNN_short_slug.py` with the next number as `revision` and the previous one as `down_revision` (`"014"` after `"013"`). Write both `upgrade` and `downgrade`.
+2. Add `migrations/versions/NNN_short_slug.py` with the next number as `revision` and the previous one as `down_revision` (`"042"` after `"041"`). Write both `upgrade` and `downgrade`.
 3. Run `make migrate` on SQLite, and on MySQL or PostgreSQL if the migration uses dialect-specific features.
 
 ### Add a REST endpoint

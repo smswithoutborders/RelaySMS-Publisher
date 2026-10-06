@@ -21,7 +21,6 @@ from publisher.api.grpc.interceptors import (
 from publisher.api.grpc.v3.servicer import PublisherServicerV3
 from publisher.config import GrpcConfig
 from publisher.db import dispose_engine, get_session
-from publisher.platforms.manager import AdapterManager
 
 logger = logging.getLogger(__name__)
 grpc_config = GrpcConfig.get()
@@ -60,9 +59,7 @@ def _build_server(max_workers: int) -> grpc.Server:
     with get_session() as db:
         keys.initialize_server_identity_keys(db)
 
-    v3_grpc.add_PublisherServicer_to_server(
-        PublisherServicerV3(adapter_manager=AdapterManager()), grpc_server
-    )
+    v3_grpc.add_PublisherServicer_to_server(PublisherServicerV3(), grpc_server)
 
     health_servicer = health.HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, grpc_server)

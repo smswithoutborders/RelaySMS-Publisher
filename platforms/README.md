@@ -4,17 +4,16 @@
 
 This module handles the discovery, management, and installation of platform adapters.
 
-Adapter files and the registry are stored under paths configurable in `.env`:
+Adapters are registered in the `platform_adapters` database table. Their files are stored under paths configurable in `.env`:
 
 ```bash
 PLATFORMS_ADAPTERS_DIR=data/platforms/adapters
 PLATFORMS_ADAPTERS_VENV_DIR=data/platforms/venvs
 PLATFORMS_ADAPTERS_ASSETS_DIR=data/platforms/assets
-PLATFORMS_REGISTRY_FILE=data/platforms/registry.json
 ```
 
 > [!IMPORTANT]
-> Use `./publisher.sh platforms` (from the install directory) instead of calling `python3 -m publisher platforms` directly. It automatically resolves the install directory, loads `.env`, and runs as the correct **service user** (the account systemd runs `relaysms-publisher-*` as), whether invoked directly as that user or via `sudo`. Calling the CLI module directly as the wrong user can leave the registry file or adapter directories owned incorrectly, causing the running services to fail to read/write them.
+> Use `./publisher.sh platforms` (from the install directory) instead of calling `python3 -m publisher platforms` directly. It automatically resolves the install directory, loads `.env`, and runs as the correct **service user** (the account systemd runs `relaysms-publisher-*` as), whether invoked directly as that user or via `sudo`. Calling the CLI module directly as the wrong user can leave adapter directories owned incorrectly, causing the running services to fail to read/write them.
 
 ## Adding Adapters from GitHub
 

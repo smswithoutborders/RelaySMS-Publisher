@@ -7,8 +7,8 @@ from datetime import datetime
 from grpc_interceptor.exceptions import InvalidArgument
 
 from protos.v3 import publisher_pb2
-from publisher.api.grpc.utils import call_adapter, require_fields
-from publisher.platforms.manager import AdapterManager
+from publisher.api.grpc.utils import call_adapter, find_adapter, require_fields
+from publisher.models.platform_adapter import PNBA
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +27,10 @@ def _to_epoch_seconds(value):
         return None
 
 
-def get_pnba_code(
-    request, adapter_manager: AdapterManager
-) -> publisher_pb2.GetPNBACodeResponse:
+def get_pnba_code(request) -> publisher_pb2.GetPNBACodeResponse:
     require_fields(request, "phone_number", "platform")
 
-    adapter = adapter_manager.get_pnba_adapter(request.platform)
+    adapter = find_adapter(request.platform, PNBA)
     result = call_adapter(
         adapter,
         "send_authorization_code",

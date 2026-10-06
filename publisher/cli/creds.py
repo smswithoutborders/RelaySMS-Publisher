@@ -1,23 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-from contextlib import contextmanager
-
 import click
 
 from publisher import credentials
+from publisher.cli.db import session
 from publisher.cli.output import print_table
-from publisher.db import get_session
 from publisher.models import credential_session as credential_sessions
 from publisher.models.credential import ALL_SCOPES, SCOPE_DESCRIPTIONS, Scope
-
-
-@contextmanager
-def _db():
-    try:
-        with get_session() as db:
-            yield db
-    except credentials.CredentialError as e:
-        raise click.ClickException(str(e)) from e
 
 
 def _format_time(value):
@@ -89,7 +78,7 @@ def scopes_command():
 @_scope_options
 def create(username, scopes, administrator):
     """Create a credential with a generated password."""
-    with _db() as db:
+    with session() as db:
         credential, password = credentials.create(
             db, username, _resolve_scopes(scopes, administrator)
         )
@@ -102,7 +91,7 @@ def create(username, scopes, administrator):
 @cli.command(name="list")
 def list_command():
     """List credentials."""
-    with _db() as db:
+    with session() as db:
         active_sessions = credential_sessions.count_active_by_credential(db)
         rows = [
             [
@@ -128,7 +117,7 @@ def list_command():
 @_scope_options
 def set_scopes(username, scopes, administrator):
     """Replace a credential's scopes. Takes effect on its next request."""
-    with _db() as db:
+    with session() as db:
         credential = credentials.get_or_raise(db, username)
         credentials.update(
             db, credential, scopes=_resolve_scopes(scopes, administrator)
@@ -142,7 +131,7 @@ def set_scopes(username, scopes, administrator):
 @_username_option()
 def reset_password(username):
     """Generate a new password and end the credential's sessions."""
-    with _db() as db:
+    with session() as db:
         credential = credentials.get_or_raise(db, username)
         password = credentials.reset_password(db, credential)
 
@@ -154,7 +143,7 @@ def reset_password(username):
 @_username_option()
 def disable(username):
     """Disable a credential and end its sessions."""
-    with _db() as db:
+    with session() as db:
         credentials.update(db, credentials.get_or_raise(db, username), active=False)
 
     click.echo(f"Credential {username} disabled; existing sessions were ended.")
@@ -164,7 +153,7 @@ def disable(username):
 @_username_option()
 def enable(username):
     """Re-enable a disabled credential."""
-    with _db() as db:
+    with session() as db:
         credentials.update(db, credentials.get_or_raise(db, username), active=True)
 
     click.echo(f"Credential {username} enabled.")
@@ -175,7 +164,7 @@ def enable(username):
 @click.confirmation_option(prompt="Permanently delete this credential?")
 def delete(username):
     """Delete a credential and its sessions."""
-    with _db() as db:
+    with session() as db:
         credentials.delete(db, credentials.get_or_raise(db, username))
 
     click.echo(f"Credential {username} deleted.")
@@ -185,7 +174,7 @@ def delete(username):
 @_username_option()
 def revoke_sessions(username):
     """Log a credential out of every web session."""
-    with _db() as db:
+    with session() as db:
         revoked = credentials.revoke_sessions(
             db, credentials.get_or_raise(db, username)
         )

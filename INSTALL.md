@@ -106,7 +106,6 @@ If you changed any of the following path variables in `.env`, create the parent 
 - `CELERY_BROKER_DB_PATH`, `CELERY_RESULT_DB_PATH` (sqlite broker only)
 - `CELERY_BEAT_SCHEDULE_PATH`
 - `PLATFORMS_ADAPTERS_DIR`, `PLATFORMS_ADAPTERS_VENV_DIR`, `PLATFORMS_ADAPTERS_ASSETS_DIR`
-- `PLATFORMS_REGISTRY_FILE`
 
 ### Run Migrations
 
@@ -208,14 +207,14 @@ sudo certbot --nginx -d publisher.example.com --redirect
 
 ## Managing Platform Adapters
 
-Use `publisher.sh` instead of calling `python3 -m publisher` directly. It automatically resolves the install directory, loads `.env`, uses the project venv, and runs as the correct service user so adapter files and the registry never end up with mismatched ownership:
+Use `publisher.sh` instead of calling `python3 -m publisher` directly. It automatically resolves the install directory, loads `.env`, uses the project venv, and runs as the correct service user so adapter files never end up with mismatched ownership:
 
 ```bash
 ./publisher.sh platforms add <GITHUB_URL>          # Add an adapter
 ./publisher.sh platforms remove <NAME>             # Remove an adapter
 ./publisher.sh platforms update [NAME] [--install] # Update one or all adapters
 ./publisher.sh platforms list                      # List registered adapters
-./publisher.sh platforms recover                   # Rebuild registry from disk
+./publisher.sh platforms import                    # Register adapter directories not yet in the database
 ./publisher.sh env                                 # Show resolved paths and service user
 ./publisher.sh shell                               # Open a shell as the service user with .env loaded
 ```
@@ -377,13 +376,12 @@ CELERY_BEAT_SCHEDULE_PATH=data/celerybeat-schedule
 PLATFORMS_ADAPTERS_DIR=data/platforms/adapters
 PLATFORMS_ADAPTERS_VENV_DIR=data/platforms/venvs
 PLATFORMS_ADAPTERS_ASSETS_DIR=data/platforms/assets
-PLATFORMS_REGISTRY_FILE=data/platforms/registry.json
 ```
 
 See [Platforms Documentation](platforms/README.md) and individual adapter READMEs for setup.
 
 > [!NOTE]
-> `PLATFORMS_REGISTRY_FILE` is written to by `publisher.sh platforms add|remove|update` and read by the running services at startup. Always run `publisher.sh platforms` as the service user (see [Platforms Documentation](platforms/README.md)) so the registry stays writable and readable across CLI runs and service restarts.
+> Adapters are registered in the `platform_adapters` database table. `manage.sh update --migrate` registers existing adapter directories with `publisher.sh platforms import`, after which the old `registry.json` and `PLATFORMS_REGISTRY_FILE` can be deleted.
 
 | Path | Description |
 |---|---|

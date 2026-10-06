@@ -2,26 +2,37 @@
 
 import configparser
 import logging
-import os
 import re
 import shutil
 import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, override
+from typing import override
 from urllib.parse import urlsplit
 
-import msgspec
-from git import RemoteProgress, Repo
+from git import GitCommandError, RemoteProgress, Repo
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from tqdm import tqdm
 
 from publisher.config import PlatformsConfig
+from publisher.errors import PublisherError
+from publisher.models import audit_event
+from publisher.models import platform_adapter as platform_adapters
+from publisher.models.audit_event import AuditAction
+from publisher.models.credential import Credential
+from publisher.models.platform_adapter import PlatformAdapter
 
 logger = logging.getLogger(__name__)
-platforms_config = PlatformsConfig.get()
 
 _GITHUB_REPO_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+_REQUIRED_FILES = ("manifest.ini", "main.py", "config.ini")
+_REQUIRED_MANIFEST_FIELDS = ("name", "display_name", "cat_id", "proto_id")
+
+
+class AdapterError(PublisherError):
+    pass
 
 
 def is_allowed_github_url(url: str) -> bool:
@@ -36,29 +47,14 @@ def is_allowed_github_url(url: str) -> bool:
         return False
     org, repo = segments
     return (
-        org.lower() in platforms_config.github_orgs
+        org.lower() in PlatformsConfig.get().github_orgs
         and repo not in (".", "..")
         and _GITHUB_REPO_PATTERN.match(repo) is not None
     )
 
 
-class PlatformManifest(msgspec.Struct, forbid_unknown_fields=False):
-    id: str
-    display_name: str
-    name: str
-    path: str
-    venv_path: str
-    assets_path: str
-    cat_id: int
-    proto_id: int
-    auth_provider: str | None = None
-    supports_offline_first: bool | None = None
-    icon_svg: str | None = None
-    icon_png: str | None = None
-
-
 class CloneProgress(RemoteProgress):
-    """Displays progress bar for git clone tasks."""
+    """Shows a progress bar while cloning."""
 
     def __init__(self):
         super().__init__()
@@ -83,411 +79,203 @@ class CloneProgress(RemoteProgress):
             self.pbar = None
 
 
-def _generate_id(url: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, url.strip().lower()))
-
-
-def _is_safe_path(base_folder: Path, target_path: Path) -> bool:
+def _rmtree(path: Path) -> None:
     try:
-        return (
-            base_folder.resolve() in target_path.resolve().parents
-            or base_folder.resolve() == target_path.resolve()
-        )
-    except (OSError, ValueError):
-        return False
-
-
-def _load_ini_file(path: Path, *sections: str) -> dict | None:
-    """Reads and merges specified INI sections into a flat dict."""
-    if not path.is_file():
-        logger.error("Missing file: %s", path)
-        return None
-
-    config = configparser.ConfigParser()
-    try:
-        config.read(path)
-    except Exception as e:
-        logger.error("Failed to parse INI file %s: %s", path, e)
-        return None
-
-    merged = {}
-    for section in sections:
-        if section not in config:
-            logger.error("Missing section '%s' in: %s", section, path)
-            return None
-        merged.update(dict(config[section]))
-
-    return merged
-
-
-def _rollback_directory(path: Path):
-    try:
-        if path.is_dir():
-            shutil.rmtree(path)
-            logger.info("Rolled back directory: %s", path)
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        pass
     except OSError as e:
-        logger.error("Failed to roll back %s: %s", path, e)
+        logger.error("Failed to delete %s: %s", path, e)
 
 
-def _validate_adapter_files(path: Path) -> bool:
-    required = ["manifest.ini", "main.py", "config.ini"]
-    missing = [f for f in required if not (path / f).is_file()]
-    if missing:
-        logger.warning("Missing adapter files in %s: %s", path, ", ".join(missing))
-        return False
-    return True
-
-
-def _install_dependencies(requirements_path: Path, venv_path: Path):
-    if not _is_safe_path(platforms_config.adapters_venv_dir, venv_path):
-        raise ValueError("Invalid virtual environment path localization.")
-
+def _install_dependencies(adapter: PlatformAdapter) -> None:
+    requirements = Path(adapter.path) / "requirements.txt"
+    if not requirements.is_file():
+        return
+    venv = Path(adapter.venv_path)
     try:
-        subprocess.check_call([sys.executable, "-m", "venv", str(venv_path)])
+        subprocess.check_call([sys.executable, "-m", "venv", str(venv)])
         subprocess.check_call(
-            [str(venv_path / "bin/pip3"), "install", "-r", str(requirements_path)]
+            [str(venv / "bin/pip3"), "install", "-r", str(requirements)]
         )
-        logger.info("Installed dependencies: %s", venv_path)
     except subprocess.SubprocessError as e:
-        logger.error("Failed to install dependencies: %s", e)
-        raise ValueError("Dependency installation failed.") from e
+        raise AdapterError(f"Dependency installation failed: {e}") from e
 
 
-def _build_manifest_from_ini(
-    adapter_id: str, ini_data: dict, existing: PlatformManifest
-) -> PlatformManifest:
+def _read_manifest(path: Path) -> dict:
+    missing = [name for name in _REQUIRED_FILES if not (path / name).is_file()]
+    if missing:
+        raise AdapterError(f"{path} is missing {', '.join(missing)}")
+    ini = configparser.ConfigParser()
     try:
-        return PlatformManifest(
-            id=adapter_id,
-            display_name=ini_data["display_name"],
-            name=ini_data["name"],
-            path=existing.path,
-            venv_path=existing.venv_path,
-            assets_path=existing.assets_path,
-            cat_id=int(ini_data["cat_id"]),
-            proto_id=int(ini_data["proto_id"]),
-            auth_provider=ini_data.get("auth_provider"),
-            supports_offline_first=ini_data.get("supports_offline_first", "")
-            .strip()
-            .lower()
-            == "true",
-            icon_svg=ini_data.get("icon_svg"),
-            icon_png=ini_data.get("icon_png"),
+        ini.read(path / "manifest.ini")
+        manifest = dict(ini["platform"])
+    except (configparser.Error, KeyError) as e:
+        raise AdapterError(f"Invalid manifest.ini in {path}: {e}") from e
+    if not all(manifest.get(field) for field in _REQUIRED_MANIFEST_FIELDS):
+        raise AdapterError(
+            f"manifest.ini in {path} needs {', '.join(_REQUIRED_MANIFEST_FIELDS)}"
         )
-    except KeyError as e:
-        raise ValueError(f"Missing required manifest field: {e}") from e
+    return manifest
 
 
-class AdapterManager:
-    """Manages adapter lifecycle operations using a JSON registry."""
+def _apply_manifest(adapter: PlatformAdapter, manifest: dict) -> None:
+    try:
+        adapter.name = manifest["name"].strip().lower()
+        adapter.display_name = manifest["display_name"]
+        adapter.cat_id = int(manifest["cat_id"])
+        adapter.proto_id = int(manifest["proto_id"])
+    except ValueError as e:
+        raise AdapterError(f"Invalid manifest value: {e}") from e
+    adapter.auth_provider = manifest.get("auth_provider") or None
+    adapter.supports_offline_first = (
+        manifest.get("supports_offline_first", "").strip().lower() == "true"
+    )
+    adapter.icon_svg = manifest.get("icon_svg") or None
+    adapter.icon_png = manifest.get("icon_png") or None
 
-    def __init__(self, registry_file: Path | None = None):
-        self.registry_file = registry_file or platforms_config.registry_file
-        self._app_registry: dict[str, PlatformManifest] = {}
-        self._last_modified: float = 0.0
 
-    def _load_registry(self) -> dict[str, PlatformManifest]:
-        try:
-            current_mtime = os.stat(self.registry_file).st_mtime
-        except FileNotFoundError:
-            return {}
+def _flush(session: Session, adapter: PlatformAdapter) -> None:
+    try:
+        session.flush()
+    except IntegrityError:
+        raise AdapterError(
+            f"An adapter for {adapter.name!r} with protocol {adapter.proto_id} "
+            "is already installed"
+        ) from None
 
-        if current_mtime == self._last_modified:
-            return self._app_registry
 
-        try:
-            with open(self.registry_file, "rb") as f:
-                registry = msgspec.json.decode(
-                    f.read(), type=dict[str, PlatformManifest]
-                )
-            self._app_registry = registry
-            self._last_modified = current_mtime
-            return self._app_registry
-        except Exception as e:
-            logger.error("Failed to read registry: %s", e)
-            return self._app_registry
+def add_from_github(
+    session: Session, url: str, actor: Credential | None = None
+) -> PlatformAdapter:
+    """Clone a repository, install its dependencies and register it."""
+    url = url.strip()
+    adapter = PlatformAdapter(
+        id=str(uuid.uuid5(uuid.NAMESPACE_URL, url.lower())),
+        source_url=url,
+        created_by=actor.id if actor else None,
+        updated_by=actor.id if actor else None,
+    )
+    path = Path(adapter.path)
+    if session.get(PlatformAdapter, adapter.id) or path.exists():
+        raise AdapterError(f"Adapter from {url} is already installed")
 
-    def _save_registry(self, data: dict[str, PlatformManifest]):
-        try:
-            self.registry_file.parent.mkdir(parents=True, exist_ok=True)
-            self.registry_file.write_bytes(msgspec.json.encode(data))
-            self._last_modified = os.stat(self.registry_file).st_mtime
-            self._app_registry = data
-        except (OSError, msgspec.ValidationError) as e:
-            logger.error("Failed to write registry: %s", e)
-
-    def find_adapter_ids(
-        self,
-        name: str | None = None,
-        proto_id: Any | None = None,
-        cat_id: Any | None = None,
-    ) -> list[str]:
-        """Return registry keys matching any combination of optional filters."""
-        registry = self._load_registry()
-        if not registry:
-            return []
-
-        n_term = name.strip().lower() if name else None
-        p_term = str(proto_id).strip().lower() if proto_id is not None else None
-        c_term = str(cat_id).strip().lower() if cat_id is not None else None
-
-        return [
-            adapter_id
-            for adapter_id, manifest in registry.items()
-            if not (n_term and str(manifest.name).strip().lower() != n_term)
-            and not (p_term and str(manifest.proto_id).strip().lower() != p_term)
-            and not (c_term and str(manifest.cat_id).strip().lower() != c_term)
-        ]
-
-    def list_adapters(
-        self,
-        name: str | None = None,
-        proto_id: Any | None = None,
-        cat_id: Any | None = None,
-    ) -> list[PlatformManifest]:
-        """Return manifests matching any combination of optional filters."""
-        registry = self._load_registry()
-        if not registry:
-            return []
-
-        n_term = name.strip().lower() if name else None
-        p_term = str(proto_id).strip().lower() if proto_id is not None else None
-        c_term = str(cat_id).strip().lower() if cat_id is not None else None
-
-        return [
-            manifest
-            for manifest in registry.values()
-            if not (n_term and str(manifest.name).strip().lower() != n_term)
-            and not (p_term and str(manifest.proto_id).strip().lower() != p_term)
-            and not (c_term and str(manifest.cat_id).strip().lower() != c_term)
-        ]
-
-    def get_oauth2_adapter(self, platform: str) -> PlatformManifest:
-        """Resolve the OAuth2 adapter for a platform or raise NotImplementedError."""
-        adapter = self.list_adapters(name=platform.lower(), proto_id=0)
-        if not adapter:
-            raise NotImplementedError(
-                f"Platform '{platform.lower()}' with protocol 'oauth2' is not "
-                "supported. Contact the developers for implementation status."
-            )
-        return adapter[0]
-
-    def get_pnba_adapter(self, platform: str) -> PlatformManifest:
-        """Resolve the PNBA adapter for a platform or raise NotImplementedError."""
-        adapter = self.list_adapters(name=platform.lower(), proto_id=1)
-        if not adapter:
-            raise NotImplementedError(
-                f"Platform '{platform.lower()}' with protocol 'pnba' is not supported. "
-                "Contact the developers for implementation status."
-            )
-        return adapter[0]
-
-    def add_adapter_from_github(self, url: str):
-        """Clone a repository and register its manifest."""
-        platforms_config.adapters_dir.mkdir(parents=True, exist_ok=True)
-        adapter_id = _generate_id(url)
-        dest_path = platforms_config.adapters_dir / adapter_id
-
-        if not _is_safe_path(platforms_config.adapters_dir, dest_path):
-            raise ValueError("Invalid target folder destination.")
-
-        registry = self._load_registry()
-        if adapter_id in registry or dest_path.exists():
-            logger.info("Adapter already registered at %s; skipping.", dest_path)
-            return
-
-        progress = CloneProgress()
-        try:
-            Repo.clone_from(url, dest_path, progress=progress.update)
-            logger.info("Cloned repository to %s", dest_path)
-        except Exception as e:
-            logger.error("Failed to clone repository %s: %s", url, e)
-            _rollback_directory(dest_path)
-            raise
-        finally:
-            progress.close()
-
-        if not _validate_adapter_files(dest_path):
-            _rollback_directory(dest_path)
-            raise ValueError(f"Validation failed for files at: {dest_path}")
-
-        ini_data = _load_ini_file(dest_path / "manifest.ini", "platform")
-        if not ini_data or not all(
-            ini_data.get(f) for f in ("name", "display_name", "cat_id", "proto_id")
-        ):
-            _rollback_directory(dest_path)
-            raise ValueError(
-                "Manifest incomplete: missing one or more of name, cat_id, proto_id."
-            )
-
-        venv_path = platforms_config.adapters_venv_dir / adapter_id
-        requirements_path = dest_path / "requirements.txt"
-
-        if requirements_path.is_file():
-            venv_path.mkdir(parents=True, exist_ok=True)
-            try:
-                _install_dependencies(requirements_path, venv_path)
-            except ValueError:
-                _rollback_directory(dest_path)
-                _rollback_directory(venv_path)
-                raise
-
-        stub = PlatformManifest(
-            id=adapter_id,
-            display_name="",
-            name="",
-            path=str(dest_path),
-            venv_path=str(venv_path),
-            assets_path=str(platforms_config.adapters_assets_dir / adapter_id),
-            cat_id=0,
-            proto_id=0,
+    path.parent.mkdir(parents=True, exist_ok=True)
+    progress = CloneProgress()
+    try:
+        # A RemoteProgress, not its update method, keeps git's error lines.
+        # GitPython accepts one here though its type hint says a callable.
+        repo = Repo.clone_from(
+            url,
+            path,
+            progress=progress,  # pyright: ignore[reportArgumentType]
         )
+        adapter.commit = repo.head.commit.hexsha
+        _apply_manifest(adapter, _read_manifest(path))
+        _install_dependencies(adapter)
+        session.add(adapter)
+        _flush(session, adapter)
+    except Exception as e:
+        _rmtree(path)
+        _rmtree(Path(adapter.venv_path))
+        if isinstance(e, GitCommandError):
+            reason = " ".join(progress.error_lines) or e.stderr.strip()
+            raise AdapterError(f"Cloning {url} failed: {reason}") from e
+        raise
+    finally:
+        progress.close()
 
+    audit_event.record(
+        session,
+        AuditAction.PLATFORMS_ADD,
+        actor=actor,
+        target=adapter,
+        details={"source_url": adapter.source_url, "commit": adapter.commit},
+    )
+    return adapter
+
+
+def update(
+    session: Session,
+    adapter: PlatformAdapter,
+    *,
+    install: bool = False,
+    actor: Credential | None = None,
+) -> None:
+    """Pull an adapter's latest commit and refresh its manifest."""
+    from_commit = adapter.commit
+    repo = Repo(adapter.path)
+    try:
+        repo.git.pull()
+    except GitCommandError as e:
+        raise AdapterError(
+            f"Pulling {adapter.name!r} failed: {e.stderr.strip()}"
+        ) from e
+    _apply_manifest(adapter, _read_manifest(Path(adapter.path)))
+    adapter.commit = repo.head.commit.hexsha
+    adapter.updated_by = actor.id if actor else None
+    _flush(session, adapter)
+    if install:
+        _install_dependencies(adapter)
+
+    audit_event.record(
+        session,
+        AuditAction.PLATFORMS_UPDATE,
+        actor=actor,
+        target=adapter,
+        details={"from_commit": from_commit, "to_commit": adapter.commit},
+    )
+
+
+def remove(
+    session: Session, adapter: PlatformAdapter, actor: Credential | None = None
+) -> None:
+    """Unregister an adapter and delete its files."""
+    # The id names its directories; reject one that could point elsewhere.
+    if adapter.id in ("", ".", "..") or "/" in adapter.id:
+        raise AdapterError(f"Unsafe adapter id {adapter.id!r}")
+    audit_event.record(
+        session,
+        AuditAction.PLATFORMS_REMOVE,
+        actor=actor,
+        target=adapter,
+        details={"source_url": adapter.source_url, "commit": adapter.commit},
+    )
+    session.delete(adapter)
+    session.flush()
+    _rmtree(Path(adapter.path))
+    _rmtree(Path(adapter.venv_path))
+
+
+def import_from_disk(session: Session) -> list[PlatformAdapter]:
+    """Register adapter directories with no row, e.g. from the old JSON registry."""
+    adapters_dir = PlatformsConfig.get().adapters_dir
+    if not adapters_dir.is_dir():
+        return []
+
+    # Checked up front: one clash at flush would fail the whole import.
+    taken = {(a.name, a.proto_id) for a in platform_adapters.find(session)}
+    imported = []
+    for path in sorted(adapters_dir.iterdir()):
+        if not path.is_dir() or session.get(PlatformAdapter, path.name):
+            continue
         try:
-            manifest_record = _build_manifest_from_ini(adapter_id, ini_data, stub)
-        except ValueError:
-            _rollback_directory(dest_path)
-            _rollback_directory(venv_path)
-            raise
-
-        registry[adapter_id] = manifest_record
-        self._save_registry(registry)
-        logger.info("Registered adapter: '%s'", ini_data["name"])
-
-    def remove_adapter(self, adapter_id: str):
-        """Remove adapter workspace folders and registry entry."""
-        registry = self._load_registry()
-        if adapter_id not in registry:
-            raise ValueError(f"Adapter ID '{adapter_id}' missing from registry.")
-
-        manifest = registry[adapter_id]
-        p_target = Path(manifest.path)
-        v_target = Path(manifest.venv_path)
-
-        if not _is_safe_path(
-            platforms_config.adapters_dir, p_target
-        ) or not _is_safe_path(platforms_config.adapters_venv_dir, v_target):
-            raise ValueError("Deletion paths run outside system target roots.")
-
-        _rollback_directory(p_target)
-        _rollback_directory(v_target)
-
-        del registry[adapter_id]
-        self._save_registry(registry)
-        logger.info("Removed adapter entry: %s", adapter_id)
-
-    def update_adapter(self, adapter_id: str | None = None, install: bool = False):
-        """Pull updates and refresh registry entries for targeted adapters."""
-        registry = self._load_registry()
-        if not registry:
-            logger.warning("Registry is empty or failed to load; aborting update.")
-            return
-
-        targets = [adapter_id] if adapter_id else list(registry.keys())
-
-        for target_id in targets:
-            manifest = registry.get(target_id)
-            if not manifest:
-                continue
-
-            adapter_path = Path(manifest.path)
-            if not _is_safe_path(platforms_config.adapters_dir, adapter_path):
-                logger.error("Skipping update: invalid path for %s", target_id)
-                continue
-
-            try:
-                Repo(manifest.path).git.pull()
-                logger.info("Pulled source updates for: %s", target_id)
-            except Exception as e:
-                logger.error("Failed to pull updates for %s: %s", target_id, e)
-                continue
-
-            ini_data = _load_ini_file(adapter_path / "manifest.ini", "platform")
-            if not ini_data:
-                logger.error(
-                    "Could not read updated manifest for %s; skipping.", target_id
-                )
-                continue
-
-            try:
-                registry[target_id] = _build_manifest_from_ini(
-                    target_id, ini_data, manifest
-                )
-                logger.info("Updated manifest for: %s", target_id)
-            except ValueError as e:
-                logger.error("Failed to build manifest for %s: %s", target_id, e)
-                continue
-
-            if install:
-                requirements_path = adapter_path / "requirements.txt"
-                if requirements_path.is_file():
-                    try:
-                        _install_dependencies(
-                            requirements_path, Path(manifest.venv_path)
-                        )
-                    except ValueError:
-                        logger.error(
-                            "Failed to reinstall dependencies for: %s", target_id
-                        )
-
-        self._save_registry(registry)
-        logger.info("Update process completed.")
-
-    def recover_registry(self):
-        """Attempt to repopulate the registry from existing adapter directories."""
-        if not platforms_config.adapters_dir.is_dir():
-            logger.error(
-                "Adapters directory not found: %s", platforms_config.adapters_dir
+            manifest = _read_manifest(path)
+            repo = Repo(path)
+            adapter = PlatformAdapter(
+                id=path.name,
+                source_url=repo.remotes.origin.url,
+                commit=repo.head.commit.hexsha,
             )
-            return
-
-        registry = self._load_registry()
-        recovered = 0
-
-        for adapter_path in platforms_config.adapters_dir.iterdir():
-            if not adapter_path.is_dir():
-                continue
-
-            adapter_id = adapter_path.name
-
-            if adapter_id in registry:
-                logger.debug("Skipping already registered adapter: %s", adapter_id)
-                continue
-
-            if not _validate_adapter_files(adapter_path):
-                logger.warning("Skipping invalid adapter directory: %s", adapter_path)
-                continue
-
-            ini_data = _load_ini_file(adapter_path / "manifest.ini", "platform")
-            if not ini_data or not all(
-                ini_data.get(f) for f in ("name", "display_name", "cat_id", "proto_id")
-            ):
-                logger.warning("Skipping incomplete manifest in: %s", adapter_path)
-                continue
-
-            venv_path = platforms_config.adapters_venv_dir / adapter_id
-            stub = PlatformManifest(
-                id=adapter_id,
-                display_name="",
-                name="",
-                path=str(adapter_path),
-                venv_path=str(venv_path),
-                assets_path=str(platforms_config.adapters_assets_dir / adapter_id),
-                cat_id=0,
-                proto_id=0,
-            )
-
-            try:
-                registry[adapter_id] = _build_manifest_from_ini(
-                    adapter_id, ini_data, stub
-                )
-                logger.info("Recovered adapter: '%s'", ini_data["name"])
-                recovered += 1
-            except ValueError as e:
-                logger.error("Failed to recover adapter at %s: %s", adapter_path, e)
-
-        if recovered:
-            self._save_registry(registry)
-            logger.info("Recovery complete: %d adapter(s) restored.", recovered)
-        else:
-            logger.info("No adapters recovered.")
+            _apply_manifest(adapter, manifest)
+        except Exception as e:
+            logger.warning("Skipping adapter directory %s: %s", path, e)
+            continue
+        if (adapter.name, adapter.proto_id) in taken:
+            logger.warning("Skipping %s: %r is already installed", path, adapter.name)
+            continue
+        taken.add((adapter.name, adapter.proto_id))
+        session.add(adapter)
+        imported.append(adapter)
+    session.flush()
+    return imported

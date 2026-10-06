@@ -9,15 +9,12 @@ from protos.v3 import publisher_pb2
 from publisher import keys
 from publisher.db import get_session
 from publisher.models.server_identity_key import mark_key_used
-from publisher.platforms.manager import AdapterManager
 from publisher.tokens import revoke_pnba_token_upstream
 
 logger = logging.getLogger(__name__)
 
 
-def revoke_pnba_token(
-    request, payload: bytes, adapter_manager: AdapterManager
-) -> publisher_pb2.RevokePNBATokenResponse:
+def revoke_pnba_token(request, payload: bytes) -> publisher_pb2.RevokePNBATokenResponse:
     if not payload:
         raise InvalidArgument("token ciphertext is required in the request payload")
 
@@ -27,7 +24,7 @@ def revoke_pnba_token(
         except keys.KeyManagementError:
             raise Unauthenticated("revocation failed") from None
 
-        error = revoke_pnba_token_upstream(token, adapter_manager)
+        error = revoke_pnba_token_upstream(s, token)
         if error:
             logger.error(
                 "Adapter revocation failed for platform %r: %s", token.platform, error

@@ -5,23 +5,24 @@ from protos.v3 import publisher_pb2
 from publisher import keys
 from publisher.api.grpc.utils import (
     call_adapter,
+    find_adapter,
     require_fields,
     validate_client_ephemeral_public_keys,
 )
 from publisher.db import get_session
+from publisher.models.platform_adapter import OAUTH2
 from publisher.models.token import create as create_token
-from publisher.platforms.manager import AdapterManager
 
 
 def exchange_oauth2_code_and_store(
-    request, adapter_manager: AdapterManager
+    request,
 ) -> publisher_pb2.ExchangeOAuth2CodeAndStoreResponse:
     require_fields(
         request, "platform", "authorization_code", "client_ephemeral_public_keys"
     )
     validate_client_ephemeral_public_keys(request.client_ephemeral_public_keys)
 
-    adapter = adapter_manager.get_oauth2_adapter(request.platform)
+    adapter = find_adapter(request.platform, OAUTH2)
     result = call_adapter(
         adapter,
         "exchange_code_and_fetch_user_info",

@@ -7,8 +7,10 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
 from grpc_interceptor.exceptions import Internal, InvalidArgument
 
 from publisher.api.grpc.interceptors import INTERNAL_ERROR
+from publisher.db import get_session
+from publisher.models import platform_adapter as platform_adapters
+from publisher.models.platform_adapter import PlatformAdapter
 from publisher.platforms import ipc
-from publisher.platforms.manager import PlatformManifest
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,13 @@ def validate_client_ephemeral_public_keys(keys) -> None:
             ) from None
 
 
-def call_adapter(adapter: PlatformManifest, method: str, params: dict) -> dict:
+def find_adapter(platform: str, proto_id: int) -> PlatformAdapter:
+    # Its own session, so none stays open while the adapter runs.
+    with get_session() as s:
+        return platform_adapters.get_for_protocol(s, platform, proto_id)
+
+
+def call_adapter(adapter: PlatformAdapter, method: str, params: dict) -> dict:
     pipe = ipc.invoke(
         adapter_path=adapter.path,
         venv_path=adapter.venv_path,

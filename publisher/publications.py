@@ -16,16 +16,17 @@ from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from publisher.config import OfflinePublishConfig
 from publisher.errors import PublisherError
 from publisher.keys import pop_token_keys
+from publisher.models import platform_adapter as platform_adapters
 from publisher.models.payload_segment import create_if_not_exists as create_segment
 from publisher.models.payload_segment import get_all_data
 from publisher.models.payload_session import create as create_session
 from publisher.models.payload_session import delete as delete_session
 from publisher.models.payload_session import get_by_sender_and_session
+from publisher.models.platform_adapter import OAUTH2, PNBA
 from publisher.models.server_identity_key import get_private_key, mark_key_used
 from publisher.models.token import update_token_data
 from publisher.models.token_hash import update_last_used as mark_token_hash_used
 from publisher.platforms import ipc
-from publisher.platforms.manager import AdapterManager
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,6 @@ def validate(text_payload: str) -> tuple[bytes, bytes, rrs.V1PayloadsTypes]:
 
 def publish(
     session: Session,
-    adapter_manager: AdapterManager,
     payload_raw: bytes,
     sender_address: str,
     raw_segment: bytes,
@@ -126,7 +126,7 @@ def publish(
     if payload is None:
         return None
 
-    return _dispatch(session, adapter_manager, payload, protocol=protocol, tag=tag)
+    return _dispatch(session, payload, protocol=protocol, tag=tag)
 
 
 def _assemble(
@@ -162,7 +162,6 @@ def _assemble(
 
 def _dispatch(
     session: Session,
-    adapter_manager: AdapterManager,
     payload: rrs.V1Payloads,
     protocol: str | None = None,
     tag: str | None = None,
@@ -204,7 +203,6 @@ def _dispatch(
 
         return _publish_offline_content(
             session,
-            adapter_manager,
             key_id=payload.get_kid(),
             len_att=payload.get_len_att(),
             content_ciphertext=payload.get_content(),
@@ -212,7 +210,6 @@ def _dispatch(
 
     return _publish_online_content(
         session,
-        adapter_manager,
         token_id=token_id,
         key_id=payload.get_kid(),
         len_att=payload.get_len_att(),
@@ -222,7 +219,6 @@ def _dispatch(
 
 def _publish_online_content(
     session: Session,
-    adapter_manager: AdapterManager,
     token_id: int,
     key_id: int,
     len_att: int,
@@ -278,7 +274,9 @@ def _publish_online_content(
     account_id = token.token_data["account_id"]
     match proto_id:
         case rrs.V1PayloadsSupportedProtocols.O_AUTH20:
-            adapter = adapter_manager.get_oauth2_adapter(token.platform)
+            adapter = platform_adapters.get_for_protocol(
+                session, token.platform, OAUTH2
+            )
             params = _get_adapter_params(
                 content=content,
                 extras={
@@ -288,7 +286,7 @@ def _publish_online_content(
                 },
             )
         case rrs.V1PayloadsSupportedProtocols.PNBA:
-            adapter = adapter_manager.get_pnba_adapter(token.platform)
+            adapter = platform_adapters.get_for_protocol(session, token.platform, PNBA)
             params = _get_adapter_params(
                 content=content,
                 extras={
@@ -384,7 +382,6 @@ def _maybe_refresh_session(session: Session, token, result: dict) -> None:
 
 def _publish_offline_content(
     session: Session,
-    adapter_manager: AdapterManager,
     key_id: int,
     len_att: int,
     content_ciphertext: bytes,
@@ -415,7 +412,9 @@ def _publish_offline_content(
             platform_name=OFFLINE_CONTENT_PLATFORM,
         ) from exc
 
-    adapter = adapter_manager.get_pnba_adapter(OFFLINE_CONTENT_PLATFORM)
+    adapter = platform_adapters.get_for_protocol(
+        session, OFFLINE_CONTENT_PLATFORM, PNBA
+    )
     params = _get_adapter_params(
         content=content, extras={"base_path": adapter.assets_path}
     )

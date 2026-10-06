@@ -12,36 +12,32 @@ from publisher.api.grpc.v3.get_pnba_code import get_pnba_code
 from publisher.api.grpc.v3.revoke_oauth2_token import revoke_oauth2_token
 from publisher.api.grpc.v3.revoke_pnba_token import revoke_pnba_token
 from publisher.api.grpc.v3.sync_keys import sync_keys
-from publisher.platforms.manager import AdapterManager
 
 
 class PublisherServicerV3(publisher_pb2_grpc.PublisherServicer):
-    def __init__(self, adapter_manager: AdapterManager):
-        self.adapter_manager = adapter_manager
-
     @override
     def GetOAuth2AuthorizationUrl(self, request, context):
-        return get_oauth2_authorization_url(request, self.adapter_manager)
+        return get_oauth2_authorization_url(request)
 
     @override
     def ExchangeOAuth2CodeAndStore(self, request, context):
-        return exchange_oauth2_code_and_store(request, self.adapter_manager)
+        return exchange_oauth2_code_and_store(request)
 
     @override
     def RevokeOAuth2Token(self, request, context):
-        return revoke_oauth2_token(request, request_payload(), self.adapter_manager)
+        return revoke_oauth2_token(request, request_payload())
 
     @override
     def GetPNBACode(self, request, context):
-        return get_pnba_code(request, self.adapter_manager)
+        return get_pnba_code(request)
 
     @override
     def ExchangePNBACodeAndStore(self, request, context):
-        return exchange_pnba_code_and_store(request, self.adapter_manager)
+        return exchange_pnba_code_and_store(request)
 
     @override
     def RevokePNBAToken(self, request, context):
-        return revoke_pnba_token(request, request_payload(), self.adapter_manager)
+        return revoke_pnba_token(request, request_payload())
 
     @override
     def SyncKeys(self, request, context):

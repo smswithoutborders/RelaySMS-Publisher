@@ -7,18 +7,17 @@ import logging
 from sqlalchemy.orm import Session
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
+from publisher.models import platform_adapter as platform_adapters
+from publisher.models.platform_adapter import OAUTH2, PNBA
 from publisher.models.token import Token, get_idle
 from publisher.platforms import ipc
-from publisher.platforms.manager import AdapterManager
 
 logger = logging.getLogger(__name__)
 
 
-def revoke_oauth2_token_upstream(
-    token: Token, adapter_manager: AdapterManager
-) -> str | None:
+def revoke_oauth2_token_upstream(session: Session, token: Token) -> str | None:
     """Revoke an OAuth2 token at its platform; return the adapter's error, if any."""
-    adapter = adapter_manager.get_oauth2_adapter(token.platform)
+    adapter = platform_adapters.get_for_protocol(session, token.platform, OAUTH2)
     pipe = ipc.invoke(
         adapter_path=adapter.path,
         venv_path=adapter.venv_path,
@@ -31,11 +30,9 @@ def revoke_oauth2_token_upstream(
     return pipe.get("error")
 
 
-def revoke_pnba_token_upstream(
-    token: Token, adapter_manager: AdapterManager
-) -> str | None:
+def revoke_pnba_token_upstream(session: Session, token: Token) -> str | None:
     """End a PNBA session at its platform; return the adapter's error, if any."""
-    adapter = adapter_manager.get_pnba_adapter(token.platform)
+    adapter = platform_adapters.get_for_protocol(session, token.platform, PNBA)
     pipe = ipc.invoke(
         adapter_path=adapter.path,
         venv_path=adapter.venv_path,
@@ -50,19 +47,19 @@ def revoke_pnba_token_upstream(
 
 
 def cleanup_idle_tokens(
-    session: Session, older_than: datetime.datetime, adapter_manager: AdapterManager
+    session: Session, older_than: datetime.datetime
 ) -> dict[str, int]:
     """Revoke and delete tokens unused since older_than; return counts by platform."""
     counts: dict[str, int] = {}
     for token in get_idle(session, older_than):
-        _revoke_idle_token(token, adapter_manager)
+        _revoke_idle_token(session, token)
         counts[token.platform] = counts.get(token.platform, 0) + 1
         session.delete(token)
     session.flush()
     return counts
 
 
-def _revoke_idle_token(token: Token, adapter_manager: AdapterManager) -> None:
+def _revoke_idle_token(session: Session, token: Token) -> None:
     try:
         proto_id = rrs.v1_payload_support_protocols_from_u8(token.proto_id)
     except Exception:
@@ -75,9 +72,9 @@ def _revoke_idle_token(token: Token, adapter_manager: AdapterManager) -> None:
 
     try:
         if proto_id == rrs.V1PayloadsSupportedProtocols.O_AUTH20:
-            error = revoke_oauth2_token_upstream(token, adapter_manager)
+            error = revoke_oauth2_token_upstream(session, token)
         elif proto_id == rrs.V1PayloadsSupportedProtocols.PNBA:
-            error = revoke_pnba_token_upstream(token, adapter_manager)
+            error = revoke_pnba_token_upstream(session, token)
         else:
             return
 
