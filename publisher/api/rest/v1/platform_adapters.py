@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Managing installed platform adapters."""
 
+import uuid
 from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, Path, Request, Response, Security
@@ -9,10 +10,17 @@ from sqlalchemy.orm import Session
 from publisher.api.rest.v1.auth import AuthContext, authorize
 from publisher.api.rest.v1.errors import ApiError
 from publisher.api.rest.v1.params import check_if_match, etag
-from publisher.api.rest.v1.schemas import PlatformAdapterInfo, PlatformAdapterUpdate
+from publisher.api.rest.v1.schemas import (
+    AdapterInstall,
+    AdapterJobInfo,
+    AdapterUpgrade,
+    PlatformAdapterInfo,
+    PlatformAdapterUpdate,
+)
 from publisher.db import get_db
 from publisher.models import credential as credentials
 from publisher.models import platform_adapter as platform_adapters
+from publisher.models import platform_adapter_job as jobs
 from publisher.models.credential import Scope
 from publisher.models.platform_adapter import PlatformAdapter
 from publisher.platforms import manager
@@ -21,6 +29,7 @@ from publisher.platforms.manager import (
     AdapterError,
     AdapterInUseError,
 )
+from publisher.tasks.platform_task import run_adapter_job
 
 router = APIRouter(prefix="/platforms/adapters", tags=["Platform Adapters"])
 
@@ -50,6 +59,7 @@ def _info(adapter: PlatformAdapter, names: dict) -> PlatformAdapterInfo:
         icon_svg=adapter.icon_svg,
         icon_png=adapter.icon_png,
         source_url=adapter.source_url,
+        tag=adapter.tag,
         commit=adapter.commit,
         enabled=adapter.is_enabled,
         created_at=adapter.created_at,
@@ -141,4 +151,127 @@ def delete_adapter(
     with _adapter_errors(context):
         manager.remove(db, adapter, actor=context.credential)
     db.commit()
+    manager.delete_files(adapter)
     return Response(status_code=204)
+
+
+def _require_administrator(context: AuthContext) -> None:
+    # Installing runs code from the repository on this server.
+    if not context.credential.is_administrator:
+        raise ApiError(403, "Installing and updating adapters needs an administrator.")
+
+
+def _require_allowed(url: str) -> None:
+    if not manager.is_allowed_github_url(url):
+        raise ApiError(
+            400,
+            "Only GitHub repositories of orgs in PLATFORMS_GITHUB_ORGS can be used.",
+        )
+
+
+def _queue(
+    db: Session, request: Request, response: Response, **job_fields
+) -> AdapterJobInfo:
+    try:
+        job = jobs.create(db, **job_fields)
+    except jobs.JobBusyError as e:
+        raise ApiError(409, str(e)) from None
+    db.commit()
+    try:
+        run_adapter_job.delay(str(job.id))
+    except Exception as e:
+        # Fail it now, or its lock would block the adapter until cleanup.
+        jobs.finish(db, job.id, state="failed", log=[f"Queueing failed: {e}"])
+        db.commit()
+        raise ApiError(
+            503, "The job queue is unavailable. Try again later.", log=str(e)
+        ) from e
+    response.headers["Location"] = str(request.url_for("get_job", job_id=job.id))
+    return AdapterJobInfo.model_validate(job)
+
+
+@router.post(
+    "", response_model=AdapterJobInfo, status_code=202, summary="Install adapter"
+)
+def install_adapter(
+    body: AdapterInstall,
+    request: Request,
+    response: Response,
+    context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
+    db: Session = Depends(get_db),
+) -> AdapterJobInfo:
+    """Queues an install; poll the job at Location. Administrators only."""
+    _require_administrator(context)
+    _require_allowed(body.source_url)
+    adapter_id = manager.adapter_id(body.source_url)
+    if db.get(PlatformAdapter, adapter_id) is not None:
+        raise ApiError(409, "This adapter is already installed. Update it instead.")
+    return _queue(
+        db,
+        request,
+        response,
+        adapter_id=adapter_id,
+        action="install",
+        source_url=body.source_url,
+        tag=body.tag,
+        requested_by=context.credential.id,
+    )
+
+
+@router.post(
+    "/{adapter_id}/update",
+    response_model=AdapterJobInfo,
+    status_code=202,
+    summary="Update adapter",
+)
+def update_adapter_version(
+    body: AdapterUpgrade,
+    request: Request,
+    response: Response,
+    adapter_id: str = ADAPTER_ID_PATH,
+    context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
+    db: Session = Depends(get_db),
+) -> AdapterJobInfo:
+    """Queues a move to a version tag; poll the job at Location. Administrators only."""
+    _require_administrator(context)
+    adapter = _load(db, adapter_id)
+    _require_allowed(adapter.source_url)
+    return _queue(
+        db,
+        request,
+        response,
+        adapter_id=adapter.id,
+        action="update",
+        source_url=adapter.source_url,
+        tag=body.tag,
+        from_commit=adapter.commit,
+        requested_by=context.credential.id,
+    )
+
+
+@router.get("/jobs/{job_id}", response_model=AdapterJobInfo, summary="Get job")
+def get_job(
+    job_id: uuid.UUID,
+    context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
+    db: Session = Depends(get_db),
+) -> AdapterJobInfo:
+    """Scope: platforms:write."""
+    job = db.get(jobs.PlatformAdapterJob, job_id)
+    if job is None:
+        raise ApiError(404, "Job not found.")
+    return AdapterJobInfo.model_validate(job)
+
+
+@router.get(
+    "/{adapter_id}/jobs", response_model=list[AdapterJobInfo], summary="List jobs"
+)
+def list_jobs(
+    adapter_id: str = ADAPTER_ID_PATH,
+    context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
+    db: Session = Depends(get_db),
+) -> list[AdapterJobInfo]:
+    """The last 20 installs and updates, newest first. Scope: platforms:write."""
+    return [
+        AdapterJobInfo.model_validate(job)
+        for job in jobs.list_for_adapter(db, adapter_id)
+    ]

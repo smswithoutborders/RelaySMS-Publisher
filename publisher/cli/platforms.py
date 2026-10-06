@@ -40,13 +40,36 @@ def cli():
     """Manage platform adapters."""
 
 
+def _version_options(command):
+    command = click.option(
+        "--branch",
+        is_flag=True,
+        help="Use the default branch, for repositories without version tags yet.",
+    )(command)
+    return click.option(
+        "--tag", help="Version tag to install. Defaults to the newest."
+    )(command)
+
+
+def _check_version(tag, branch):
+    if tag and branch:
+        raise click.UsageError("Pass either --tag or --branch, not both.")
+
+
+def _describe(adapter):
+    return f"{adapter.tag or 'default branch'} ({adapter.commit[:12]})"
+
+
 @cli.command()
 @click.argument("github_url")
-def add(github_url):
+@_version_options
+def add(github_url, tag, branch):
     """Add an adapter from a GitHub repository."""
+    _check_version(tag, branch)
     with session() as db:
-        adapter = manager.add_from_github(db, github_url)
-        click.echo(f"Adapter {adapter.name!r} added from {github_url}.")
+        adapter = manager.install(db, github_url, tag, branch=branch, log=[])
+    manager.activate(adapter)
+    click.echo(f"Adapter {adapter.name!r} added at {_describe(adapter)}.")
 
 
 @cli.command()
@@ -60,7 +83,9 @@ def add(github_url):
 def remove(name, proto_id, cat_id, force):
     """Remove an adapter, matched by name and optional IDs."""
     with session() as db:
-        manager.remove(db, _find_one(db, name, proto_id, cat_id), force=force)
+        adapter = _find_one(db, name, proto_id, cat_id)
+        manager.remove(db, adapter, force=force)
+    manager.delete_files(adapter)
     click.echo(f"Adapter {name!r} removed.")
 
 
@@ -120,9 +145,12 @@ def exec_(name, proto_id, cat_id, cli_args):
 @cli.command()
 @click.argument("name", required=False)
 @_filter_options
-@click.option("--install", is_flag=True, help="Reinstall dependencies after updating.")
-def update(name, proto_id, cat_id, install):
-    """Pull the latest changes for one adapter, or all of them."""
+@_version_options
+def update(name, proto_id, cat_id, tag, branch):
+    """Move one adapter, or all of them, to a new version."""
+    _check_version(tag, branch)
+    if tag and not name:
+        raise click.UsageError("--tag needs an adapter name.")
     with session() as db:
         if name or proto_id is not None or cat_id is not None:
             adapters = [_find_one(db, name, proto_id, cat_id)]
@@ -136,9 +164,11 @@ def update(name, proto_id, cat_id, install):
         try:
             with session() as db:
                 adapter = db.get(PlatformAdapter, adapter_id)
-                if adapter is not None:
-                    manager.update(db, adapter, install=install)
-                    click.echo(f"Updated {adapter.name!r} to {adapter.commit}.")
+                if adapter is None:
+                    continue
+                manager.update(db, adapter, tag, branch=branch, log=[])
+            manager.activate(adapter)
+            click.echo(f"Updated {adapter.name!r} to {_describe(adapter)}.")
         except click.ClickException as e:
             failed = True
             click.echo(f"Error updating adapter {adapter_id}: {e.message}", err=True)
@@ -167,7 +197,7 @@ def list_command(name, proto_id, cat_id):
             "Auth Provider",
             "Offline",
             "Enabled",
-            "Commit",
+            "Version",
         ],
         [
             [
@@ -179,7 +209,7 @@ def list_command(name, proto_id, cat_id):
                 a.auth_provider or "-",
                 "✓" if a.supports_offline_first else "-",
                 "✓" if a.is_enabled else "-",
-                a.commit[:12],
+                _describe(a),
             ]
             for a in adapters
         ],

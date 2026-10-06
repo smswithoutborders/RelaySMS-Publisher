@@ -17,25 +17,14 @@ PLATFORMS_ADAPTERS_ASSETS_DIR=data/platforms/assets
 
 ## Adding Adapters from GitHub
 
-You can add adapters directly from a GitHub repository using the CLI.
-
-### Steps
-
-1. Run the following command from the project root:
+Adapters are installed at a version tag such as `v1.2.0`, the newest one unless you name it:
 
 ```bash
-./publisher.sh platforms add <GITHUB_URL>
+./publisher.sh platforms add <GITHUB_URL> [--tag TAG]
+./publisher.sh platforms add https://github.com/example/adapter-repo --tag v1.2.0
 ```
 
-Replace `<GITHUB_URL>` with the URL of the GitHub repository containing the adapter.
-
-### Example
-
-```bash
-./publisher.sh platforms add https://github.com/example/adapter-repo.git
-```
-
-This will clone the repository, register the adapter, and make it available for use.
+For a repository without version tags yet, add `--branch` to use its default branch instead.
 
 ## Removing Adapters
 
@@ -61,34 +50,13 @@ This will unregister the adapter and remove it from the system. It's refused whi
 
 ## Updating Adapters
 
-You can update adapters by pulling the latest changes from their Git repositories using the CLI.
-
-### Steps
-
-1. Run the following command from the project root:
+Moves one adapter, or all of them, to the newest version tag, or to the tag you name:
 
 ```bash
-./publisher.sh platforms update [ADAPTER_NAME] [--install]
+./publisher.sh platforms update [ADAPTER_NAME] [--tag TAG | --branch]
 ```
 
-- Replace `[ADAPTER_NAME]` with the name of the adapter you want to update. If omitted, all adapters will be updated.
-- Use the `--install` flag to reinstall dependencies after updating.
-
-### Examples
-
-Update a specific adapter:
-
-```bash
-./publisher.sh platforms update example-adapter
-```
-
-Update all adapters and reinstall dependencies:
-
-```bash
-./publisher.sh platforms update --install
-```
-
-This will pull the latest changes for the specified adapter(s) and optionally reinstall dependencies.
+Each update clones the version and builds its virtualenv next to the running one, then switches over, so a failed update leaves the running version untouched. An update is refused if the installed tag now points to a different commit, since a release tag shouldn't move. `--branch` works as it does for `add`.
 
 ## Running an Adapter's Own CLI
 

@@ -85,20 +85,30 @@ cat_id = 0
 """
 
 
-def adapter_repo(path: Path, name: str = "gmail", proto_id: object = 0) -> Repo:
+def adapter_repo(
+    path: Path,
+    name: str = "gmail",
+    proto_id: object = 0,
+    tag: str | None = "v1.0.0",
+) -> Repo:
     """A local git repo laid out like an adapter, with no requirements.txt."""
     path.mkdir(parents=True)
     repo = Repo.init(path)
     for file in ("main.py", "config.ini"):
         (path / file).write_text("")
-    commit_manifest(repo, name, proto_id)
+    commit_manifest(repo, name, proto_id, tag)
     return repo
 
 
-def commit_manifest(repo: Repo, name: str, proto_id: object) -> str:
-    """Write and commit manifest.ini; return the commit's sha."""
+def commit_manifest(
+    repo: Repo, name: str, proto_id: object, tag: str | None = None
+) -> str:
+    """Write and commit manifest.ini, tagged if tag; return the commit's sha."""
     path = repo.working_tree_dir
     with open(f"{path}/manifest.ini", "w") as f:
         f.write(MANIFEST.format(name=name, proto_id=proto_id))
     repo.index.add(["main.py", "config.ini", "manifest.ini"])
-    return repo.index.commit(f"{name} {proto_id}").hexsha
+    commit = repo.index.commit(f"{name} {proto_id}")
+    if tag:
+        repo.create_tag(tag, ref=commit.hexsha, force=True)
+    return commit.hexsha

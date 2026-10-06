@@ -1313,6 +1313,58 @@
             ]
           }
         ]
+      },
+      "post": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Install adapter",
+        "description": "Queues an install; poll the job at Location. Administrators only.",
+        "operationId": "install_adapter_v1_platforms_adapters_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdapterInstall"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterJobInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ]
       }
     },
     "/v1/platforms/adapters/{adapter_id}": {
@@ -1471,6 +1523,190 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/adapters/{adapter_id}/update": {
+      "post": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Update adapter",
+        "description": "Queues a move to a version tag; poll the job at Location. Administrators only.",
+        "operationId": "update_adapter_version_v1_platforms_adapters__adapter_id__update_post",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdapterUpgrade"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterJobInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/adapters/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Get job",
+        "description": "Scope: platforms:write.",
+        "operationId": "get_job_v1_platforms_adapters_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterJobInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/adapters/{adapter_id}/jobs": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "List jobs",
+        "description": "The last 20 installs and updates, newest first. Scope: platforms:write.",
+        "operationId": "list_jobs_v1_platforms_adapters__adapter_id__jobs_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdapterJobInfo"
+                  },
+                  "title": "Response List Jobs V1 Platforms Adapters  Adapter Id  Jobs Get"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1672,6 +1908,144 @@
   },
   "components": {
     "schemas": {
+      "AdapterInstall": {
+        "properties": {
+          "source_url": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Source Url",
+            "description": "https://github.com/<org>/<repo>, an org in PLATFORMS_GITHUB_ORGS."
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "A version tag such as v1.2.0. Defaults to the newest one."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_url"
+        ],
+        "title": "AdapterInstall"
+      },
+      "AdapterJobInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "adapter_id": {
+            "type": "string",
+            "title": "Adapter Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "install or update"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "Requested, then the one installed."
+          },
+          "from_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Commit"
+          },
+          "to_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Commit"
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "queued, running, succeeded or failed"
+          },
+          "log": {
+            "type": "string",
+            "title": "Log",
+            "description": "The end of the git and pip output."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "adapter_id",
+          "action",
+          "state",
+          "log",
+          "created_at"
+        ],
+        "title": "AdapterJobInfo"
+      },
+      "AdapterUpgrade": {
+        "properties": {
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "A version tag such as v1.2.0. Defaults to the newest one."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AdapterUpgrade"
+      },
       "AuditAction": {
         "type": "string",
         "enum": [
@@ -2232,6 +2606,18 @@
           "source_url": {
             "type": "string",
             "title": "Source Url"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "Null for a default-branch clone."
           },
           "commit": {
             "type": "string",

@@ -6,6 +6,7 @@ from publisher.models.credential_session import CredentialSession
 from publisher.models.payload_segment import PayloadSegment
 from publisher.models.payload_session import PayloadSession
 from publisher.models.platform_adapter import PlatformAdapter
+from publisher.models.platform_adapter_job import PlatformAdapterJob
 from publisher.models.publication_stats import PublicationStats
 from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.server_identity_key import ServerIdentityKey
@@ -21,6 +22,7 @@ __all__ = [
     "PayloadSegment",
     "PayloadSession",
     "PlatformAdapter",
+    "PlatformAdapterJob",
     "PublicationStats",
     "ServerEphemeralKey",
     "ServerIdentityKey",

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import datetime
+import uuid
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -179,6 +180,7 @@ class AuditEventPage(PageLinks):
 class PlatformAdapterInfo(PlatformManifest):
     id: str
     source_url: str
+    tag: str | None = Field(None, description="Null for a default-branch clone.")
     commit: str
     enabled: bool
     created_at: datetime.datetime
@@ -194,3 +196,39 @@ class PlatformAdapterInfo(PlatformManifest):
 class PlatformAdapterUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool
+
+
+TAG_FIELD = Field(
+    None,
+    max_length=100,
+    description="A version tag such as v1.2.0. Defaults to the newest one.",
+)
+
+
+class AdapterInstall(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_url: str = Field(
+        ...,
+        max_length=255,
+        description="https://github.com/<org>/<repo>, an org in PLATFORMS_GITHUB_ORGS.",
+    )
+    tag: str | None = TAG_FIELD
+
+
+class AdapterUpgrade(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tag: str | None = TAG_FIELD
+
+
+class AdapterJobInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    adapter_id: str
+    action: str = Field(..., description="install or update")
+    tag: str | None = Field(None, description="Requested, then the one installed.")
+    from_commit: str | None = None
+    to_commit: str | None = None
+    state: str = Field(..., description="queued, running, succeeded or failed")
+    log: str = Field(..., description="The end of the git and pip output.")
+    created_at: datetime.datetime
+    finished_at: datetime.datetime | None = None

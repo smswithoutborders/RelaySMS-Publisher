@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
 from git import Repo
@@ -61,12 +62,39 @@ def test_empty_allowlist_rejects_everything(platforms_config):
 
 def _rows():
     with db.get_session() as session:
-        return [(a.name, a.proto_id) for a in platform_adapters.find(session)]
+        return [
+            (a.name, a.proto_id)
+            for a in platform_adapters.find(session, include_disabled=True)
+        ]
 
 
 def _actions():
     with db.get_session() as session:
         return list(session.scalars(select(AuditEvent.action).order_by(AuditEvent.id)))
+
+
+def _install(url, tag=None, **options):
+    with db.get_session() as session:
+        adapter = manager.install(session, str(url), tag, log=[], **options)
+    manager.activate(adapter)
+    return adapter.id, adapter.tag
+
+
+def _update(adapter_id, tag=None, **options):
+    with db.get_session() as session:
+        adapter = session.get(PlatformAdapter, adapter_id)
+        manager.update(session, adapter, tag, log=[], **options)
+    manager.activate(adapter)
+
+
+def _adapter(adapter_id):
+    with db.get_session() as session:
+        return session.get(PlatformAdapter, adapter_id)
+
+
+def _siblings(tmp_path):
+    """Leftover .new or .old directories from a build or swap."""
+    return sorted(p.name for p in tmp_path.glob("*/*") if p.suffix in (".new", ".old"))
 
 
 @pytest.mark.usefixtures("test_db")
@@ -82,42 +110,189 @@ def test_adapters_resolve_by_platform_and_protocol():
 
 
 @pytest.mark.usefixtures("test_db")
-def test_add_update_and_remove(tmp_path):
-    source = adapter_repo(tmp_path / "src")
-    url = str(source.working_tree_dir)
+def test_install_takes_the_newest_version_tag(tmp_path):
+    repo = adapter_repo(tmp_path / "src", tag="v1.2.0")
+    newest = commit_manifest(repo, "gmail", OAUTH2, tag="v1.10.0")
+    commit_manifest(repo, "gmail", OAUTH2, tag="nightly")
 
-    with db.get_session() as session:
-        adapter = manager.add_from_github(session, url)
-        adapter_id = adapter.id
-    assert _rows() == [("gmail", OAUTH2)]
+    adapter_id, tag = _install(repo.working_tree_dir)
+
+    assert tag == "v1.10.0"
+    assert _adapter(adapter_id).commit == newest
     assert (tmp_path / "adapters" / adapter_id / "manifest.ini").is_file()
+    assert _siblings(tmp_path) == []
 
-    second_commit = commit_manifest(source, "gmail", PNBA)
-    with db.get_session() as session:
-        manager.update(session, session.get(PlatformAdapter, adapter_id))
-    with db.get_session() as session:
-        assert session.get(PlatformAdapter, adapter_id).commit == second_commit
-    assert _rows() == [("gmail", PNBA)]
+
+@pytest.mark.usefixtures("test_db")
+def test_install_a_named_tag(tmp_path):
+    repo = adapter_repo(tmp_path / "src", tag="v1.0.0")
+    commit_manifest(repo, "gmail", OAUTH2, tag="v2.0.0")
+
+    assert _install(repo.working_tree_dir, "v1.0.0")[1] == "v1.0.0"
+
+
+@pytest.mark.usefixtures("test_db")
+def test_an_untagged_repo_installs_only_from_its_branch(tmp_path):
+    repo = adapter_repo(tmp_path / "src", tag=None)
+
+    with pytest.raises(manager.AdapterError, match="no version tags"):
+        _install(repo.working_tree_dir)
+    adapter_id, tag = _install(repo.working_tree_dir, branch=True)
+
+    assert tag is None
+    assert _adapter(adapter_id).commit == repo.head.commit.hexsha
+
+
+@pytest.mark.usefixtures("test_db")
+def test_update_swaps_in_the_new_version(tmp_path):
+    repo = adapter_repo(tmp_path / "src")
+    adapter_id, _ = _install(repo.working_tree_dir)
+    commit_manifest(repo, "gmail", PNBA, tag="v2.0.0")
+
+    _update(adapter_id)
+
+    adapter = _adapter(adapter_id)
+    assert (adapter.tag, adapter.proto_id) == ("v2.0.0", PNBA)
+    manifest = (tmp_path / "adapters" / adapter_id / "manifest.ini").read_text()
+    assert "proto_id = 1" in manifest
+    assert _siblings(tmp_path) == []
+    assert _actions() == ["platforms.add", "platforms.update"]
+
+
+@pytest.mark.usefixtures("test_db")
+def test_a_moved_tag_is_refused(tmp_path):
+    repo = adapter_repo(tmp_path / "src")
+    adapter_id, _ = _install(repo.working_tree_dir)
+    installed = _adapter(adapter_id).commit
+    commit_manifest(repo, "gmail", OAUTH2, tag="v1.0.0")
+
+    with pytest.raises(manager.AdapterError, match="now points to"):
+        _update(adapter_id, "v1.0.0")
+
+    assert _adapter(adapter_id).commit == installed
+    assert _siblings(tmp_path) == []
+
+
+@pytest.mark.usefixtures("test_db")
+def test_a_failed_build_keeps_the_running_version(tmp_path):
+    repo = adapter_repo(tmp_path / "src")
+    adapter_id, _ = _install(repo.working_tree_dir)
+    (tmp_path / "src" / "main.py").unlink()
+    repo.index.remove(["main.py"])
+    repo.index.commit("drop main.py")
+    repo.create_tag("v2.0.0")
+
+    with pytest.raises(manager.AdapterError, match="missing main"):
+        _update(adapter_id)
+
+    assert _adapter(adapter_id).tag == "v1.0.0"
+    assert (tmp_path / "adapters" / adapter_id / "main.py").is_file()
+    assert _siblings(tmp_path) == []
+
+
+@pytest.mark.usefixtures("test_db")
+def test_remove_deletes_the_row_and_files(tmp_path):
+    adapter_id, _ = _install(adapter_repo(tmp_path / "src").working_tree_dir)
 
     with db.get_session() as session:
-        manager.remove(session, session.get(PlatformAdapter, adapter_id))
+        adapter = session.get(PlatformAdapter, adapter_id)
+        manager.remove(session, adapter)
+    manager.delete_files(adapter)
+
     assert _rows() == []
     assert not (tmp_path / "adapters" / adapter_id).exists()
-    assert _actions() == ["platforms.add", "platforms.update", "platforms.remove"]
+    assert _actions() == ["platforms.add", "platforms.remove"]
 
 
 @pytest.mark.usefixtures("test_db")
 def test_add_rejects_a_second_adapter_for_the_same_platform(tmp_path):
     add_adapter("gmail", OAUTH2)
-    url = str(adapter_repo(tmp_path / "src").working_tree_dir)
 
-    with (
-        pytest.raises(manager.AdapterError, match="already installed"),
-        db.get_session() as session,
-    ):
-        manager.add_from_github(session, url)
+    with pytest.raises(manager.AdapterError, match="already installed"):
+        _install(adapter_repo(tmp_path / "src").working_tree_dir)
 
     assert list((tmp_path / "adapters").iterdir()) == []
+
+
+@pytest.mark.usefixtures("test_db")
+def test_the_same_url_cant_be_added_twice(tmp_path):
+    url = adapter_repo(tmp_path / "src").working_tree_dir
+    _install(url)
+
+    with pytest.raises(manager.AdapterError, match="already installed"):
+        _install(url)
+
+
+@pytest.mark.usefixtures("test_db")
+def test_a_failed_clone_names_the_reason_and_leaves_nothing(tmp_path):
+    with pytest.raises(manager.AdapterError, match="does not exist"):
+        _install(tmp_path / "missing", "v1.0.0")
+
+    assert list((tmp_path / "adapters").iterdir()) == []
+    assert _rows() == []
+
+
+@pytest.mark.parametrize(
+    "manifest, error",
+    [
+        ("[other]\nname = x\n", "Invalid manifest.ini"),
+        ("[platform]\nname = gmail\n", "needs name, display_name"),
+        (MANIFEST.format(name="gmail", proto_id="oauth2"), "Invalid manifest value"),
+    ],
+)
+@pytest.mark.usefixtures("test_db")
+def test_a_bad_manifest_is_rejected_and_rolled_back(tmp_path, manifest, error):
+    repo = adapter_repo(tmp_path / "src", tag=None)
+    (tmp_path / "src" / "manifest.ini").write_text(manifest)
+    repo.index.add(["manifest.ini"])
+    repo.create_tag("v1.0.0", ref=repo.index.commit("break the manifest").hexsha)
+
+    with pytest.raises(manager.AdapterError, match=error):
+        _install(repo.working_tree_dir)
+
+    assert list((tmp_path / "adapters").iterdir()) == []
+
+
+def _repo_with_requirements(tmp_path):
+    repo = adapter_repo(tmp_path / "src", tag=None)
+    (tmp_path / "src" / "requirements.txt").write_text("requests\n")
+    repo.index.add(["requirements.txt"])
+    repo.create_tag("v1.0.0", ref=repo.index.commit("add requirements").hexsha)
+    return repo.working_tree_dir
+
+
+@pytest.mark.usefixtures("test_db")
+def test_dependencies_install_into_the_adapter_venv(tmp_path, monkeypatch):
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        if command[1:3] == ["-m", "venv"]:
+            Path(command[3]).mkdir(parents=True)
+        return subprocess.CompletedProcess(command, 0, "installed", "")
+
+    monkeypatch.setattr(manager.subprocess, "run", run)
+
+    adapter_id, _ = _install(_repo_with_requirements(tmp_path))
+
+    # Built beside the running version, then renamed into place.
+    venv = tmp_path / "venvs" / f"{adapter_id}.new"
+    assert commands[0][1:] == ["-m", "venv", str(venv)]
+    assert commands[1][0] == str(venv / "bin/pip3")
+    assert (tmp_path / "venvs" / adapter_id).is_dir()
+
+
+@pytest.mark.usefixtures("test_db")
+def test_a_failed_dependency_install_rolls_back(tmp_path, monkeypatch):
+    def fail(command, **kwargs):
+        raise subprocess.CalledProcessError(1, command, "", "No matching version")
+
+    monkeypatch.setattr(manager.subprocess, "run", fail)
+
+    with pytest.raises(manager.AdapterError, match="No matching version"):
+        _install(_repo_with_requirements(tmp_path))
+    assert list((tmp_path / "adapters").iterdir()) == []
+    assert _rows() == []
 
 
 @pytest.mark.usefixtures("test_db")
@@ -154,103 +329,6 @@ def test_a_concurrent_change_is_a_conflict():
         manager.set_enabled(stale, adapter, False)
 
 
-def _repo_with_requirements(tmp_path):
-    repo = adapter_repo(tmp_path / "src")
-    (tmp_path / "src" / "requirements.txt").write_text("requests\n")
-    repo.index.add(["requirements.txt"])
-    repo.index.commit("add requirements")
-    return str(repo.working_tree_dir)
-
-
-def _add(url):
-    with db.get_session() as session:
-        return manager.add_from_github(session, url).id
-
-
-@pytest.mark.usefixtures("test_db")
-def test_a_failed_clone_names_the_reason_and_leaves_nothing(tmp_path):
-    with pytest.raises(manager.AdapterError, match="does not exist"):
-        _add(str(tmp_path / "missing"))
-
-    assert list((tmp_path / "adapters").iterdir()) == []
-    assert _rows() == []
-
-
-@pytest.mark.usefixtures("test_db")
-def test_the_same_url_cant_be_added_twice(tmp_path):
-    url = str(adapter_repo(tmp_path / "src").working_tree_dir)
-    _add(url)
-
-    with pytest.raises(manager.AdapterError, match="already installed"):
-        _add(url)
-
-
-@pytest.mark.parametrize(
-    "manifest, error",
-    [
-        ("[other]\nname = x\n", "Invalid manifest.ini"),
-        ("[platform]\nname = gmail\n", "needs name, display_name"),
-        (MANIFEST.format(name="gmail", proto_id="oauth2"), "Invalid manifest value"),
-    ],
-)
-@pytest.mark.usefixtures("test_db")
-def test_a_bad_manifest_is_rejected_and_rolled_back(tmp_path, manifest, error):
-    repo = adapter_repo(tmp_path / "src")
-    (tmp_path / "src" / "manifest.ini").write_text(manifest)
-    repo.index.add(["manifest.ini"])
-    repo.index.commit("break the manifest")
-
-    with pytest.raises(manager.AdapterError, match=error):
-        _add(str(repo.working_tree_dir))
-
-    assert list((tmp_path / "adapters").iterdir()) == []
-
-
-@pytest.mark.usefixtures("test_db")
-def test_dependencies_install_into_the_adapter_venv(tmp_path, monkeypatch):
-    url = _repo_with_requirements(tmp_path)
-    commands = []
-    monkeypatch.setattr(manager.subprocess, "check_call", commands.append)
-
-    adapter_id = _add(url)
-
-    venv = tmp_path / "venvs" / adapter_id
-    assert commands[0][1:] == ["-m", "venv", str(venv)]
-    assert commands[1][0] == str(venv / "bin/pip3")
-    assert commands[1][-1] == str(
-        tmp_path / "adapters" / adapter_id / "requirements.txt"
-    )
-
-
-@pytest.mark.usefixtures("test_db")
-def test_a_failed_dependency_install_rolls_back(tmp_path, monkeypatch):
-    url = _repo_with_requirements(tmp_path)
-
-    def fail(command):
-        raise manager.subprocess.CalledProcessError(1, command)
-
-    monkeypatch.setattr(manager.subprocess, "check_call", fail)
-
-    with pytest.raises(manager.AdapterError, match="Dependency installation failed"):
-        _add(url)
-    assert list((tmp_path / "adapters").iterdir()) == []
-    assert _rows() == []
-
-
-@pytest.mark.usefixtures("test_db")
-def test_a_failed_pull_leaves_the_adapter_unchanged(tmp_path):
-    source = adapter_repo(tmp_path / "src")
-    adapter_id = _add(str(source.working_tree_dir))
-    shutil.rmtree(tmp_path / "src")
-
-    with (
-        pytest.raises(manager.AdapterError, match="Pulling 'gmail' failed"),
-        db.get_session() as session,
-    ):
-        manager.update(session, session.get(PlatformAdapter, adapter_id))
-    assert _actions() == ["platforms.add"]
-
-
 @pytest.mark.usefixtures("test_db")
 def test_remove_refuses_an_id_that_points_outside_the_adapters_dir():
     with db.get_session() as session:
@@ -267,3 +345,19 @@ def test_enabling_an_enabled_adapter_changes_nothing():
         manager.set_enabled(session, session.get(PlatformAdapter, "gmail-0"), True)
 
     assert _actions() == []
+
+
+@pytest.mark.usefixtures("test_db")
+def test_an_uncommitted_update_leaves_the_running_version(tmp_path):
+    repo = adapter_repo(tmp_path / "src")
+    adapter_id, _ = _install(repo.working_tree_dir)
+    commit_manifest(repo, "gmail", PNBA, tag="v2.0.0")
+
+    with pytest.raises(RuntimeError), db.get_session() as session:
+        adapter = session.get(PlatformAdapter, adapter_id)
+        manager.update(session, adapter, log=[])
+        raise RuntimeError("commit fails")
+
+    assert _adapter(adapter_id).tag == "v1.0.0"
+    manifest = (tmp_path / "adapters" / adapter_id / "manifest.ini").read_text()
+    assert "proto_id = 0" in manifest

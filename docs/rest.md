@@ -31,7 +31,9 @@ A credential can only grant scopes it holds, can't change itself, and can't chan
 
 ## Managing Platform Adapters
 
-`/v1/platforms/adapters` lists every installed adapter, with its source, commit and who last changed it, and takes the same `ETag` and `If-Match` rules as credentials. A disabled adapter disappears from `/v1/platforms` and can't publish or link accounts, but still revokes tokens so users can unlink. Uninstalling is refused with `409` while accounts are linked through the adapter; disable it instead, or remove it with `./publisher.sh platforms remove --force`.
+`/v1/platforms/adapters` lists every installed adapter, with its source, version tag, commit and who last changed it, and takes the same `ETag` and `If-Match` rules as credentials. A disabled adapter disappears from `/v1/platforms` and can't publish or link accounts, but still revokes tokens so users can unlink. Uninstalling is refused with `409` while accounts are linked through the adapter; disable it instead, or remove it with `./publisher.sh platforms remove --force`.
+
+Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/adapters/{id}/update`) run code from the repository on the server, so they need an administrator and a GitHub repository of an org in `PLATFORMS_GITHUB_ORGS`. Both take an optional `tag`, defaulting to the newest version tag, and return `202` with the job's URL in `Location`. Poll the job until its `state` is `succeeded` or `failed`; its `log` has the end of the git and pip output. An adapter has one job at a time; another gets `409`.
 
 ## Pagination
 

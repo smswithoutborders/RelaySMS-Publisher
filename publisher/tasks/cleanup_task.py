@@ -6,6 +6,7 @@ from publisher.config import CleanupConfig
 from publisher.db import get_session
 from publisher.db.types import utc_now
 from publisher.models import audit_event
+from publisher.models import platform_adapter_job as adapter_jobs
 from publisher.models.credential_session import (
     delete_expired as delete_expired_credential_sessions,
 )
@@ -66,3 +67,16 @@ def cleanup_old_audit_events() -> None:
         logger.info("Cleaned up %d old audit event(s)", deleted)
     else:
         logger.debug("No old audit events to clean up")
+
+
+@celery_app.task(name="tasks.cleanup_task.cleanup_adapter_jobs")
+def cleanup_adapter_jobs() -> None:
+    """Fail abandoned adapter jobs and delete those past the audit retention."""
+    with get_session() as db:
+        failed = adapter_jobs.fail_stale(db)
+        deleted = adapter_jobs.delete_older_than(
+            db, utc_now() - cleanup_config.audit_retention
+        )
+
+    if failed or deleted:
+        logger.info("Adapter jobs: %d abandoned, %d deleted", failed, deleted)

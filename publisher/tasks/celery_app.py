@@ -74,6 +74,10 @@ def make_celery() -> Celery:
             "task": "tasks.cleanup_task.cleanup_old_audit_events",
             "schedule": cleanup_schedule,
         },
+        "cleanup-adapter-jobs": {
+            "task": "tasks.cleanup_task.cleanup_adapter_jobs",
+            "schedule": cleanup_schedule,
+        },
     }
     if celery.worker_heartbeat_url:
         # Uptime Kuma push-monitor heartbeat, see observability/README.md
@@ -89,6 +93,7 @@ def make_celery() -> Celery:
             "publisher.tasks.forward_task",
             "publisher.tasks.cleanup_task",
             "publisher.tasks.heartbeat_task",
+            "publisher.tasks.platform_task",
         ],
     )
     app.conf.update(

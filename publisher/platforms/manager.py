@@ -11,13 +11,8 @@ from pathlib import Path
 from typing import override
 from urllib.parse import urlsplit
 
-from git import (
-    GitCommandError,
-    InvalidGitRepositoryError,
-    NoSuchPathError,
-    RemoteProgress,
-    Repo,
-)
+from git import GitCommandError, RemoteProgress, Repo
+from git.cmd import Git
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
@@ -35,12 +30,18 @@ from publisher.models.platform_adapter import PlatformAdapter
 logger = logging.getLogger(__name__)
 
 _GITHUB_REPO_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+_VERSION_TAG = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 _REQUIRED_FILES = ("manifest.ini", "main.py", "config.ini")
 _REQUIRED_MANIFEST_FIELDS = ("name", "display_name", "cat_id", "proto_id")
 
 
 class AdapterError(PublisherError):
     pass
+
+
+def _git_error(e: GitCommandError) -> str:
+    # GitPython wraps git's message as "stderr: '<message>'".
+    return str(e.stderr).strip().removeprefix("stderr: ").strip("'")
 
 
 class AdapterConflictError(AdapterError):
@@ -104,18 +105,20 @@ def _rmtree(path: Path) -> None:
         logger.error("Failed to delete %s: %s", path, e)
 
 
-def _install_dependencies(adapter: PlatformAdapter) -> None:
-    requirements = Path(adapter.path) / "requirements.txt"
+def _install_dependencies(path: Path, venv: Path, log: list[str]) -> None:
+    requirements = path / "requirements.txt"
     if not requirements.is_file():
         return
-    venv = Path(adapter.venv_path)
-    try:
-        subprocess.check_call([sys.executable, "-m", "venv", str(venv)])
-        subprocess.check_call(
-            [str(venv / "bin/pip3"), "install", "-r", str(requirements)]
-        )
-    except subprocess.SubprocessError as e:
-        raise AdapterError(f"Dependency installation failed: {e}") from e
+    for command in (
+        [sys.executable, "-m", "venv", str(venv)],
+        [str(venv / "bin/pip3"), "install", "-r", str(requirements)],
+    ):
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            log.extend([e.stdout, e.stderr])
+            raise AdapterError(f"Dependency installation failed: {e.stderr}") from e
+        log.append(result.stdout)
 
 
 def _read_manifest(path: Path) -> dict:
@@ -166,52 +169,139 @@ def _flush(session: Session, adapter: PlatformAdapter) -> None:
         ) from None
 
 
-def add_from_github(
-    session: Session, url: str, actor: Credential | None = None
-) -> PlatformAdapter:
-    """Clone a repository, install its dependencies and register it."""
-    url = url.strip()
-    adapter = PlatformAdapter(
-        id=str(uuid.uuid5(uuid.NAMESPACE_URL, url.lower())),
-        source_url=url,
-        created_by=actor.id if actor else None,
-        updated_by=actor.id if actor else None,
-    )
-    path = Path(adapter.path)
-    if session.get(PlatformAdapter, adapter.id) or path.exists():
-        raise AdapterError(f"Adapter from {url} is already installed")
+def adapter_id(url: str) -> str:
+    """Stable per URL, so a reinstall finds the same directories."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, url.strip().lower()))
 
+
+def latest_tag(url: str) -> str:
+    """The newest version tag (v1.2.3 or 1.2.3) of the repository at url."""
+    try:
+        refs = str(Git().ls_remote("--tags", "--refs", url))
+    except GitCommandError as e:
+        raise AdapterError(f"Listing the tags of {url} failed: {_git_error(e)}") from e
+    versions = {}
+    for line in refs.splitlines():
+        tag = line.rpartition("refs/tags/")[2]
+        if match := _VERSION_TAG.match(tag):
+            versions[tuple(int(n) for n in match.groups())] = tag
+    if not versions:
+        raise AdapterError(f"{url} has no version tags such as v1.0.0")
+    return versions[max(versions)]
+
+
+def _beside(path: str | Path, suffix: str) -> Path:
+    return Path(f"{path}.{suffix}")
+
+
+def _discard_build(adapter: PlatformAdapter) -> None:
+    _rmtree(_beside(adapter.path, "new"))
+    _rmtree(_beside(adapter.venv_path, "new"))
+
+
+def _build(
+    adapter: PlatformAdapter, tag: str | None, log: list[str]
+) -> tuple[str, dict]:
+    """Clone tag, or the default branch, and its venv next to the running version.
+
+    Returns the commit and the manifest.
+    """
+    path, venv = _beside(adapter.path, "new"), _beside(adapter.venv_path, "new")
+    _discard_build(adapter)
     path.parent.mkdir(parents=True, exist_ok=True)
     progress = CloneProgress()
     try:
         # A RemoteProgress, not its update method, keeps git's error lines.
         # GitPython accepts one here though its type hint says a callable.
         repo = Repo.clone_from(
-            url,
+            adapter.source_url,
             path,
             progress=progress,  # pyright: ignore[reportArgumentType]
+            branch=tag,
+            depth=1,
         )
-        adapter.commit = repo.head.commit.hexsha
-        _apply_manifest(adapter, _read_manifest(path))
-        _install_dependencies(adapter)
-        session.add(adapter)
-        _flush(session, adapter)
+        manifest = _read_manifest(path)
+        _install_dependencies(path, venv, log)
     except Exception as e:
-        _rmtree(path)
-        _rmtree(Path(adapter.venv_path))
+        _discard_build(adapter)
         if isinstance(e, GitCommandError):
-            reason = " ".join(progress.error_lines) or e.stderr.strip()
-            raise AdapterError(f"Cloning {url} failed: {reason}") from e
+            reason = " ".join(progress.error_lines) or _git_error(e)
+            raise AdapterError(f"Cloning {adapter.source_url} failed: {reason}") from e
         raise
     finally:
         progress.close()
+    return repo.head.commit.hexsha, manifest
+
+
+def _register(session: Session, adapter: PlatformAdapter, manifest: dict) -> None:
+    try:
+        _apply_manifest(adapter, manifest)
+        session.add(adapter)
+        _flush(session, adapter)
+    except AdapterError:
+        _discard_build(adapter)
+        raise
+
+
+def _resolve_tag(url: str, tag: str | None, branch: bool) -> str | None:
+    return None if branch else tag or latest_tag(url)
+
+
+def activate(adapter: PlatformAdapter) -> None:
+    """Move a built version into place. Call it after the install or update commits.
+
+    Run before the commit, a failed commit would leave the new files with the old row.
+    """
+    # Renames are atomic, so an adapter call sees the old version or the new.
+    for current in (Path(adapter.path), Path(adapter.venv_path)):
+        new, old = _beside(current, "new"), _beside(current, "old")
+        if not new.exists():
+            continue
+        if current.exists():
+            current.rename(old)
+        new.rename(current)
+        _rmtree(old)
+
+
+def delete_files(adapter: PlatformAdapter) -> None:
+    """Delete a removed adapter's files. Call it after the removal commits."""
+    _rmtree(Path(adapter.path))
+    _rmtree(Path(adapter.venv_path))
+
+
+def install(
+    session: Session,
+    url: str,
+    tag: str | None = None,
+    *,
+    branch: bool = False,
+    actor: Credential | None = None,
+    log: list[str],
+) -> PlatformAdapter:
+    """Build and register url at tag, its newest tag, or its default branch."""
+    url = url.strip()
+    adapter = PlatformAdapter(
+        id=adapter_id(url),
+        source_url=url,
+        tag=_resolve_tag(url, tag, branch),
+        created_by=actor.id if actor else None,
+        updated_by=actor.id if actor else None,
+    )
+    if session.get(PlatformAdapter, adapter.id) or Path(adapter.path).exists():
+        raise AdapterError(f"Adapter from {url} is already installed")
+    adapter.commit, manifest = _build(adapter, adapter.tag, log)
+    _register(session, adapter, manifest)
 
     audit_event.record(
         session,
         AuditAction.PLATFORMS_ADD,
         actor=actor,
         target=adapter,
-        details={"source_url": adapter.source_url, "commit": adapter.commit},
+        details={
+            "source_url": adapter.source_url,
+            "tag": adapter.tag,
+            "commit": adapter.commit,
+        },
     )
     return adapter
 
@@ -219,35 +309,33 @@ def add_from_github(
 def update(
     session: Session,
     adapter: PlatformAdapter,
+    tag: str | None = None,
     *,
-    install: bool = False,
+    branch: bool = False,
     actor: Credential | None = None,
+    log: list[str],
 ) -> None:
-    """Pull an adapter's latest commit and refresh its manifest."""
-    from_commit = adapter.commit
-    try:
-        repo = Repo(adapter.path)
-    except (InvalidGitRepositoryError, NoSuchPathError) as e:
-        raise AdapterError(f"{adapter.path} is not a git clone") from e
-    try:
-        repo.git.pull()
-    except GitCommandError as e:
+    """Register tag, the newest version tag, or the default branch for an adapter."""
+    tag = _resolve_tag(adapter.source_url, tag, branch)
+    commit, manifest = _build(adapter, tag, log)
+    # A tag that now names other code was moved, which a release shouldn't do.
+    if tag and tag == adapter.tag and commit != adapter.commit:
+        _discard_build(adapter)
         raise AdapterError(
-            f"Pulling {adapter.name!r} failed: {e.stderr.strip()}"
-        ) from e
-    _apply_manifest(adapter, _read_manifest(Path(adapter.path)))
-    adapter.commit = repo.head.commit.hexsha
+            f"Tag {tag} of {adapter.name!r} now points to {commit[:12]}, "
+            f"not the installed {adapter.commit[:12]}"
+        )
+    details = {"from_tag": adapter.tag, "from_commit": adapter.commit}
+    adapter.tag, adapter.commit = tag, commit
     adapter.updated_by = actor.id if actor else None
-    _flush(session, adapter)
-    if install:
-        _install_dependencies(adapter)
+    _register(session, adapter, manifest)
 
     audit_event.record(
         session,
         AuditAction.PLATFORMS_UPDATE,
         actor=actor,
         target=adapter,
-        details={"from_commit": from_commit, "to_commit": adapter.commit},
+        details={**details, "to_tag": tag, "to_commit": commit},
     )
 
 
@@ -273,7 +361,7 @@ def remove(
     *,
     force: bool = False,
 ) -> None:
-    """Unregister an adapter and delete its files.
+    """Unregister an adapter; call delete_files after the commit.
 
     Raises:
         AdapterInUseError: When accounts are linked through it and force is off.
@@ -301,8 +389,6 @@ def remove(
     )
     session.delete(adapter)
     _flush(session, adapter)
-    _rmtree(Path(adapter.path))
-    _rmtree(Path(adapter.venv_path))
 
 
 def import_from_disk(session: Session) -> list[PlatformAdapter]:
