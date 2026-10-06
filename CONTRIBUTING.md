@@ -287,7 +287,7 @@ make build test PYTHON=.venv312/bin/python
 
 1. Add the route to the matching module in `publisher/api/rest/v1/` (or a new module with its own `APIRouter`, registered in `routes.py`).
 2. Put request and response models in `schemas.py`. Use `Depends(get_db)` for the session and map domain errors to `HTTPException`.
-3. Test it in `tests/api/rest/` and update [docs/rest.md](docs/rest.md).
+3. Test it in `tests/api/rest/`, describe it in its docstring and run `make docs`. Update [docs/rest.md](docs/rest.md) only for what the reference doesn't show.
 
 ### Change the gRPC API
 
@@ -313,7 +313,7 @@ Adapters live outside this repository and are installed with `python -m publishe
 
 ## Documentation
 
-- [docs/rest.md](docs/rest.md), [docs/grpc.md](docs/grpc.md) and [docs/smtp.md](docs/smtp.md) describe each interface. Update them in the same PR as the behaviour.
+- [docs/rest.md](docs/rest.md) (with the generated [docs/openapi.json](docs/openapi.json)), [docs/grpc.md](docs/grpc.md) and [docs/smtp.md](docs/smtp.md) describe each interface. Update them in the same PR as the behaviour.
 - The README covers installation, configuration and operations. Keep it in step with `template.env` and the CLI.
 - Write plainly and briefly. Use code blocks for commands and tables for options.
 

@@ -4,7 +4,7 @@ PYTHON ?= python3
 SPECS_DIR := lib_relaysms_payload_specs
 SPECS_LIB := $(SPECS_DIR)/target/release/librelaysms_spec_payload.so
 
-.PHONY: build protos specs migrate run test test-e2e check clean
+.PHONY: build protos specs migrate run test test-e2e docs check clean
 
 ## Generate the gRPC code and the payload-specs bindings.
 build: protos specs
@@ -36,6 +36,10 @@ test:
 ## Install and update in a systemd container with podman (slow, needs network).
 test-e2e:
 	$(PYTHON) -m pytest --noconftest tests/e2e $(PYTEST_ARGS)
+
+## Regenerate docs/openapi.json from the REST app. A test fails when it's stale.
+docs:
+	$(PYTHON) -m publisher.api.rest.openapi
 
 check:
 	$(PYTHON) -m pre_commit run --all-files

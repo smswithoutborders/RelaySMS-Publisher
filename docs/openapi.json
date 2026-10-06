@@ -1,0 +1,2349 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "RelaySMS Publisher",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log in",
+        "description": "Sets an HttpOnly session cookie.\n\nWrong passwords and disabled credentials get the same 401. An `Origin` other than\nthis API's or one in `AUTH_WEB_ORIGINS` gets 403.",
+        "operationId": "login_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentCredential"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log out",
+        "description": "Ends the cookie session.",
+        "operationId": "logout_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Current credential",
+        "description": "Call it on page load to check the session. `expires_at` is null for Basic.",
+        "operationId": "me_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentCredential"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/creds": {
+      "get": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "List credentials",
+        "description": "Scope: creds:read.",
+        "operationId": "list_credentials_v1_creds_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CredentialInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Credentials V1 Creds Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:read"
+            ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Create credential",
+        "description": "The generated password is shown only once. Scope: creds:write.",
+        "operationId": "create_credential_v1_creds_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialWithPassword"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/creds/{username}": {
+      "get": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Get credential",
+        "description": "Returns the ETag to send as If-Match. Scope: creds:read.",
+        "operationId": "get_credential_v1_creds__username__get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Update credential",
+        "description": "Change scopes or active. Needs If-Match. Scope: creds:write.",
+        "operationId": "update_credential_v1_creds__username__patch",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Delete credential",
+        "description": "Needs If-Match. Scope: creds:write.",
+        "operationId": "delete_credential_v1_creds__username__delete",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/creds/{username}/reset-password": {
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Reset password",
+        "description": "New password shown once; sessions end. Needs If-Match. Scope: creds:write.",
+        "operationId": "reset_credential_password_v1_creds__username__reset_password_post",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialWithPassword"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/creds/{username}/revoke-sessions": {
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Revoke sessions",
+        "description": "Scope: creds:write.",
+        "operationId": "revoke_credential_sessions_v1_creds__username__revoke_sessions_post",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audit-events": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "summary": "List audit events",
+        "description": "Newest first. Scope: audit:read, plus creds:read for auth and creds events.",
+        "operationId": "list_audit_events_v1_audit_events_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "audit:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "audit:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AuditAction"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by action",
+              "title": "Action"
+            },
+            "description": "Filter by action"
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by actor username",
+              "title": "Actor"
+            },
+            "description": "Filter by actor username"
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by target name",
+              "title": "Target"
+            },
+            "description": "Filter by target name"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "At or after (ISO-8601, UTC if no offset)",
+              "title": "Since"
+            },
+            "description": "At or after (ISO-8601, UTC if no offset)"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Before (ISO-8601, UTC if no offset)",
+              "title": "Until"
+            },
+            "description": "Before (ISO-8601, UTC if no offset)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Set by the next and prev links",
+              "title": "Cursor"
+            },
+            "description": "Set by the next and prev links"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats/publications": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "List publications",
+        "description": "Newest first. Scope: stats:publications:read.\n\n`failure_reason` is null without stats:publications:reasons.",
+        "operationId": "list_publication_stats_v1_stats_publications_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "stats:publications:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "stats:publications:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Set by the next and prev links",
+              "title": "Cursor"
+            },
+            "description": "Set by the next and prev links"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            },
+            "description": "Filter by status"
+          },
+          {
+            "name": "platform_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by platform name",
+              "title": "Platform Name"
+            },
+            "description": "Filter by platform name"
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by ingestion protocol",
+              "title": "Protocol"
+            },
+            "description": "Filter by ingestion protocol"
+          },
+          {
+            "name": "country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 10,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by ISO country code",
+              "title": "Country Code"
+            },
+            "description": "Filter by ISO country code"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Created at or after (ISO-8601, UTC if no offset)",
+              "title": "Since"
+            },
+            "description": "Created at or after (ISO-8601, UTC if no offset)"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Created before (ISO-8601, UTC if no offset)",
+              "title": "Until"
+            },
+            "description": "Created before (ISO-8601, UTC if no offset)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationStatsPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats/publications/summary": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Summarize publications",
+        "description": "Counts per group; last 30 days by default. Scope: stats:publications:read.\n\nGrouping by `failure_reason` also needs stats:publications:reasons. Groups sort by\nperiod, then count, highest first. Periods with no rows are left out; chart them\nas 0.",
+        "operationId": "summarize_publication_stats_v1_stats_publications_summary_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "stats:publications:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "stats:publications:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/StatsGroupBy"
+              },
+              "description": "Columns to group by. Repeatable.",
+              "default": [
+                "status"
+              ],
+              "title": "Group By"
+            },
+            "description": "Columns to group by. Repeatable."
+          },
+          {
+            "name": "interval",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Also group by period start, in UTC. Weeks start Monday.",
+              "title": "Interval"
+            },
+            "description": "Also group by period start, in UTC. Weeks start Monday."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            },
+            "description": "Filter by status"
+          },
+          {
+            "name": "platform_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by platform name",
+              "title": "Platform Name"
+            },
+            "description": "Filter by platform name"
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by ingestion protocol",
+              "title": "Protocol"
+            },
+            "description": "Filter by ingestion protocol"
+          },
+          {
+            "name": "country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 10,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by ISO country code",
+              "title": "Country Code"
+            },
+            "description": "Filter by ISO country code"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Created at or after (ISO-8601, UTC if no offset)",
+              "title": "Since"
+            },
+            "description": "Created at or after (ISO-8601, UTC if no offset)"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Created before (ISO-8601, UTC if no offset)",
+              "title": "Until"
+            },
+            "description": "Created before (ISO-8601, UTC if no offset)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationStatsSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/publications": {
+      "post": {
+        "tags": [
+          "Publishing"
+        ],
+        "summary": "Publish",
+        "description": "Queues an SMS payload for publishing.\n\nMulti-part payloads are kept until every segment arrives, then published. Payloads\nare tagged with protocol `https`; see Offline Publishing in the README for\n`OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors\nhappen later in the queue, so they're logged, not returned.",
+        "operationId": "create_publications_v1_publications_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRestContentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishContentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/twilio-sms": {
+      "post": {
+        "tags": [
+          "Publishing"
+        ],
+        "summary": "Twilio SMS webhook",
+        "description": "Checks the Twilio signature, then queues the SMS for publishing.\n\nTakes Twilio's form-encoded webhook (`From`, `Body`) and answers with empty TwiML.\nReturns 404 unless `TWILIO_SMS_TRANSPORT_ENABLED=true`, and 403 without a valid\n`X-Twilio-Signature`. Payloads are tagged with protocol `sms`. Each SMS is also\nforwarded to `TWILIO_FORWARD_URLS_RAW` as Twilio's form and to\n`TWILIO_FORWARD_URLS_JSON` as `{\"sender\", \"text\", \"received_at\"}`.",
+        "operationId": "twilio_incoming_sms_v1_twilio_sms_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms": {
+      "get": {
+        "tags": [
+          "Platforms"
+        ],
+        "summary": "List platforms",
+        "description": "Platforms with an installed adapter.",
+        "operationId": "get_platforms_v1_platforms_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 50,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by platform name",
+              "title": "Name"
+            },
+            "description": "Filter by platform name"
+          },
+          {
+            "name": "proto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by protocol ID",
+              "title": "Proto Id"
+            },
+            "description": "Filter by protocol ID"
+          },
+          {
+            "name": "cat_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by category ID",
+              "title": "Cat Id"
+            },
+            "description": "Filter by category ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformManifest"
+                  },
+                  "title": "Response Get Platforms V1 Platforms Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/{platform_name}/oauth/client-metadata.json": {
+      "get": {
+        "tags": [
+          "Platforms"
+        ],
+        "summary": "OAuth client metadata",
+        "description": "Only for platforms with dynamic client registration, such as Bluesky.",
+        "operationId": "get_platform_oauth_client_metadata_v1_platforms__platform_name__oauth_client_metadata_json_get",
+        "parameters": [
+          {
+            "name": "platform_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "description": "Platform name",
+              "title": "Platform Name"
+            },
+            "description": "Platform name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClientMetadata"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/{platform_name}/oauth/callback": {
+      "get": {
+        "tags": [
+          "Platforms"
+        ],
+        "summary": "OAuth callback",
+        "description": "Shows the callback query parameters, as a redirect target for OAuth2 testing.",
+        "operationId": "oauth_callback_v1_platforms__platform_name__oauth_callback_get",
+        "parameters": [
+          {
+            "name": "platform_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "description": "Platform name",
+              "title": "Platform Name"
+            },
+            "description": "Platform name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/gateway-clients": {
+      "get": {
+        "tags": [
+          "Gateway Clients"
+        ],
+        "summary": "List gateway clients",
+        "description": "Numbers that relay SMS to this server.",
+        "operationId": "get_gateway_clients_v1_gateway_clients_get",
+        "parameters": [
+          {
+            "name": "msisdn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by MSISDN",
+              "title": "Msisdn"
+            },
+            "description": "Filter by MSISDN"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by country",
+              "title": "Country"
+            },
+            "description": "Filter by country"
+          },
+          {
+            "name": "operator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by operator",
+              "title": "Operator"
+            },
+            "description": "Filter by operator"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GatewayClientManifest"
+                  },
+                  "title": "Response Get Gateway Clients V1 Gateway Clients Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/server-keys": {
+      "get": {
+        "tags": [
+          "Server Keys"
+        ],
+        "summary": "List server keys",
+        "description": "Static keys for gRPC v3 encryption.",
+        "operationId": "list_server_static_keys_v1_server_keys_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ServerStaticPublicKey"
+                  },
+                  "type": "array",
+                  "title": "Response List Server Static Keys V1 Server Keys Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/server-keys/{key_id}": {
+      "get": {
+        "tags": [
+          "Server Keys"
+        ],
+        "summary": "Get server key",
+        "operationId": "get_server_static_key_v1_server_keys__key_id__get",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 255,
+              "minimum": 0,
+              "description": "Static key identifier, 0-255",
+              "title": "Key Id"
+            },
+            "description": "Static key identifier, 0-255"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerStaticPublicKey"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "description": "Liveness and readiness for uptime monitoring.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuditAction": {
+        "type": "string",
+        "enum": [
+          "auth.login",
+          "auth.logout",
+          "creds.create",
+          "creds.update",
+          "creds.reset_password",
+          "creds.revoke_sessions",
+          "creds.delete"
+        ],
+        "title": "AuditAction",
+        "description": "Named <area>.<verb>. Reading an area's events needs its scope in AREA_SCOPES."
+      },
+      "AuditEventInfo": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor",
+            "description": "Username at the time; null for the CLI or a failed login."
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "e.g. creds.update"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target",
+            "description": "Target's name at the time."
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome",
+            "description": "success, denied or failed."
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "action",
+          "outcome"
+        ],
+        "title": "AuditEventInfo"
+      },
+      "AuditEventPage": {
+        "properties": {
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next",
+            "description": "URL of the next (older) page; null on the last page."
+          },
+          "prev": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev",
+            "description": "URL of the previous (newer) page; null on the first page."
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEventInfo"
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "AuditEventPage"
+      },
+      "CredentialCreate": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Username"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Scopes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "username",
+          "scopes"
+        ],
+        "title": "CredentialCreate"
+      },
+      "CredentialInfo": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "administrator": {
+            "type": "boolean",
+            "title": "Administrator",
+            "description": "Holds every scope."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "title": "Active Sessions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "active",
+          "scopes",
+          "administrator",
+          "created_at",
+          "active_sessions"
+        ],
+        "title": "CredentialInfo"
+      },
+      "CredentialUpdate": {
+        "properties": {
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 32,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CredentialUpdate"
+      },
+      "CredentialWithPassword": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "administrator": {
+            "type": "boolean",
+            "title": "Administrator",
+            "description": "Holds every scope."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "title": "Active Sessions"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Shown only in this response."
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "active",
+          "scopes",
+          "administrator",
+          "created_at",
+          "active_sessions",
+          "password"
+        ],
+        "title": "CredentialWithPassword"
+      },
+      "CurrentCredential": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "administrator": {
+            "type": "boolean",
+            "title": "Administrator",
+            "description": "Holds every scope."
+          },
+          "auth_method": {
+            "type": "string",
+            "enum": [
+              "session",
+              "basic"
+            ],
+            "title": "Auth Method"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "Session expiry (session auth only)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "scopes",
+          "administrator",
+          "auth_method"
+        ],
+        "title": "CurrentCredential"
+      },
+      "GatewayClientManifest": {
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "title": "Msisdn",
+            "description": "Phone number in E.164 format"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "operator": {
+            "type": "string",
+            "title": "Operator"
+          },
+          "operator_code": {
+            "type": "string",
+            "title": "Operator Code",
+            "description": "PLMN code (MCC + MNC)"
+          },
+          "protocols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Protocols",
+            "description": "How clients reach this server"
+          }
+        },
+        "type": "object",
+        "required": [
+          "msisdn",
+          "country",
+          "operator",
+          "operator_code",
+          "protocols"
+        ],
+        "title": "GatewayClientManifest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "OAuthClientMetadata": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "title": "Client Id"
+          },
+          "dpop_bound_access_tokens": {
+            "type": "boolean",
+            "title": "Dpop Bound Access Tokens"
+          },
+          "application_type": {
+            "type": "string",
+            "title": "Application Type"
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Redirect Uris"
+          },
+          "grant_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Grant Types"
+          },
+          "response_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Response Types"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "token_endpoint_auth_method": {
+            "type": "string",
+            "title": "Token Endpoint Auth Method"
+          },
+          "client_name": {
+            "type": "string",
+            "title": "Client Name"
+          },
+          "client_uri": {
+            "type": "string",
+            "title": "Client Uri"
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_id",
+          "dpop_bound_access_tokens",
+          "application_type",
+          "redirect_uris",
+          "grant_types",
+          "response_types",
+          "scope",
+          "token_endpoint_auth_method",
+          "client_name",
+          "client_uri"
+        ],
+        "title": "OAuthClientMetadata"
+      },
+      "PlatformManifest": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "proto_id": {
+            "type": "integer",
+            "title": "Proto Id",
+            "description": "0 = oauth2, 1 = pnba"
+          },
+          "cat_id": {
+            "type": "integer",
+            "title": "Cat Id",
+            "description": "0 = email, 1 = message, 2 = text, 3 = bridge"
+          },
+          "auth_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Provider"
+          },
+          "supports_offline_first": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Offline First"
+          },
+          "icon_svg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Svg"
+          },
+          "icon_png": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Png"
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name",
+          "name",
+          "proto_id",
+          "cat_id"
+        ],
+        "title": "PlatformManifest"
+      },
+      "PublicationStat": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "platform_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Name"
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "created_at"
+        ],
+        "title": "PublicationStat"
+      },
+      "PublicationStatsPage": {
+        "properties": {
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next",
+            "description": "URL of the next (older) page; null on the last page."
+          },
+          "prev": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev",
+            "description": "URL of the previous (newer) page; null on the first page."
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationStat"
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "PublicationStatsPage"
+      },
+      "PublicationStatsSummary": {
+        "properties": {
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since"
+          },
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Until"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatsInterval"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationStatsSummaryGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "since",
+          "until",
+          "total",
+          "groups"
+        ],
+        "title": "PublicationStatsSummary"
+      },
+      "PublicationStatsSummaryGroup": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "title": "PublicationStatsSummaryGroup",
+        "description": "group_by column values plus their count."
+      },
+      "PublishContentResponse": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "title": "PublishContentResponse"
+      },
+      "PublishRestContentRequest": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Sender phone number in E.164 format",
+            "examples": [
+              "+12025550123"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Base64-encoded SMS payload"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "Shared secret for offline payloads, if the server sets one."
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "text"
+        ],
+        "title": "PublishRestContentRequest"
+      },
+      "ServerStaticPublicKey": {
+        "properties": {
+          "key_id": {
+            "type": "integer",
+            "title": "Key Id",
+            "description": "0-255"
+          },
+          "public_key": {
+            "type": "string",
+            "title": "Public Key",
+            "description": "Base64url-encoded X25519 public key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key_id",
+          "public_key"
+        ],
+        "title": "ServerStaticPublicKey"
+      },
+      "StatsGroupBy": {
+        "type": "string",
+        "enum": [
+          "status",
+          "platform_name",
+          "protocol",
+          "country_code",
+          "failure_reason"
+        ],
+        "title": "StatsGroupBy"
+      },
+      "StatsInterval": {
+        "type": "string",
+        "enum": [
+          "day",
+          "week",
+          "month",
+          "year"
+        ],
+        "title": "StatsInterval"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBasic": {
+        "type": "http",
+        "scheme": "basic"
+      },
+      "SessionCookie": {
+        "type": "apiKey",
+        "description": "Set by POST /v1/auth/login.",
+        "in": "cookie",
+        "name": "relaysms_session"
+      }
+    }
+  }
+}

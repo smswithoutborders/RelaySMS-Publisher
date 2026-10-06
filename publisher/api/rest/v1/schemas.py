@@ -13,8 +13,8 @@ from publisher.publications import PublishContentRequest
 class PlatformManifest(BaseModel):
     display_name: str
     name: str
-    proto_id: int
-    cat_id: int
+    proto_id: int = Field(..., description="0 = oauth2, 1 = pnba")
+    cat_id: int = Field(..., description="0 = email, 1 = message, 2 = text, 3 = bridge")
     auth_provider: str | None = None
     supports_offline_first: bool | None = None
     icon_svg: str | None = None
@@ -22,11 +22,11 @@ class PlatformManifest(BaseModel):
 
 
 class GatewayClientManifest(BaseModel):
-    msisdn: str
+    msisdn: str = Field(..., description="Phone number in E.164 format")
     country: str
     operator: str
-    operator_code: str
-    protocols: list[str]
+    operator_code: str = Field(..., description="PLMN code (MCC + MNC)")
+    protocols: list[str] = Field(..., description="How clients reach this server")
 
 
 class OAuthClientMetadata(BaseModel):
@@ -43,8 +43,8 @@ class OAuthClientMetadata(BaseModel):
 
 
 class ServerStaticPublicKey(BaseModel):
-    key_id: int
-    public_key: str
+    key_id: int = Field(..., description="0-255")
+    public_key: str = Field(..., description="Base64url-encoded X25519 public key")
 
 
 class PublishRestContentRequest(PublishContentRequest):

@@ -25,7 +25,13 @@ router = APIRouter(tags=["Publishing"])
 
 @router.post("/publications", response_model=PublishContentResponse, summary="Publish")
 def create_publications(body: PublishRestContentRequest) -> PublishContentResponse:
-    """Queues an SMS payload for publishing."""
+    """Queues an SMS payload for publishing.
+
+    Multi-part payloads are kept until every segment arrives, then published. Payloads
+    are tagged with protocol `https`; see Offline Publishing in the README for
+    `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors
+    happen later in the queue, so they're logged, not returned.
+    """
     try:
         publications.validate(body.text)
     except PayloadMalformedError as exc:
@@ -38,7 +44,14 @@ def create_publications(body: PublishRestContentRequest) -> PublishContentRespon
 
 @router.post("/twilio-sms", summary="Twilio SMS webhook")
 async def twilio_incoming_sms(request: Request) -> Response:
-    """Checks the Twilio signature, then queues the SMS for publishing."""
+    """Checks the Twilio signature, then queues the SMS for publishing.
+
+    Takes Twilio's form-encoded webhook (`From`, `Body`) and answers with empty TwiML.
+    Returns 404 unless `TWILIO_SMS_TRANSPORT_ENABLED=true`, and 403 without a valid
+    `X-Twilio-Signature`. Payloads are tagged with protocol `sms`. Each SMS is also
+    forwarded to `TWILIO_FORWARD_URLS_RAW` as Twilio's form and to
+    `TWILIO_FORWARD_URLS_JSON` as `{"sender", "text", "received_at"}`.
+    """
     if not twilio_config.sms_transport_enabled:
         raise HTTPException(status_code=404, detail="Not Found")
 

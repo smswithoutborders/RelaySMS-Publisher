@@ -1,6 +1,6 @@
 # Gateway Clients Module
 
-Registered clients are also readable via the REST API: see [List Gateway Clients](../docs/rest.md#2-list-gateway-clients).
+Registered clients are also readable via the REST API: see `GET /v1/gateway-clients` in the [REST API reference](../docs/openapi.json).
 
 ```bash
 GATEWAY_CLIENTS_REGISTRY_FILE=data/gateway_clients/registry.json

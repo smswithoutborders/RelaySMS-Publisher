@@ -204,7 +204,11 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> CurrentCredential:
-    """Sets an HttpOnly session cookie."""
+    """Sets an HttpOnly session cookie.
+
+    Wrong passwords and disabled credentials get the same 401. An `Origin` other than
+    this API's or one in `AUTH_WEB_ORIGINS` gets 403.
+    """
     check_origin(request)
 
     credential = authenticate(db, body.username, body.password)
@@ -259,4 +263,5 @@ def logout(
 
 @router.get("/me", response_model=CurrentCredential, summary="Current credential")
 def me(context: AuthContext = Depends(authenticate_request)) -> CurrentCredential:
+    """Call it on page load to check the session. `expires_at` is null for Basic."""
     return _current_credential(context.credential, context.session)

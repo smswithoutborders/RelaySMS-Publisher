@@ -36,6 +36,7 @@ def get_platforms(
     proto_id: int | None = Query(None, description="Filter by protocol ID"),
     cat_id: int | None = Query(None, description="Filter by category ID"),
 ) -> list[PlatformManifest]:
+    """Platforms with an installed adapter."""
     manager: AdapterManager = request.app.state.adapter_manager
     manifests = manager.list_adapters(name=name, proto_id=proto_id, cat_id=cat_id)
 
@@ -58,7 +59,7 @@ def get_platform_oauth_client_metadata(
     request: Request,
     platform_name: str = Path(..., description="Platform name", pattern=NAME_PATTERN),
 ) -> OAuthClientMetadata:
-    """Only for platforms with dynamic client registration."""
+    """Only for platforms with dynamic client registration, such as Bluesky."""
     manager: AdapterManager = request.app.state.adapter_manager
     adapters = manager.list_adapters(name=platform_name)
 
@@ -94,7 +95,7 @@ async def oauth_callback(
     request: Request,
     platform_name: str = Path(..., description="Platform name", pattern=NAME_PATTERN),
 ) -> HTMLResponse:
-    """Shows the callback query parameters."""
+    """Shows the callback query parameters, as a redirect target for OAuth2 testing."""
     manager: AdapterManager = request.app.state.adapter_manager
     adapters = manager.list_adapters(name=platform_name)
 

@@ -24,6 +24,7 @@ def get_gateway_clients(
     country: str | None = Query(None, description="Filter by country"),
     operator: str | None = Query(None, description="Filter by operator"),
 ) -> list[GatewayClientManifest]:
+    """Numbers that relay SMS to this server."""
     manager: GatewayClientManager = request.app.state.gateway_client_manager
     manifests = manager.list_clients(msisdn=msisdn, country=country, operator=operator)
 

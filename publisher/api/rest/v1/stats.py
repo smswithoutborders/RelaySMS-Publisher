@@ -70,7 +70,10 @@ def list_publication_stats(
     ),
     db: Session = Depends(get_db),
 ) -> PublicationStatsPage:
-    """Newest first. Scope: stats:publications:read (+ :reasons for failure_reason)."""
+    """Newest first. Scope: stats:publications:read.
+
+    `failure_reason` is null without stats:publications:reasons.
+    """
     decoded_cursor = pagination.decode_cursor(cursor) if cursor else None
 
     page = publication_stats.list_stats(
@@ -106,7 +109,12 @@ def summarize_publication_stats(
     ),
     db: Session = Depends(get_db),
 ) -> PublicationStatsSummary:
-    """Counts per group; last 30 days by default. Scope: stats:publications:read."""
+    """Counts per group; last 30 days by default. Scope: stats:publications:read.
+
+    Grouping by `failure_reason` also needs stats:publications:reasons. Groups sort by
+    period, then count, highest first. Periods with no rows are left out; chart them
+    as 0.
+    """
     columns = list(dict.fromkeys(item.value for item in group_by))
     if "failure_reason" in columns:
         require_scopes(context, Scope.STATS_PUBLICATIONS_REASONS)

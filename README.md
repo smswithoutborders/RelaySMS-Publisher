@@ -180,7 +180,7 @@ OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=      # Comma-separated allowlist of ingestion
 OFFLINE_PUBLISH_SHARED_SECRET=          # Shared secret required in the "tag" field for offline payloads over https (empty disables the check). 64-char hex (32 bytes).
 ```
 
-Offline payloads are tagged with the protocol they came in on: `https` for [REST `/publications`](docs/rest.md#7-publish-content), `smtp` for the [SMTP transport](docs/smtp.md), `sms` for the [Twilio transport](docs/rest.md#8-twilio-incoming-sms). If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set, offline payloads from any other protocol are discarded.
+Offline payloads are tagged with the protocol they came in on: `https` for [REST `/publications`](docs/rest.md#publishing), `smtp` for the [SMTP transport](docs/smtp.md), `sms` for the [Twilio transport](docs/rest.md#publishing). If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set, offline payloads from any other protocol are discarded.
 
 `https` is excluded by default since it's unauthenticated and free to spam. `smtp` and `sms` are allowed because their listeners authenticate the sender first (DKIM + allowlist for `smtp`, signature check for `sms`).
 
@@ -239,7 +239,7 @@ Registered gateway clients can be retrieved via the REST API: `/v1/gateway-clien
 
 ## Credentials
 
-Logins for the REST API, each with scopes. One holding every scope is an administrator. Also manageable over the [REST API](docs/rest.md#15-list-credentials).
+Logins for the REST API, each with scopes. One holding every scope is an administrator. Also manageable over the [REST API](docs/rest.md#managing-credentials).
 
 ```bash
 ./publisher.sh creds scopes                                          # list scopes
@@ -258,7 +258,7 @@ Logins for the REST API, each with scopes. One holding every scope is an adminis
 
 - [Installation Guide](INSTALL.md) - Detailed setup instructions
 - [gRPC API](docs/grpc.md) - gRPC interface documentation
-- [REST API](docs/rest.md) - REST API reference
+- [REST API](docs/rest.md) - REST API guide, with the [OpenAPI reference](docs/openapi.json)
 - [SMTP Transport](docs/smtp.md) - Publishing payloads sent by email
 - [Platform Adapters](platforms/README.md) - Extending functionality
 - [Gateway Clients](gateway_clients/README.md) - Managing the gateway client registry
