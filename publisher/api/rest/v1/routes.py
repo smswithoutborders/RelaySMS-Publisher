@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from publisher.api.rest.v1 import (
+    audit,
     auth,
     creds,
     gateway_clients,
@@ -17,6 +18,7 @@ router = APIRouter()
 for module in (
     auth,
     creds,
+    audit,
     stats,
     publications,
     platforms,

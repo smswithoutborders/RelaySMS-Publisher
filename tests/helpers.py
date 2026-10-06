@@ -25,6 +25,12 @@ def basic_auth(username: str, password: str) -> dict[str, str]:
     return {"Authorization": f"Basic {token}"}
 
 
+def get_etag(client: TestClient, headers: dict[str, str], username: str) -> str:
+    response = client.get(f"/v1/creds/{username}", headers=headers)
+    assert response.status_code == 200, response.text
+    return response.headers["etag"]
+
+
 def login(client: TestClient, password: str, username: str = USERNAME):
     return client.post(
         "/v1/auth/login", json={"username": username, "password": password}

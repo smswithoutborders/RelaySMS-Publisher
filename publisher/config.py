@@ -436,6 +436,7 @@ class CeleryConfig(Section):
 class CleanupConfig(Section):
     payload_session_max_age: datetime.timedelta
     token_idle_max_age: datetime.timedelta
+    audit_retention: datetime.timedelta
 
     @classmethod
     def load(cls, read: _Reader) -> Self:
@@ -445,6 +446,9 @@ class CleanupConfig(Section):
             ),
             token_idle_max_age=datetime.timedelta(
                 days=read.get_int("TOKEN_IDLE_MAX_AGE_DAYS", 90, minimum=1)
+            ),
+            audit_retention=datetime.timedelta(
+                days=read.get_int("AUDIT_RETENTION_DAYS", 365, minimum=1)
             ),
         )
 

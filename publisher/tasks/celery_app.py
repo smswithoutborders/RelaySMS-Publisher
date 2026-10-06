@@ -70,6 +70,10 @@ def make_celery() -> Celery:
             "task": "tasks.cleanup_task.cleanup_expired_credential_sessions",
             "schedule": cleanup_schedule,
         },
+        "cleanup-old-audit-events": {
+            "task": "tasks.cleanup_task.cleanup_old_audit_events",
+            "schedule": cleanup_schedule,
+        },
     }
     if celery.worker_heartbeat_url:
         # Uptime Kuma push-monitor heartbeat, see observability/README.md

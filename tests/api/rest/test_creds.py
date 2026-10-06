@@ -3,14 +3,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.helpers import USERNAME, basic_auth, create_credential, login
+from tests.helpers import USERNAME, basic_auth, create_credential, get_etag, login
 
 pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
-
-
-@pytest.fixture
-def admin(password):
-    return basic_auth(USERNAME, password)
 
 
 @pytest.fixture
@@ -27,12 +22,6 @@ def analyst_session(app):
 def analyst():
     create_credential("analyst", ["stats:publications:read"])
     return "analyst"
-
-
-def _etag(client, admin, username):
-    response = client.get(f"/v1/creds/{username}", headers=admin)
-    assert response.status_code == 200, response.text
-    return response.headers["etag"]
 
 
 def _create(client, admin, username, scopes):
@@ -81,7 +70,8 @@ def test_list_and_get(client, admin, analyst):
 
 def test_etags_are_opaque(client, admin, analyst):
     etags = {
-        username: _etag(client, admin, username) for username in (USERNAME, "analyst")
+        username: get_etag(client, admin, username)
+        for username in (USERNAME, "analyst")
     }
 
     # Both are at version 1, yet their etags differ and don't show it.
@@ -97,7 +87,7 @@ def test_create_returns_a_working_password_once(client, admin):
     assert body["username"] == "analyst"
     assert response.headers["cache-control"] == "private, no-store"
     assert response.headers["location"].endswith("/v1/creds/analyst")
-    assert response.headers["etag"] == _etag(client, admin, "analyst")
+    assert response.headers["etag"] == get_etag(client, admin, "analyst")
 
     me = client.get("/v1/auth/me", headers=basic_auth("analyst", body["password"]))
     assert me.json()["scopes"] == ["stats:publications:read"]
@@ -139,7 +129,7 @@ def test_managers_cannot_grant_scopes_they_lack(client):
 def test_update_requires_a_current_if_match(client, admin, analyst, caplog):
     url = "/v1/creds/analyst"
     body = {"scopes": ["stats:publications:read", "stats:publications:reasons"]}
-    etag = _etag(client, admin, analyst)
+    etag = get_etag(client, admin, analyst)
 
     missing = client.patch(url, json=body, headers=admin)
     stale = client.patch(url, json=body, headers={**admin, "If-Match": '"999"'})
@@ -164,7 +154,7 @@ def test_update_rejects_bad_bodies(client, admin, analyst, body, status):
     response = client.patch(
         "/v1/creds/analyst",
         json=body,
-        headers={**admin, "If-Match": _etag(client, admin, analyst)},
+        headers={**admin, "If-Match": get_etag(client, admin, analyst)},
     )
 
     assert response.status_code == status
@@ -175,7 +165,7 @@ def test_reset_password_replaces_the_old_one(client, admin):
 
     response = client.post(
         "/v1/creds/analyst/reset-password",
-        headers={**admin, "If-Match": _etag(client, admin, "analyst")},
+        headers={**admin, "If-Match": get_etag(client, admin, "analyst")},
     )
 
     assert response.status_code == 200
@@ -201,7 +191,7 @@ def test_delete(client, admin, analyst):
 
     assert client.delete(url, headers=admin).status_code == 428
     response = client.delete(
-        url, headers={**admin, "If-Match": _etag(client, admin, analyst)}
+        url, headers={**admin, "If-Match": get_etag(client, admin, analyst)}
     )
 
     assert response.status_code == 204

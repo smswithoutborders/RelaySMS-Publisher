@@ -1,26 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Outcomes of publish attempts, with listing and summaries."""
 
-import base64
-import binascii
 import datetime
-import json
-import operator
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
-from sqlalchemy import Index, String, and_, func, or_, select
+from sqlalchemy import Index, String, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from publisher.db import Base
-from publisher.db.types import UTCDateTime, as_utc, date_bucket, utc_now
-
-Direction = Literal["next", "prev"]
-
-
-class InvalidCursorError(ValueError):
-    pass
+from publisher.db import Base, pagination
+from publisher.db.pagination import Cursor, Page
+from publisher.db.types import UTCDateTime, date_bucket, utc_now
 
 
 class PublicationStats(Base):
@@ -95,13 +86,6 @@ def record(
 
 
 @dataclass(frozen=True)
-class Cursor:
-    created_at: datetime.datetime
-    id: int
-    direction: Direction
-
-
-@dataclass(frozen=True)
 class StatsFilters:
     status: str | None = None
     platform_name: str | None = None
@@ -109,38 +93,6 @@ class StatsFilters:
     country_code: str | None = None
     since: datetime.datetime | None = None
     until: datetime.datetime | None = None
-
-
-@dataclass(frozen=True)
-class StatsPage:
-    data: list[dict[str, Any]]
-    next_cursor: str | None
-    prev_cursor: str | None
-
-
-def encode_cursor(
-    created_at: datetime.datetime, row_id: int, direction: Direction
-) -> str:
-    payload = json.dumps(
-        {"t": as_utc(created_at).isoformat(), "i": row_id, "d": direction},
-        separators=(",", ":"),
-    )
-    return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
-
-
-def decode_cursor(cursor: str) -> Cursor:
-    try:
-        padded = cursor + "=" * (-len(cursor) % 4)
-        data = json.loads(base64.urlsafe_b64decode(padded.encode()))
-        created_at = as_utc(datetime.datetime.fromisoformat(data["t"]))
-        row_id = data["i"]
-        direction = data["d"]
-    except (binascii.Error, UnicodeDecodeError, ValueError, KeyError, TypeError):
-        raise InvalidCursorError("Invalid cursor.") from None
-
-    if type(row_id) is not int or row_id < 1 or direction not in ("next", "prev"):
-        raise InvalidCursorError("Invalid cursor.")
-    return Cursor(created_at=created_at, id=row_id, direction=direction)
 
 
 def _filter_clauses(filters: StatsFilters) -> list:
@@ -162,52 +114,19 @@ def list_stats(
     filters: StatsFilters,
     limit: int,
     cursor: Cursor | None = None,
-) -> StatsPage:
-    created_at, row_id = PublicationStats.created_at, PublicationStats.id
-    backward = cursor is not None and cursor.direction == "prev"
-
-    stmt = select(*LIST_COLUMNS).where(*_filter_clauses(filters))
-    if cursor is not None:
-        # OR form: row-value comparisons aren't consistent across databases.
-        beyond = operator.gt if backward else operator.lt
-        stmt = stmt.where(
-            or_(
-                beyond(created_at, cursor.created_at),
-                and_(created_at == cursor.created_at, beyond(row_id, cursor.id)),
-            )
-        )
-
-    order = (
-        (created_at.asc(), row_id.asc())
-        if backward
-        else (created_at.desc(), row_id.desc())
+) -> Page[dict[str, Any]]:
+    page = pagination.paginate(
+        select(*LIST_COLUMNS).where(*_filter_clauses(filters)),
+        PublicationStats.created_at,
+        PublicationStats.id,
+        limit=limit,
+        cursor=cursor,
+        fetch=lambda stmt: session.execute(stmt).all(),
     )
-    rows = session.execute(stmt.order_by(*order).limit(limit + 1)).mappings().all()
-
-    has_more = len(rows) > limit
-    rows = list(rows[:limit])
-    if backward:
-        rows.reverse()
-
-    if not rows:
-        return StatsPage(data=[], next_cursor=None, prev_cursor=None)
-
-    first, last = rows[0], rows[-1]
-    if backward:
-        has_next, has_prev = True, has_more
-    else:
-        has_next, has_prev = has_more, cursor is not None
-
-    return StatsPage(
-        data=[dict(row) for row in rows],
-        next_cursor=(
-            encode_cursor(last["created_at"], last["id"], "next") if has_next else None
-        ),
-        prev_cursor=(
-            encode_cursor(first["created_at"], first["id"], "prev")
-            if has_prev
-            else None
-        ),
+    return Page(
+        items=[row._asdict() for row in page.items],
+        next_cursor=page.next_cursor,
+        prev_cursor=page.prev_cursor,
     )
 
 

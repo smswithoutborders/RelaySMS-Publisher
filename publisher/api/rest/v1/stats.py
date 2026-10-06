@@ -14,7 +14,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from publisher.api.rest.v1.auth import AuthContext, authorize, require_scopes
-from publisher.api.rest.v1.params import filter_query
+from publisher.api.rest.v1.params import check_time_range, filter_query, page_link
 from publisher.api.rest.v1.schemas import (
     PublicationStatsPage,
     PublicationStatsSummary,
@@ -22,8 +22,8 @@ from publisher.api.rest.v1.schemas import (
     StatsGroupBy,
     StatsInterval,
 )
-from publisher.db import get_db
-from publisher.db.types import as_utc, utc_now
+from publisher.db import get_db, pagination
+from publisher.db.types import utc_now
 from publisher.models import publication_stats
 from publisher.models.credential import Scope
 
@@ -46,10 +46,7 @@ def stats_filters(
         description="Created before (ISO-8601, UTC if no offset)",
     ),
 ) -> publication_stats.StatsFilters:
-    since, until = as_utc(since), as_utc(until)
-    if since is not None and until is not None and since >= until:
-        raise HTTPException(status_code=400, detail="'since' must be before 'until'.")
-
+    since, until = check_time_range(since, until)
     return publication_stats.StatsFilters(
         status=status,
         platform_name=platform_name,
@@ -58,10 +55,6 @@ def stats_filters(
         since=since,
         until=until,
     )
-
-
-def _page_link(request: Request, cursor: str | None) -> str | None:
-    return str(request.url.include_query_params(cursor=cursor)) if cursor else None
 
 
 @router.get(
@@ -78,16 +71,16 @@ def list_publication_stats(
     db: Session = Depends(get_db),
 ) -> PublicationStatsPage:
     """Newest first. Scope: stats:publications:read (+ :reasons for failure_reason)."""
-    decoded_cursor = publication_stats.decode_cursor(cursor) if cursor else None
+    decoded_cursor = pagination.decode_cursor(cursor) if cursor else None
 
     page = publication_stats.list_stats(
         db, filters=filters, limit=limit, cursor=decoded_cursor
     )
     result = PublicationStatsPage.model_validate(
         {
-            "data": page.data,
-            "next": _page_link(request, page.next_cursor),
-            "prev": _page_link(request, page.prev_cursor),
+            "data": page.items,
+            "next": page_link(request, page.next_cursor),
+            "prev": page_link(request, page.prev_cursor),
         }
     )
     if Scope.STATS_PUBLICATIONS_REASONS not in context.credential.scopes:

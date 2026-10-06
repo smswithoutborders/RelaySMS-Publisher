@@ -6,12 +6,9 @@ import pytest
 
 from publisher.api.rest.v1.schemas import StatsGroupBy, StatsInterval
 from publisher.db import get_session
+from publisher.db.pagination import encode_cursor
 from publisher.db.types import DATE_BUCKET_UNITS, utc_now
-from publisher.models.publication_stats import (
-    GROUPABLE_COLUMNS,
-    PublicationStats,
-    encode_cursor,
-)
+from publisher.models.publication_stats import GROUPABLE_COLUMNS, PublicationStats
 from tests.helpers import USERNAME, basic_auth, create_credential, login
 
 pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")

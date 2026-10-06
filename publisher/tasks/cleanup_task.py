@@ -7,6 +7,7 @@ from celery.signals import worker_init
 from publisher.config import CleanupConfig
 from publisher.db import get_session
 from publisher.db.types import utc_now
+from publisher.models import audit_event
 from publisher.models.credential_session import (
     delete_expired as delete_expired_credential_sessions,
 )
@@ -70,3 +71,16 @@ def cleanup_expired_credential_sessions() -> None:
         logger.info("Cleaned up %d expired credential session(s)", deleted)
     else:
         logger.debug("No expired credential sessions to clean up")
+
+
+@celery_app.task(name="tasks.cleanup_task.cleanup_old_audit_events")
+def cleanup_old_audit_events() -> None:
+    """Delete audit events older than the retention period."""
+    cutoff = utc_now() - cleanup_config.audit_retention
+    with get_session() as db:
+        deleted = audit_event.delete_older_than(db, cutoff)
+
+    if deleted:
+        logger.info("Cleaned up %d old audit event(s)", deleted)
+    else:
+        logger.debug("No old audit events to clean up")

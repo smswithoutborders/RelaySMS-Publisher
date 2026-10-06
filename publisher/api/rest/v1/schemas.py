@@ -2,7 +2,7 @@
 
 import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -69,14 +69,17 @@ class PublicationStat(BaseModel):
     created_at: datetime.datetime
 
 
-class PublicationStatsPage(BaseModel):
-    data: list[PublicationStat]
+class PageLinks(BaseModel):
     next: str | None = Field(
         None, description="URL of the next (older) page; null on the last page."
     )
     prev: str | None = Field(
         None, description="URL of the previous (newer) page; null on the first page."
     )
+
+
+class PublicationStatsPage(PageLinks):
+    data: list[PublicationStat]
 
 
 class StatsGroupBy(StrEnum):
@@ -148,3 +151,26 @@ class CredentialInfo(BaseModel):
 
 class CredentialWithPassword(CredentialInfo):
     password: str = Field(..., description="Shown only in this response.")
+
+
+class AuditEventInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    occurred_at: datetime.datetime
+    actor: str | None = Field(
+        None,
+        validation_alias="actor_username",
+        description="Username at the time; null for the CLI or a failed login.",
+    )
+    action: str = Field(..., description="e.g. creds.update")
+    target: str | None = Field(
+        None,
+        validation_alias="target_label",
+        description="Target's name at the time.",
+    )
+    outcome: str = Field(..., description="success, denied or failed.")
+    details: dict[str, Any] | None = None
+
+
+class AuditEventPage(PageLinks):
+    data: list[AuditEventInfo]

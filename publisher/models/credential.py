@@ -27,6 +27,7 @@ class Scope(StrEnum):
     PLATFORMS_WRITE = "platforms:write"
     CREDS_READ = "creds:read"
     CREDS_WRITE = "creds:write"
+    AUDIT_READ = "audit:read"
 
 
 ALL_SCOPES = frozenset(Scope)
@@ -40,6 +41,7 @@ SCOPE_DESCRIPTIONS = {
     Scope.PLATFORMS_WRITE: "Change and remove platform adapters",
     Scope.CREDS_READ: "List credentials",
     Scope.CREDS_WRITE: "Add, change and remove credentials",
+    Scope.AUDIT_READ: "Read the audit log, for the areas your other scopes cover",
 }
 
 

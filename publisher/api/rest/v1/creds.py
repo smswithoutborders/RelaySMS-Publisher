@@ -24,7 +24,9 @@ from publisher.credentials import (
     CredentialPermissionError,
 )
 from publisher.db import get_db
+from publisher.models import audit_event
 from publisher.models import credential_session as credential_sessions
+from publisher.models.audit_event import AuditAction, AuditOutcome
 from publisher.models.credential import MAX_USERNAME_LENGTH, Credential, Scope
 
 logger = logging.getLogger(__name__)
@@ -54,7 +56,13 @@ def _check_if_match(request: Request, credential: Credential) -> None:
 
 
 @contextmanager
-def _model_errors(actor: Credential):
+def _model_errors(
+    db: Session,
+    actor: Credential,
+    action: AuditAction,
+    target: Credential | None = None,
+    details: dict | None = None,
+):
     by = f"actor {actor.id}"
     try:
         yield
@@ -69,6 +77,17 @@ def _model_errors(actor: Credential):
             log=f"{by}: {e}",
         ) from None
     except CredentialPermissionError as e:
+        # Keep the denial, not the change.
+        db.rollback()
+        audit_event.record(
+            db,
+            action,
+            actor=actor,
+            target=target,
+            outcome=AuditOutcome.DENIED,
+            details={**(details or {}), "reason": str(e)},
+        )
+        db.commit()
         raise ApiError(403, f"{e}.", log=f"{by}: {e}") from None
     except CredentialError as e:
         raise ApiError(400, str(e), log=by) from None
@@ -136,7 +155,12 @@ def create_credential(
     db: Session = Depends(get_db),
 ) -> CredentialWithPassword:
     """The generated password is shown only once. Scope: creds:write."""
-    with _model_errors(context.credential):
+    with _model_errors(
+        db,
+        context.credential,
+        AuditAction.CREDS_CREATE,
+        details={"username": body.username},
+    ):
         credential, password = credentials.create(
             db, body.username, body.scopes, actor=context.credential
         )
@@ -170,7 +194,7 @@ def update_credential(
 
     credential = _load(db, username)
     _check_if_match(request, credential)
-    with _model_errors(context.credential):
+    with _model_errors(db, context.credential, AuditAction.CREDS_UPDATE, credential):
         credentials.update(
             db,
             credential,
@@ -205,7 +229,9 @@ def reset_credential_password(
     """New password shown once; sessions end. Needs If-Match. Scope: creds:write."""
     credential = _load(db, username)
     _check_if_match(request, credential)
-    with _model_errors(context.credential):
+    with _model_errors(
+        db, context.credential, AuditAction.CREDS_RESET_PASSWORD, credential
+    ):
         password = credentials.reset_password(db, credential, actor=context.credential)
     db.commit()
 
@@ -226,7 +252,9 @@ def revoke_credential_sessions(
 ) -> Response:
     """Scope: creds:write."""
     credential = _load(db, username)
-    with _model_errors(context.credential):
+    with _model_errors(
+        db, context.credential, AuditAction.CREDS_REVOKE_SESSIONS, credential
+    ):
         credentials.revoke_sessions(db, credential, actor=context.credential)
     db.commit()
 
@@ -249,7 +277,7 @@ def delete_credential(
     credential = _load(db, username)
     _check_if_match(request, credential)
     credential_id = credential.id
-    with _model_errors(context.credential):
+    with _model_errors(db, context.credential, AuditAction.CREDS_DELETE, credential):
         credentials.delete(db, credential, actor=context.credential)
     db.commit()
 

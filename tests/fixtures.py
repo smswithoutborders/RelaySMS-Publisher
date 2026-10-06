@@ -11,7 +11,7 @@ from publisher import credentials, db
 from publisher.api.rest import app as app_module
 from publisher.api.rest.v1 import routes
 from publisher.db import Base
-from tests.helpers import USERNAME, create_credential
+from tests.helpers import USERNAME, basic_auth, create_credential
 
 
 @pytest.fixture
@@ -55,3 +55,9 @@ def client(app):
 def password():
     """Password of USERNAME, an administrator."""
     return create_credential(USERNAME)
+
+
+@pytest.fixture
+def admin(password):
+    """Basic auth headers for USERNAME."""
+    return basic_auth(USERNAME, password)

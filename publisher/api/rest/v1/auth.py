@@ -17,9 +17,11 @@ from sqlalchemy.orm import Session
 from publisher.api.rest.v1.errors import ApiError
 from publisher.api.rest.v1.schemas import CurrentCredential, LoginRequest
 from publisher.config import AuthConfig
-from publisher.credentials import authenticate, record_login
+from publisher.credentials import authenticate, get_by_username, record_login
 from publisher.db import get_db
+from publisher.models import audit_event
 from publisher.models import credential_session as credential_sessions
+from publisher.models.audit_event import AuditAction, AuditOutcome
 from publisher.models.credential import Credential
 from publisher.models.credential_session import CredentialSession
 
@@ -102,6 +104,22 @@ def _request_origin(request: Request) -> str | None:
     return origin
 
 
+def _record_failed_login(db: Session, username: str, method: str) -> None:
+    # Not for unknown usernames: anyone can send those, so they'd flood the table.
+    target = get_by_username(db, username)
+    if target is None:
+        return
+    audit_event.record(
+        db,
+        AuditAction.AUTH_LOGIN,
+        actor=None,
+        target=target,
+        outcome=AuditOutcome.FAILED,
+        details={"method": method},
+    )
+    db.commit()
+
+
 def check_origin(request: Request) -> None:
     origin = _request_origin(request)
     # Browsers send Origin on cross-origin POSTs; none means a non-browser client.
@@ -137,6 +155,7 @@ def authenticate_request(
     if basic:
         credential = authenticate(db, basic.username, basic.password)
         if credential is None:
+            _record_failed_login(db, basic.username, "basic")
             raise _basic_challenge("Invalid username or password.")
         record_login(
             db, credential, min_interval_seconds=BASIC_LOGIN_RECORD_INTERVAL_SECONDS
@@ -190,6 +209,7 @@ def login(
 
     credential = authenticate(db, body.username, body.password)
     if credential is None:
+        _record_failed_login(db, body.username, "session")
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
     credential_session, raw_token = credential_sessions.create(
@@ -199,6 +219,13 @@ def login(
         user_agent=request.headers.get("User-Agent"),
     )
     record_login(db, credential)
+    audit_event.record(
+        db,
+        AuditAction.AUTH_LOGIN,
+        actor=credential,
+        target=credential,
+        details={"method": "session"},
+    )
     db.commit()
 
     set_session_cookie(response, raw_token)
@@ -220,6 +247,9 @@ def logout(
         )
 
     db.delete(context.session)
+    audit_event.record(
+        db, AuditAction.AUTH_LOGOUT, actor=context.credential, target=context.credential
+    )
     db.commit()
 
     response = Response(status_code=204)

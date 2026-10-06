@@ -18,6 +18,8 @@ from sqlalchemy.orm.attributes import set_committed_value
 
 from publisher.db.types import utc_now
 from publisher.errors import PublisherError
+from publisher.models import audit_event
+from publisher.models.audit_event import AuditAction
 from publisher.models.credential import (
     ALL_SCOPES,
     MAX_USERNAME_LENGTH,
@@ -214,6 +216,13 @@ def create(
         session.flush()
     except IntegrityError:
         raise CredentialExistsError(f"Credential {username!r} already exists") from None
+    audit_event.record(
+        session,
+        AuditAction.CREDS_CREATE,
+        actor=actor,
+        target=credential,
+        details={"scopes": sorted(scopes)},
+    )
     return credential, password
 
 
@@ -227,13 +236,26 @@ def update(
 ) -> None:
     new_scopes = parse_scopes(scopes) if scopes is not None else None
     _authorize_change(session, actor, credential, new_scopes or ())
-    if new_scopes is not None:
+    details = {}
+    if new_scopes is not None and new_scopes != credential.scopes:
+        details["scopes"] = {
+            "added": sorted(new_scopes - credential.scopes),
+            "removed": sorted(credential.scopes - new_scopes),
+        }
         _set_scope_rows(credential, new_scopes)
-    if active is not None:
+    if active is not None and active != credential.is_active:
+        details["active"] = active
         credential.is_active = active
         if not active:
             _end_sessions(session, credential)
     session.flush()
+    audit_event.record(
+        session,
+        AuditAction.CREDS_UPDATE,
+        actor=actor,
+        target=credential,
+        details=details or None,
+    )
 
 
 def reset_password(
@@ -243,6 +265,9 @@ def reset_password(
     password = _generate_password()
     credential.password_hash = password_hasher.hash(password)
     _end_sessions(session, credential)
+    audit_event.record(
+        session, AuditAction.CREDS_RESET_PASSWORD, actor=actor, target=credential
+    )
     return password
 
 
@@ -250,13 +275,24 @@ def revoke_sessions(
     session: Session, credential: Credential, actor: Credential | None = None
 ) -> int:
     _authorize_change(session, actor, credential)
-    return _end_sessions(session, credential)
+    ended = _end_sessions(session, credential)
+    audit_event.record(
+        session,
+        AuditAction.CREDS_REVOKE_SESSIONS,
+        actor=actor,
+        target=credential,
+        details={"sessions": ended},
+    )
+    return ended
 
 
 def delete(
     session: Session, credential: Credential, actor: Credential | None = None
 ) -> None:
     _authorize_change(session, actor, credential)
+    audit_event.record(
+        session, AuditAction.CREDS_DELETE, actor=actor, target=credential
+    )
     session.delete(credential)
     session.flush()
 
