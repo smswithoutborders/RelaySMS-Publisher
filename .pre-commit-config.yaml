@@ -1,4 +1,6 @@
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
+# Hooks without their own stages run only before a commit, not on commit-msg or push.
+default_stages: [pre-commit]
 # protocol_interfaces.py is copied verbatim into adapter repositories.
 exclude: ^(protos/|lib_relaysms_payload_specs/|platforms/protocol_interfaces\.py$)
 
