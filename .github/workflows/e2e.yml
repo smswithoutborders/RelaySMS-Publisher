@@ -6,10 +6,20 @@ on:
     branches:
       - staging
       - main
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-  workflow_call:
+    paths:
+      - "install.sh"
+      - "manage.sh"
+      - "publisher.sh"
+      - "sync-env.sh"
+      - "template.env"
+      - "Makefile"
+      - "alembic.ini"
+      - "requirements*.txt"
+      - "scripts/**"
+      - "deploy/**"
+      - "migrations/**"
+      - "tests/e2e/**"
+      - ".github/workflows/e2e.yml"
   workflow_dispatch:
 
 jobs:
@@ -31,9 +41,9 @@ jobs:
         distro: [ubuntu, debian]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 

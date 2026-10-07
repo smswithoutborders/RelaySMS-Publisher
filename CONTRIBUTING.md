@@ -253,7 +253,7 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 
 `make test-dialects` starts Postgres, MySQL and MariaDB in rootless podman and removes them afterwards; `PYTEST_ARGS="-k mysql"` runs one dialect. MariaDB is skipped on a machine with MariaDB installed, since its AppArmor profile stops the container's server. Add a test there when a query or migration could behave differently on another database.
 
-`make test-e2e` installs the working tree, uncommitted changes included, into systemd containers. It needs rootless podman and network access, and takes a few minutes; `PYTEST_ARGS="-k debian"` runs one distro. The staging deploy waits for it.
+`make test-e2e` installs the working tree, uncommitted changes included, into systemd containers. It needs rootless podman and network access, and takes a few minutes; `PYTEST_ARGS="-k debian"` runs one distro.
 
 ### Writing tests
 
@@ -344,7 +344,7 @@ Adapters live in their own repositories. Install one locally with `python -m pub
 
 ## When CI fails
 
-`.github/workflows/checks.yml` runs each check as its own job: **Hooks**, **Tests** on Python 3.12 and 3.13, **Coverage** on 3.14, **Database dialects**, and **E2E** on pushes. Every pytest job adds a results table to the run's summary page, through `tests/summary.py`, with the failing tests listed under it. A test module can set `SUMMARY_BY` to group its rows by test or by a parametrized fixture instead of by directory.
+`.github/workflows/checks.yml` runs each check as its own job: **Hooks**, **Tests** on Python 3.12 and 3.13, and **Coverage** on 3.14. The staging deploy waits only for these. **Database dialects** and **E2E** have their own workflows, which run on PRs that touch their files, or from the Actions tab with **Run workflow**. Every pytest job adds a results table to the run's summary page, through `tests/summary.py`, with the failing tests listed under it. A test module can set `SUMMARY_BY` to group its rows by test or by a parametrized fixture instead of by directory.
 
 - **Hook failures:** run `make check` locally. Ruff and the whitespace hooks fix files in place, so re-add and commit the changes.
 - **Pyright:** fix the type, or narrow it with an `assert`. Use `# pyright: ignore[rule]` only with a reason.

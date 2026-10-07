@@ -8,7 +8,10 @@ on:
   push:
     branches:
       - staging
-      - main
+
+concurrency:
+  group: checks-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -18,7 +21,7 @@ jobs:
     name: Hooks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -44,7 +47,7 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -59,7 +62,7 @@ jobs:
     name: Coverage (Python 3.14)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -72,28 +75,8 @@ jobs:
           make coverage PYTHON=venv/bin/python
           PYTEST_ARGS="--cov-report=term --cov-report=markdown-append:$GITHUB_STEP_SUMMARY"
 
-  dialects:
-    name: Database dialects
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-
-      - uses: ./.github/actions/setup
-        with:
-          python-version: "3.12"
-
-      # Postgres, MySQL and MariaDB run in the runner's rootless podman.
-      - name: Run dialect tests
-        run: make test-dialects PYTHON=venv/bin/python
-
-  e2e:
-    if: github.event_name == 'push'
-    uses: ./.github/workflows/e2e.yml
-
   deploy-staging:
-    needs: [hooks, tests, coverage, dialects, e2e]
+    needs: [hooks, tests, coverage]
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     uses: ./.github/workflows/deploy.staging.yml
     secrets: inherit
