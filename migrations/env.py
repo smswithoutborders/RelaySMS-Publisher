@@ -8,6 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import publisher.models  # noqa: F401  (registers every table on Base.metadata)
 from publisher.config import DatabaseConfig
 from publisher.db import Base, build_url, get_engine
+from publisher.log import setup_logging
+
+setup_logging()
 
 config = context.config
 target_metadata = Base.metadata
