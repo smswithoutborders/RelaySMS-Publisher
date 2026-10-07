@@ -4,6 +4,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 
+from publisher.api.rest.v1.errors import error_responses
 from publisher.api.rest.v1.schemas import ServerStaticPublicKey
 from publisher.db import get_db
 from publisher.models.server_identity_key import get_public_key, get_public_keys
@@ -17,7 +18,12 @@ def list_server_static_keys(db: Session = Depends(get_db)):
     return get_public_keys(db)
 
 
-@router.get("/{key_id}", response_model=ServerStaticPublicKey, summary="Get server key")
+@router.get(
+    "/{key_id}",
+    response_model=ServerStaticPublicKey,
+    summary="Get server key",
+    responses=error_responses({404: "No key with that ID."}),
+)
 def get_server_static_key(
     key_id: int = Path(..., ge=0, le=255, description="Static key identifier, 0-255"),
     db: Session = Depends(get_db),

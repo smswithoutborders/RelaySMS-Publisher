@@ -14,6 +14,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from publisher.api.rest.v1.auth import AuthContext, authorize, require_scopes
+from publisher.api.rest.v1.errors import PAGE_QUERY_ERRORS, error_responses
 from publisher.api.rest.v1.params import check_time_range, filter_query, page_link
 from publisher.api.rest.v1.schemas import (
     PublicationStatsPage,
@@ -58,7 +59,10 @@ def stats_filters(
 
 
 @router.get(
-    "/publications", response_model=PublicationStatsPage, summary="List publications"
+    "/publications",
+    response_model=PublicationStatsPage,
+    summary="List publications",
+    responses=error_responses(PAGE_QUERY_ERRORS),
 )
 def list_publication_stats(
     request: Request,
@@ -96,6 +100,13 @@ def list_publication_stats(
     "/publications/summary",
     response_model=PublicationStatsSummary,
     summary="Summarize publications",
+    responses=error_responses(
+        {
+            400: "'since' isn't before 'until'.",
+            403: "Also when grouping by failure_reason without "
+            "stats:publications:reasons.",
+        }
+    ),
 )
 def summarize_publication_stats(
     context: AuthContext = Security(authorize, scopes=[Scope.STATS_PUBLICATIONS_READ]),

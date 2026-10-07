@@ -12,6 +12,12 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from publisher import keys
+from publisher.api.rest.v1.auth import SAFE_METHODS
+from publisher.api.rest.v1.errors import (
+    ErrorResponse,
+    error_response_spec,
+    error_responses,
+)
 from publisher.api.rest.v1.routes import router as v1_router
 from publisher.config import ApiDocsConfig, AuthConfig
 from publisher.db import dispose_engine, get_session
@@ -30,6 +36,51 @@ API_DOCS_CSP = (
     "style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; "
     "connect-src 'self'"
 )
+VALIDATION_ERROR = (
+    "A parameter or body field is missing or invalid; the message names it."
+)
+UNAUTHENTICATED = (
+    "No session cookie or Basic credentials, an expired session, or a wrong "
+    "username or password."
+)
+
+
+def _forbidden_reasons(method: str, security: list[dict[str, list[str]]]) -> str:
+    reasons = []
+    scopes = sorted(
+        {scope for requirement in security for s in requirement.values() for scope in s}
+    )
+    if scopes:
+        reasons.append(f"the credential lacks {', '.join(scopes)}")
+    if method.upper() not in SAFE_METHODS:
+        reasons.append("a cookie request came from an origin that isn't allowed")
+    if not reasons:
+        return ""
+    sentence = ", or ".join(reasons)
+    return sentence[0].upper() + sentence[1:] + "."
+
+
+def document_shared_errors(spec: dict) -> None:
+    """Adds the errors that the exception handlers and auth return on every route.
+
+    A route's own 403 description is appended to the generated one.
+    """
+    spec["components"]["schemas"].setdefault(
+        "ErrorResponse", ErrorResponse.model_json_schema()
+    )
+    for operations in spec["paths"].values():
+        for method, operation in operations.items():
+            responses = operation["responses"]
+            if "422" in responses:
+                responses["422"] = error_response_spec(VALIDATION_ERROR)
+            if security := operation.get("security"):
+                responses.setdefault("401", error_response_spec(UNAUTHENTICATED))
+                if forbidden := _forbidden_reasons(method, security):
+                    extra = responses.get("403", {}).get("description")
+                    responses["403"] = error_response_spec(
+                        " ".join(filter(None, (forbidden, extra)))
+                    )
+            operation["responses"] = dict(sorted(responses.items()))
 
 
 def _validation_message(error: dict) -> str:
@@ -77,6 +128,16 @@ app = FastAPI(
     openapi_url="/openapi.json" if api_docs_enabled else None,
 )
 app.include_router(v1_router, prefix="/v1")
+default_openapi = app.openapi
+
+
+def openapi() -> dict:
+    if app.openapi_schema is None:
+        document_shared_errors(default_openapi())
+    return default_openapi()
+
+
+app.openapi = openapi
 configure_cors(app, AuthConfig.get())
 
 
@@ -98,7 +159,12 @@ if api_docs_enabled:
         )
 
 
-@app.get("/health", tags=["Health"], summary="Health check")
+@app.get(
+    "/health",
+    tags=["Health"],
+    summary="Health check",
+    responses=error_responses({500: "The database is unreachable."}),
+)
 def health():
     """Liveness and readiness for uptime monitoring."""
     with get_session() as db:

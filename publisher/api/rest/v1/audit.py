@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request, Security
 from sqlalchemy.orm import Session
 
 from publisher.api.rest.v1.auth import AuthContext, authorize
+from publisher.api.rest.v1.errors import PAGE_QUERY_ERRORS, error_responses
 from publisher.api.rest.v1.params import check_time_range, page_link
 from publisher.api.rest.v1.schemas import AuditEventInfo, AuditEventPage
 from publisher.db import get_db, pagination
@@ -17,7 +18,12 @@ from publisher.models.credential import MAX_USERNAME_LENGTH, Scope
 router = APIRouter(prefix="/audit-events", tags=["Audit"])
 
 
-@router.get("", response_model=AuditEventPage, summary="List audit events")
+@router.get(
+    "",
+    response_model=AuditEventPage,
+    summary="List audit events",
+    responses=error_responses(PAGE_QUERY_ERRORS),
+)
 def list_audit_events(
     request: Request,
     context: AuthContext = Security(authorize, scopes=[Scope.AUDIT_READ]),
@@ -40,7 +46,7 @@ def list_audit_events(
     ),
     db: Session = Depends(get_db),
 ) -> AuditEventPage:
-    """Newest first. Scope: audit:read, plus creds:read for auth and creds events."""
+    """Newest first. Scope: audit:read, plus creds:read or platforms:read per area."""
     since, until = check_time_range(since, until)
     page = audit_event.list_events(
         db,

@@ -57,7 +57,10 @@ class PublishRestContentRequest(PublishContentRequest):
 
 class PublishContentResponse(BaseModel):
     message: str | None = None
-    error: str | None = None
+    error: str | None = Field(
+        default=None,
+        description="Always null here; errors come back with a 4xx status.",
+    )
 
 
 class PublicationStat(BaseModel):

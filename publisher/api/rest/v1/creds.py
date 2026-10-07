@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from publisher import credentials
 from publisher.api.rest.v1.auth import AuthContext, authorize
-from publisher.api.rest.v1.errors import ApiError
+from publisher.api.rest.v1.errors import (
+    CONCURRENT_CHANGE,
+    IF_MATCH_ERRORS,
+    ApiError,
+    error_responses,
+)
 from publisher.api.rest.v1.params import check_if_match, etag
 from publisher.api.rest.v1.schemas import (
     CredentialCreate,
@@ -34,6 +39,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/creds", tags=["Credentials"])
 
 USERNAME_PATH = Path(..., max_length=MAX_USERNAME_LENGTH)
+NOT_FOUND = {404: "No credential with that username."}
+CHANGE_TARGET_403 = {
+    403: "Also when changing your own credential or one with scopes you don't hold."
+}
+SCOPE_ERROR = "an unknown scope, or a scope without the one it requires."
 
 
 def _etag(credential: Credential) -> str:
@@ -115,7 +125,12 @@ def list_credentials(
     ]
 
 
-@router.get("/{username}", response_model=CredentialInfo, summary="Get credential")
+@router.get(
+    "/{username}",
+    response_model=CredentialInfo,
+    summary="Get credential",
+    responses=error_responses(NOT_FOUND),
+)
 def get_credential(
     response: Response,
     username: str = USERNAME_PATH,
@@ -131,6 +146,13 @@ def get_credential(
     response_model=CredentialWithPassword,
     status_code=201,
     summary="Create credential",
+    responses=error_responses(
+        {
+            400: f"Invalid username, {SCOPE_ERROR}",
+            403: "Also when granting scopes you don't hold.",
+            409: "That username is already taken.",
+        }
+    ),
 )
 def create_credential(
     body: CredentialCreate,
@@ -139,7 +161,7 @@ def create_credential(
     context: AuthContext = Security(authorize, scopes=[Scope.CREDS_WRITE]),
     db: Session = Depends(get_db),
 ) -> CredentialWithPassword:
-    """The generated password is shown only once. Scope: creds:write."""
+    """The generated password is shown only in this response. Scope: creds:write."""
     with _model_errors(
         db,
         context.credential,
@@ -164,7 +186,21 @@ def create_credential(
     return CredentialWithPassword(**info.model_dump(), password=password)
 
 
-@router.patch("/{username}", response_model=CredentialInfo, summary="Update credential")
+@router.patch(
+    "/{username}",
+    response_model=CredentialInfo,
+    summary="Update credential",
+    responses=error_responses(
+        NOT_FOUND,
+        CONCURRENT_CHANGE,
+        IF_MATCH_ERRORS,
+        {
+            400: f"Nothing to change, {SCOPE_ERROR}",
+            403: "Also when changing your own credential or one with scopes you "
+            "don't hold, or granting scopes you don't hold.",
+        },
+    ),
+)
 def update_credential(
     body: CredentialUpdate,
     request: Request,
@@ -173,7 +209,7 @@ def update_credential(
     context: AuthContext = Security(authorize, scopes=[Scope.CREDS_WRITE]),
     db: Session = Depends(get_db),
 ) -> CredentialInfo:
-    """Change scopes or active. Needs If-Match. Scope: creds:write."""
+    """Deactivating ends its sessions. Needs If-Match. Scope: creds:write."""
     if body.scopes is None and body.active is None:
         raise HTTPException(status_code=400, detail="Nothing to change.")
 
@@ -203,6 +239,9 @@ def update_credential(
     "/{username}/reset-password",
     response_model=CredentialWithPassword,
     summary="Reset password",
+    responses=error_responses(
+        CHANGE_TARGET_403, NOT_FOUND, CONCURRENT_CHANGE, IF_MATCH_ERRORS
+    ),
 )
 def reset_credential_password(
     request: Request,
@@ -229,13 +268,18 @@ def reset_credential_password(
     return CredentialWithPassword(**info.model_dump(), password=password)
 
 
-@router.post("/{username}/revoke-sessions", status_code=204, summary="Revoke sessions")
+@router.post(
+    "/{username}/revoke-sessions",
+    status_code=204,
+    summary="Revoke sessions",
+    responses=error_responses(CHANGE_TARGET_403, NOT_FOUND, CONCURRENT_CHANGE),
+)
 def revoke_credential_sessions(
     username: str = USERNAME_PATH,
     context: AuthContext = Security(authorize, scopes=[Scope.CREDS_WRITE]),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Scope: creds:write."""
+    """Logs it out everywhere; Basic auth still works. Scope: creds:write."""
     credential = _load(db, username)
     with _model_errors(
         db, context.credential, AuditAction.CREDS_REVOKE_SESSIONS, credential
@@ -251,7 +295,14 @@ def revoke_credential_sessions(
     return Response(status_code=204)
 
 
-@router.delete("/{username}", status_code=204, summary="Delete credential")
+@router.delete(
+    "/{username}",
+    status_code=204,
+    summary="Delete credential",
+    responses=error_responses(
+        CHANGE_TARGET_403, NOT_FOUND, CONCURRENT_CHANGE, IF_MATCH_ERRORS
+    ),
+)
 def delete_credential(
     request: Request,
     username: str = USERNAME_PATH,

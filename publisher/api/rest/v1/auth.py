@@ -14,7 +14,7 @@ from fastapi.security import (
 )
 from sqlalchemy.orm import Session
 
-from publisher.api.rest.v1.errors import ApiError
+from publisher.api.rest.v1.errors import ApiError, error_responses
 from publisher.api.rest.v1.schemas import CurrentCredential, LoginRequest
 from publisher.config import AuthConfig
 from publisher.credentials import authenticate, get_by_username, record_login
@@ -197,18 +197,24 @@ def _current_credential(
     )
 
 
-@router.post("/login", response_model=CurrentCredential, summary="Log in")
+@router.post(
+    "/login",
+    response_model=CurrentCredential,
+    summary="Log in",
+    responses=error_responses(
+        {
+            401: "Wrong username or password, or the credential is disabled.",
+            403: "The Origin isn't this API's or one in AUTH_WEB_ORIGINS.",
+        }
+    ),
+)
 def login(
     body: LoginRequest,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> CurrentCredential:
-    """Sets an HttpOnly session cookie.
-
-    Wrong passwords and disabled credentials get the same 401. An `Origin` other than
-    this API's or one in `AUTH_WEB_ORIGINS` gets 403.
-    """
+    """Sets an HttpOnly session cookie for the web client; scripts use HTTP Basic."""
     check_origin(request)
 
     credential = authenticate(db, body.username, body.password)
@@ -238,12 +244,19 @@ def login(
     return _current_credential(credential, credential_session)
 
 
-@router.post("/logout", status_code=204, summary="Log out")
+@router.post(
+    "/logout",
+    status_code=204,
+    summary="Log out",
+    responses=error_responses(
+        {400: "The request used Basic auth, which has no session to end."}
+    ),
+)
 def logout(
     context: AuthContext = Depends(authenticate_request),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Ends the cookie session."""
+    """Ends the current session and clears its cookie."""
     if context.session is None:
         raise HTTPException(
             status_code=400,
@@ -261,7 +274,11 @@ def logout(
     return response
 
 
-@router.get("/me", response_model=CurrentCredential, summary="Current credential")
+@router.get(
+    "/me",
+    response_model=CurrentCredential,
+    summary="Current credential",
+)
 def me(context: AuthContext = Depends(authenticate_request)) -> CurrentCredential:
-    """Call it on page load to check the session. `expires_at` is null for Basic."""
+    """Call it on page load to check the session."""
     return _current_credential(context.credential, context.session)

@@ -16,3 +16,17 @@ def test_committed_spec_is_current():
     committed = openapi.SPEC_FILE.read_text(encoding="utf-8")
 
     assert committed == openapi.render(), "docs/openapi.json is stale: run make docs"
+
+
+def test_every_error_response_documents_the_error_body():
+    spec = app_module.app.openapi()
+
+    for path, operations in spec["paths"].items():
+        for method, operation in operations.items():
+            for status, response in operation["responses"].items():
+                if not status.startswith(("4", "5")):
+                    continue
+                schema = response["content"]["application/json"]["schema"]
+                assert schema == {"$ref": "#/components/schemas/ErrorResponse"}, (
+                    f"{method.upper()} {path} {status}: add it with error_responses()"
+                )

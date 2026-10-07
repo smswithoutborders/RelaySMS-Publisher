@@ -11,7 +11,7 @@
           "Auth"
         ],
         "summary": "Log in",
-        "description": "Sets an HttpOnly session cookie.\n\nWrong passwords and disabled credentials get the same 401. An `Origin` other than\nthis API's or one in `AUTH_WEB_ORIGINS` gets 403.",
+        "description": "Sets an HttpOnly session cookie for the web client; scripts use HTTP Basic.",
         "operationId": "login_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -34,12 +34,32 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "Wrong username or password, or the credential is disabled.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Origin isn't this API's or one in AUTH_WEB_ORIGINS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -53,11 +73,41 @@
           "Auth"
         ],
         "summary": "Log out",
-        "description": "Ends the cookie session.",
+        "description": "Ends the current session and clears its cookie.",
         "operationId": "logout_v1_auth_logout_post",
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request used Basic auth, which has no session to end.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -76,7 +126,7 @@
           "Auth"
         ],
         "summary": "Current credential",
-        "description": "Call it on page load to check the session. `expires_at` is null for Basic.",
+        "description": "Call it on page load to check the session.",
         "operationId": "me_v1_auth_me_get",
         "responses": {
           "200": {
@@ -85,6 +135,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CurrentCredential"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -122,6 +182,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -142,7 +222,7 @@
           "Credentials"
         ],
         "summary": "Create credential",
-        "description": "The generated password is shown only once. Scope: creds:write.",
+        "description": "The generated password is shown only in this response. Scope: creds:write.",
         "operationId": "create_credential_v1_creds_post",
         "requestBody": {
           "content": {
@@ -165,12 +245,52 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "Invalid username, an unknown scope, or a scope without the one it requires.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when granting scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That username is already taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -233,12 +353,42 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -250,7 +400,7 @@
           "Credentials"
         ],
         "summary": "Update credential",
-        "description": "Change scopes or active. Needs If-Match. Scope: creds:write.",
+        "description": "Deactivating ends its sessions. Needs If-Match. Scope: creds:write.",
         "operationId": "update_credential_v1_creds__username__patch",
         "security": [
           {
@@ -297,12 +447,82 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "Nothing to change, an unknown scope, or a scope without the one it requires.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when changing your own credential or one with scopes you don't hold, or granting scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -344,12 +564,72 @@
           "204": {
             "description": "Successful Response"
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when changing your own credential or one with scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -400,12 +680,72 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when changing your own credential or one with scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -419,7 +759,7 @@
           "Credentials"
         ],
         "summary": "Revoke sessions",
-        "description": "Scope: creds:write.",
+        "description": "Logs it out everywhere; Basic auth still works. Scope: creds:write.",
         "operationId": "revoke_credential_sessions_v1_creds__username__revoke_sessions_post",
         "security": [
           {
@@ -449,12 +789,52 @@
           "204": {
             "description": "Successful Response"
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when changing your own credential or one with scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -468,7 +848,7 @@
           "Audit"
         ],
         "summary": "List audit events",
-        "description": "Newest first. Scope: audit:read, plus creds:read for auth and creds events.",
+        "description": "Newest first. Scope: audit:read, plus creds:read or platforms:read per area.",
         "operationId": "list_audit_events_v1_audit_events_get",
         "security": [
           {
@@ -622,12 +1002,42 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "An invalid cursor, or 'since' not before 'until'.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks audit:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -819,12 +1229,42 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "An invalid cursor, or 'since' not before 'until'.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks stats:publications:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1018,12 +1458,42 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "'since' isn't before 'until'.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks stats:publications:read. Also when grouping by failure_reason without stats:publications:reasons.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1060,12 +1530,22 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "The payload isn't base64, or isn't a RelaySMS payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1079,14 +1559,71 @@
           "Publishing"
         ],
         "summary": "Twilio SMS webhook",
-        "description": "Checks the Twilio signature, then queues the SMS for publishing.\n\nTakes Twilio's form-encoded webhook (`From`, `Body`) and answers with empty TwiML.\nReturns 404 unless `TWILIO_SMS_TRANSPORT_ENABLED=true`, and 403 without a valid\n`X-Twilio-Signature`. Payloads are tagged with protocol `sms`. Each SMS is also\nforwarded to `TWILIO_FORWARD_URLS_RAW` as Twilio's form and to\n`TWILIO_FORWARD_URLS_JSON` as `{\"sender\", \"text\", \"received_at\"}`.",
+        "description": "Checks the Twilio signature, then queues the SMS for publishing.\n\nPayloads are tagged with protocol `sms`. Each SMS is also forwarded to\n`TWILIO_FORWARD_URLS_RAW` as Twilio's form and to `TWILIO_FORWARD_URLS_JSON` as\n`{\"sender\", \"text\", \"received_at\"}`.",
         "operationId": "twilio_incoming_sms_v1_twilio_sms_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "From": {
+                    "type": "string",
+                    "description": "Sender phone number"
+                  },
+                  "Body": {
+                    "type": "string",
+                    "description": "Base64-encoded SMS payload"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object",
+                "required": [
+                  "From",
+                  "Body"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Empty TwiML, so Twilio sends no reply.",
+            "content": {
+              "text/xml": {
+                "example": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response />"
+              }
+            }
+          },
+          "400": {
+            "description": "No From or Body field. The payload isn't base64, or isn't a RelaySMS payload.",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No valid X-Twilio-Signature.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "TWILIO_SMS_TRANSPORT_ENABLED isn't true.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1099,7 +1636,7 @@
           "Platforms"
         ],
         "summary": "List platforms",
-        "description": "Platforms with an installed adapter.",
+        "description": "Platforms users can link: those with an installed, enabled adapter.",
         "operationId": "get_platforms_v1_platforms_get",
         "parameters": [
           {
@@ -1175,11 +1712,11 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "A parameter or body field is missing or invalid; the message names it.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1220,12 +1757,22 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "404": {
+            "description": "No enabled adapter for the platform, or the platform has no client metadata.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1257,19 +1804,27 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The query parameters as an HTML table.",
+            "content": {
+              "text/html": {}
+            }
+          },
+          "404": {
+            "description": "No enabled adapter for the platform, or the platform has no client metadata.",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "A parameter or body field is missing or invalid; the message names it.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1296,6 +1851,26 @@
                   },
                   "type": "array",
                   "title": "Response List Adapters V1 Platforms Adapters Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1342,12 +1917,62 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "source_url isn't a GitHub repository of an org in PLATFORMS_GITHUB_ORGS.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed. Also when the credential isn't an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already installed, or an install of it is already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The job queue is unavailable. Try again later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1411,12 +2036,42 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1476,12 +2131,72 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1493,7 +2208,7 @@
           "Platform Adapters"
         ],
         "summary": "Uninstall adapter",
-        "description": "Needs If-Match. Scope: platforms:write.\n\nRefused with 409 while accounts are linked through it; disable it instead.",
+        "description": "Needs If-Match. Scope: platforms:write.\n\nRefused while accounts are linked through it; disable it instead.",
         "operationId": "delete_adapter_v1_platforms_adapters__adapter_id__delete",
         "security": [
           {
@@ -1524,12 +2239,72 @@
           "204": {
             "description": "Successful Response"
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Accounts are linked through it, or it changed at the same moment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1591,12 +2366,72 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "The adapter's source isn't a GitHub repository of an org in PLATFORMS_GITHUB_ORGS.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed. Also when the credential isn't an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An install or update of it is already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The job queue is unavailable. Try again later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1610,7 +2445,7 @@
           "Platform Adapters"
         ],
         "summary": "Get job",
-        "description": "Scope: platforms:write.",
+        "description": "Poll until the state is succeeded or failed. Scope: platforms:write.",
         "operationId": "get_job_v1_platforms_adapters_jobs__job_id__get",
         "security": [
           {
@@ -1647,12 +2482,42 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No job with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1708,12 +2573,32 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1727,7 +2612,7 @@
           "Gateway Clients"
         ],
         "summary": "List gateway clients",
-        "description": "Numbers that relay SMS to this server.",
+        "description": "Numbers that relay SMS to this server. Country and operator ignore case.",
         "operationId": "get_gateway_clients_v1_gateway_clients_get",
         "parameters": [
           {
@@ -1801,11 +2686,11 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "A parameter or body field is missing or invalid; the message names it.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1872,12 +2757,22 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "404": {
+            "description": "No key with that ID.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1899,6 +2794,16 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "The database is unreachable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2395,6 +3300,21 @@
           "auth_method"
         ],
         "title": "CurrentCredential"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "description": "What went wrong, safe to show to users."
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "description": "The body of every error response."
       },
       "GatewayClientManifest": {
         "properties": {
@@ -2953,7 +3873,8 @@
                 "type": "null"
               }
             ],
-            "title": "Error"
+            "title": "Error",
+            "description": "Always null here; errors come back with a 4xx status."
           }
         },
         "type": "object",

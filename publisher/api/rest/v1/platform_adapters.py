@@ -8,7 +8,12 @@ from fastapi import APIRouter, Depends, Path, Request, Response, Security
 from sqlalchemy.orm import Session
 
 from publisher.api.rest.v1.auth import AuthContext, authorize
-from publisher.api.rest.v1.errors import ApiError
+from publisher.api.rest.v1.errors import (
+    CONCURRENT_CHANGE,
+    IF_MATCH_ERRORS,
+    ApiError,
+    error_responses,
+)
 from publisher.api.rest.v1.params import check_if_match, etag
 from publisher.api.rest.v1.schemas import (
     AdapterInstall,
@@ -31,9 +36,15 @@ from publisher.platforms.manager import (
 )
 from publisher.tasks.platform_task import run_adapter_job
 
-router = APIRouter(prefix="/platforms/adapters", tags=["Platform Adapters"])
+router = APIRouter(
+    prefix="/platforms/adapters",
+    tags=["Platform Adapters"],
+)
 
 ADAPTER_ID_PATH = Path(..., max_length=36, pattern=r"^[A-Za-z0-9._-]+$")
+NOT_FOUND = {404: "No adapter with that ID."}
+NOT_ADMINISTRATOR = {403: "Also when the credential isn't an administrator."}
+QUEUE_DOWN = {503: "The job queue is unavailable. Try again later."}
 
 
 def _etag(adapter: PlatformAdapter) -> str:
@@ -101,7 +112,12 @@ def list_adapters(
     return [_info(adapter, names) for adapter in adapters]
 
 
-@router.get("/{adapter_id}", response_model=PlatformAdapterInfo, summary="Get adapter")
+@router.get(
+    "/{adapter_id}",
+    response_model=PlatformAdapterInfo,
+    summary="Get adapter",
+    responses=error_responses(NOT_FOUND),
+)
 def get_adapter(
     response: Response,
     adapter_id: str = ADAPTER_ID_PATH,
@@ -113,7 +129,10 @@ def get_adapter(
 
 
 @router.patch(
-    "/{adapter_id}", response_model=PlatformAdapterInfo, summary="Enable or disable"
+    "/{adapter_id}",
+    response_model=PlatformAdapterInfo,
+    summary="Enable or disable",
+    responses=error_responses(NOT_FOUND, CONCURRENT_CHANGE, IF_MATCH_ERRORS),
 )
 def update_adapter(
     body: PlatformAdapterUpdate,
@@ -135,7 +154,16 @@ def update_adapter(
     return _respond(db, response, adapter)
 
 
-@router.delete("/{adapter_id}", status_code=204, summary="Uninstall adapter")
+@router.delete(
+    "/{adapter_id}",
+    status_code=204,
+    summary="Uninstall adapter",
+    responses=error_responses(
+        NOT_FOUND,
+        IF_MATCH_ERRORS,
+        {409: "Accounts are linked through it, or it changed at the same moment."},
+    ),
+)
 def delete_adapter(
     request: Request,
     adapter_id: str = ADAPTER_ID_PATH,
@@ -144,7 +172,7 @@ def delete_adapter(
 ) -> Response:
     """Needs If-Match. Scope: platforms:write.
 
-    Refused with 409 while accounts are linked through it; disable it instead.
+    Refused while accounts are linked through it; disable it instead.
     """
     adapter = _load(db, adapter_id)
     check_if_match(request, _etag(adapter), "adapter")
@@ -191,7 +219,19 @@ def _queue(
 
 
 @router.post(
-    "", response_model=AdapterJobInfo, status_code=202, summary="Install adapter"
+    "",
+    response_model=AdapterJobInfo,
+    status_code=202,
+    summary="Install adapter",
+    responses=error_responses(
+        NOT_ADMINISTRATOR,
+        QUEUE_DOWN,
+        {
+            400: "source_url isn't a GitHub repository of an org in "
+            "PLATFORMS_GITHUB_ORGS.",
+            409: "Already installed, or an install of it is already running.",
+        },
+    ),
 )
 def install_adapter(
     body: AdapterInstall,
@@ -223,6 +263,16 @@ def install_adapter(
     response_model=AdapterJobInfo,
     status_code=202,
     summary="Update adapter",
+    responses=error_responses(
+        NOT_ADMINISTRATOR,
+        QUEUE_DOWN,
+        NOT_FOUND,
+        {
+            400: "The adapter's source isn't a GitHub repository of an org in "
+            "PLATFORMS_GITHUB_ORGS.",
+            409: "An install or update of it is already running.",
+        },
+    ),
 )
 def update_adapter_version(
     body: AdapterUpgrade,
@@ -249,13 +299,18 @@ def update_adapter_version(
     )
 
 
-@router.get("/jobs/{job_id}", response_model=AdapterJobInfo, summary="Get job")
+@router.get(
+    "/jobs/{job_id}",
+    response_model=AdapterJobInfo,
+    summary="Get job",
+    responses=error_responses({404: "No job with that ID."}),
+)
 def get_job(
     job_id: uuid.UUID,
     context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
     db: Session = Depends(get_db),
 ) -> AdapterJobInfo:
-    """Scope: platforms:write."""
+    """Poll until the state is succeeded or failed. Scope: platforms:write."""
     job = db.get(jobs.PlatformAdapterJob, job_id)
     if job is None:
         raise ApiError(404, "Job not found.")
@@ -263,7 +318,9 @@ def get_job(
 
 
 @router.get(
-    "/{adapter_id}/jobs", response_model=list[AdapterJobInfo], summary="List jobs"
+    "/{adapter_id}/jobs",
+    response_model=list[AdapterJobInfo],
+    summary="List jobs",
 )
 def list_jobs(
     adapter_id: str = ADAPTER_ID_PATH,

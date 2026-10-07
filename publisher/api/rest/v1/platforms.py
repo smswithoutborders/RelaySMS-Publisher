@@ -5,10 +5,11 @@ import json
 import logging
 from pathlib import Path as PathLib
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from publisher.api.rest.v1.errors import error_responses
 from publisher.api.rest.v1.params import NAME_PATTERN, filter_query
 from publisher.api.rest.v1.schemas import OAuthClientMetadata, PlatformManifest
 from publisher.db import get_db
@@ -29,6 +30,9 @@ ALLOWED_PLATFORM_MANIFEST_KEYS = [
     "icon_png",
 ]
 ALLOWED_PLATFORMS_WITH_CLIENT_METADATA = ["bluesky"]
+CLIENT_METADATA_404 = (
+    "No enabled adapter for the platform, or the platform has no client metadata."
+)
 
 
 @router.get("", summary="List platforms")
@@ -38,7 +42,7 @@ def get_platforms(
     cat_id: int | None = Query(None, description="Filter by category ID"),
     db: Session = Depends(get_db),
 ) -> list[PlatformManifest]:
-    """Platforms with an installed adapter."""
+    """Platforms users can link: those with an installed, enabled adapter."""
     manifests = platform_adapters.find(db, name=name, proto_id=proto_id, cat_id=cat_id)
 
     return [
@@ -54,7 +58,9 @@ def get_platforms(
 
 
 @router.get(
-    "/{platform_name}/oauth/client-metadata.json", summary="OAuth client metadata"
+    "/{platform_name}/oauth/client-metadata.json",
+    summary="OAuth client metadata",
+    responses=error_responses({404: CLIENT_METADATA_404}),
 )
 def get_platform_oauth_client_metadata(
     platform_name: str = Path(..., description="Platform name", pattern=NAME_PATTERN),
@@ -90,7 +96,19 @@ def get_platform_oauth_client_metadata(
         ) from exc
 
 
-@router.get("/{platform_name}/oauth/callback", summary="OAuth callback")
+@router.get(
+    "/{platform_name}/oauth/callback",
+    summary="OAuth callback",
+    # Not HTMLResponse: that would list the JSON errors as text/html too.
+    response_class=Response,
+    responses={
+        200: {
+            "description": "The query parameters as an HTML table.",
+            "content": {"text/html": {}},
+        },
+        **error_responses({404: CLIENT_METADATA_404}),
+    },
+)
 async def oauth_callback(
     request: Request,
     platform_name: str = Path(..., description="Platform name", pattern=NAME_PATTERN),
