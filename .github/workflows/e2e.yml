@@ -2,13 +2,25 @@ name: E2E
 
 # Installs, updates and uninstalls in a systemd container on each supported distro.
 on:
+  # Checks runs it before each deploy, so PRs need it only for install changes.
   pull_request:
     branches:
       - staging
       - main
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
+    paths:
+      - "install.sh"
+      - "manage.sh"
+      - "publisher.sh"
+      - "sync-env.sh"
+      - "template.env"
+      - "Makefile"
+      - "alembic.ini"
+      - "requirements*.txt"
+      - "scripts/**"
+      - "deploy/**"
+      - "migrations/**"
+      - "tests/e2e/**"
+      - ".github/workflows/e2e.yml"
   workflow_call:
   workflow_dispatch:
 
@@ -21,8 +33,9 @@ jobs:
     permissions:
       contents: read
 
+    # Cancelling a push run would skip its deploy and its [migrate].
     concurrency:
-      group: e2e-${{ github.ref }}-${{ matrix.distro }}
+      group: e2e-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}-${{ matrix.distro }}
       cancel-in-progress: true
 
     strategy:
