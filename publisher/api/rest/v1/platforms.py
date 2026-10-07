@@ -130,7 +130,7 @@ async def oauth_callback(
         f"<tr><td>{html.escape(key)}</td><td>{html.escape(str(value))}</td></tr>"
         for key, value in request.query_params.items()
     )
-    platform_display_name = platform_name.capitalize()
+    platform_display_name = html.escape(platform_name.capitalize())
 
     return HTMLResponse(
         content=f"""

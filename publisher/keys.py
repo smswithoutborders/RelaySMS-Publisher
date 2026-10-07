@@ -215,11 +215,11 @@ def pop_token_keys(
         raise KeyNotFoundError("Token hash not found", platform_name=token.platform)
 
     try:
-        keys = pop_keys(session, token_hash.id, key_id)
+        ss_kid, es_kid, es_kid_pk, ec_kid_pk = pop_keys(session, token_hash.id, key_id)
     except KeyUnavailableError as exc:
         exc.platform_name = token.platform
         raise
-    return token, token_hash, *keys
+    return token, token_hash, ss_kid, es_kid, es_kid_pk, ec_kid_pk
 
 
 def verify_token(

@@ -86,8 +86,15 @@ def invoke(
 
         try:
             response = json.loads(clean_stdout)
-        except json.JSONDecodeError:
-            logger.error("Malformed JSON response received: %s", clean_stdout)
+        except json.JSONDecodeError as e:
+            logger.error(
+                "Malformed JSON response from %s's %s (%d bytes): %s at char %d",
+                a_base.name,
+                method,
+                len(clean_stdout),
+                e.msg,
+                e.pos,
+            )
             return {"result": None, "error": "Invalid JSON response payload."}
 
         logger.info("Completed method '%s' successfully", method)

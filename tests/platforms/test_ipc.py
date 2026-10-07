@@ -22,7 +22,7 @@ elif method == "crash":
     print("boom", file=sys.stderr)
     sys.exit(3)
 elif method == "garbage":
-    print("not json")
+    print('{"result": {"access_token": "s3cret"')
 elif method == "warn":
     print("2026-01-01 00:00:00,000 - adapter - WARNING - careful", file=sys.stderr)
     print(json.dumps({"result": True}))
@@ -58,11 +58,14 @@ def test_a_crashing_adapter_raises_with_its_stderr(adapter):
         ipc.invoke(adapter.path, adapter.venv, "crash")
 
 
-def test_output_that_is_not_json_becomes_an_error(adapter):
-    assert (
-        ipc.invoke(adapter.path, adapter.venv, "garbage")["error"]
-        == "Invalid JSON response payload."
-    )
+def test_output_that_is_not_json_becomes_an_error_without_being_logged(adapter, caplog):
+    caplog.set_level(logging.DEBUG, logger=ipc.__name__)
+
+    result = ipc.invoke(adapter.path, adapter.venv, "garbage")
+
+    assert result["error"] == "Invalid JSON response payload."
+    assert "Malformed JSON response from adapter's garbage" in caplog.text
+    assert "s3cret" not in caplog.text
 
 
 def test_adapter_log_lines_keep_their_severity(adapter, caplog):
