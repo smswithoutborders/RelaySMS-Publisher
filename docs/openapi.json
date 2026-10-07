@@ -2622,7 +2622,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 20
                 },
                 {
                   "type": "null"
@@ -2640,7 +2641,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 100
                 },
                 {
                   "type": "null"
@@ -2658,7 +2660,8 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 100
                 },
                 {
                   "type": "null"
@@ -2687,6 +2690,571 @@
           },
           "422": {
             "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/gateway-clients/registry": {
+      "get": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "List all clients",
+        "description": "Every gateway client, disabled ones included. Scope: gc:read.",
+        "operationId": "list_clients_v1_gateway_clients_registry_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GatewayClientInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Clients V1 Gateway Clients Registry Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:read"
+            ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Add client",
+        "description": "Country, operator and operator code are resolved if omitted. Scope: gc:write.",
+        "operationId": "create_client_v1_gateway_clients_registry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GatewayClientCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayClientInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An invalid MSISDN or operator code, or details that can't be resolved from the MSISDN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That MSISDN is already registered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:write"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/gateway-clients/registry/suggest": {
+      "get": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Suggest client details",
+        "description": "Details and PLMN candidates to confirm before adding. Scope: gc:write.",
+        "operationId": "suggest_client_v1_gateway_clients_registry_suggest_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "msisdn",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 20,
+              "description": "Phone number in E.164",
+              "title": "Msisdn"
+            },
+            "description": "Phone number in E.164"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayClientSuggestion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The MSISDN isn't in E.164 format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/gateway-clients/registry/{client_id}": {
+      "get": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Get client",
+        "description": "Returns the ETag to send as If-Match. Scope: gc:read.",
+        "operationId": "get_client_v1_gateway_clients_registry__client_id__get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayClientInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No gateway client with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Change client",
+        "description": "Needs If-Match. Omitted fields stay as they are. Scope: gc:write.",
+        "operationId": "update_client_v1_gateway_clients_registry__client_id__patch",
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GatewayClientUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayClientInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An invalid operator code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No gateway client with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Delete client",
+        "description": "Needs If-Match. To hide it for a while, disable it instead. Scope: gc:write.",
+        "operationId": "delete_client_v1_gateway_clients_registry__client_id__delete",
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No gateway client with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2965,7 +3533,12 @@
           "platforms.update",
           "platforms.remove",
           "platforms.enable",
-          "platforms.disable"
+          "platforms.disable",
+          "gateway_clients.create",
+          "gateway_clients.update",
+          "gateway_clients.enable",
+          "gateway_clients.disable",
+          "gateway_clients.delete"
         ],
         "title": "AuditAction",
         "description": "Named <area>.<verb>. Reading an area's events also needs its read scope."
@@ -3316,6 +3889,179 @@
         "title": "ErrorResponse",
         "description": "The body of every error response."
       },
+      "GatewayClientCandidate": {
+        "properties": {
+          "operator_code": {
+            "type": "string",
+            "title": "Operator Code",
+            "description": "PLMN code (MCC + MNC)"
+          },
+          "network": {
+            "type": "string",
+            "title": "Network",
+            "description": "Name in the bundled MCC/MNC table"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operator_code",
+          "network"
+        ],
+        "title": "GatewayClientCandidate"
+      },
+      "GatewayClientCreate": {
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Msisdn",
+            "description": "Phone number in E.164 format"
+          },
+          "protocols": {
+            "items": {
+              "type": "string",
+              "maxLength": 32,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Protocols"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country",
+            "description": "Resolved from the MSISDN when omitted."
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator",
+            "description": "Resolved from the MSISDN when omitted."
+          },
+          "operator_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 6
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Code",
+            "description": "PLMN code (MCC + MNC). Resolved from the MSISDN when omitted."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "msisdn",
+          "protocols"
+        ],
+        "title": "GatewayClientCreate"
+      },
+      "GatewayClientInfo": {
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "title": "Msisdn",
+            "description": "Phone number in E.164 format"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "operator": {
+            "type": "string",
+            "title": "Operator"
+          },
+          "operator_code": {
+            "type": "string",
+            "title": "Operator Code",
+            "description": "PLMN code (MCC + MNC)"
+          },
+          "protocols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Protocols",
+            "description": "How clients reach this server"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "Username; null for the CLI or a deleted credential."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Username; null for the CLI or a deleted credential."
+          }
+        },
+        "type": "object",
+        "required": [
+          "msisdn",
+          "country",
+          "operator",
+          "operator_code",
+          "protocols",
+          "id",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GatewayClientInfo"
+      },
       "GatewayClientManifest": {
         "properties": {
           "msisdn": {
@@ -3354,6 +4100,173 @@
           "protocols"
         ],
         "title": "GatewayClientManifest"
+      },
+      "GatewayClientSuggestion": {
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "title": "Msisdn"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "iso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iso",
+            "description": "ISO 3166-1 alpha-2, lowercase"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code",
+            "description": "Country calling code"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator",
+            "description": "Carrier name for the number"
+          },
+          "operator_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Code",
+            "description": "Set only when every candidate has the same PLMN code."
+          },
+          "match": {
+            "type": "string",
+            "enum": [
+              "carrier",
+              "region",
+              "none"
+            ],
+            "title": "Match",
+            "description": "carrier: candidates match the number's carrier. region: every operator in its country. none: the number couldn't be placed."
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/GatewayClientCandidate"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "description": "Best matches first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "msisdn",
+          "match",
+          "candidates"
+        ],
+        "title": "GatewayClientSuggestion"
+      },
+      "GatewayClientUpdate": {
+        "properties": {
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator"
+          },
+          "operator_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 6
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Code"
+          },
+          "protocols": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 32,
+                  "minLength": 1
+                },
+                "type": "array",
+                "maxItems": 8,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocols"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled",
+            "description": "Disabled clients aren't listed."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GatewayClientUpdate"
       },
       "HTTPValidationError": {
         "properties": {

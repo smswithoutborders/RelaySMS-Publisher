@@ -8,7 +8,6 @@ from publisher.config import (
     AuthConfig,
     CeleryConfig,
     DatabaseConfig,
-    GatewayClientsConfig,
     GrpcConfig,
     LoggingConfig,
     OfflinePublishConfig,
@@ -192,17 +191,11 @@ def test_offline_shared_secret_must_be_a_key():
     assert offline.shared_secret == KEY
 
 
-def test_registry_paths_default_to_data_dir():
-    assert load(GatewayClientsConfig).registry_file == (
-        config.ROOT / "data" / "gateway_clients" / "registry.json"
-    )
-
-
 def test_template_env_paths_match_defaults():
     # scripts/lib.sh falls back to template.env for paths unset in .env.
     template = dotenv_values(config.ROOT / "template.env")
     database, celery = load(DatabaseConfig), load(CeleryConfig)
-    platforms, gateway_clients = load(PlatformsConfig), load(GatewayClientsConfig)
+    platforms = load(PlatformsConfig)
     defaults = {
         "SQLITE_DATABASE_PATH": database.sqlite_path,
         "CELERY_BROKER_DB_PATH": celery.broker_db_path,
@@ -211,7 +204,6 @@ def test_template_env_paths_match_defaults():
         "PLATFORMS_ADAPTERS_DIR": platforms.adapters_dir,
         "PLATFORMS_ADAPTERS_VENV_DIR": platforms.adapters_venv_dir,
         "PLATFORMS_ADAPTERS_ASSETS_DIR": platforms.adapters_assets_dir,
-        "GATEWAY_CLIENTS_REGISTRY_FILE": gateway_clients.registry_file,
     }
 
     for key, default in defaults.items():

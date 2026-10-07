@@ -480,20 +480,6 @@ class PlatformsConfig(Section):
 
 
 @dataclass(frozen=True)
-class GatewayClientsConfig(Section):
-    registry_file: Path
-
-    @classmethod
-    def load(cls, read: _Reader) -> Self:
-        return cls(
-            registry_file=read.get_path(
-                "GATEWAY_CLIENTS_REGISTRY_FILE",
-                ROOT / "data" / "gateway_clients" / "registry.json",
-            )
-        )
-
-
-@dataclass(frozen=True)
 class AuthConfig(Section):
     idle_timeout: datetime.timedelta
     max_age: datetime.timedelta

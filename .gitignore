@@ -127,6 +127,9 @@ venv/
 
 # Written by install.sh into the install directory
 .instance-name
+
+# Runtime data: adapters, their venvs and assets, gateway client imports
+/data/
 ENV/
 env.bak/
 venv.bak/

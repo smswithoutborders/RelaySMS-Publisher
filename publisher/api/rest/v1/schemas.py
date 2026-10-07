@@ -3,12 +3,16 @@
 import datetime
 import uuid
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from publisher.models.credential import MAX_USERNAME_LENGTH
 from publisher.publications import PublishContentRequest
+
+USERNAME_FIELD = Field(
+    None, description="Username; null for the CLI or a deleted credential."
+)
 
 
 class PlatformManifest(BaseModel):
@@ -23,6 +27,7 @@ class PlatformManifest(BaseModel):
 
 
 class GatewayClientManifest(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     msisdn: str = Field(..., description="Phone number in E.164 format")
     country: str
     operator: str
@@ -187,18 +192,78 @@ class PlatformAdapterInfo(PlatformManifest):
     commit: str
     enabled: bool
     created_at: datetime.datetime
-    created_by: str | None = Field(
-        None, description="Username; null for the CLI or a deleted credential."
-    )
+    created_by: str | None = USERNAME_FIELD
     updated_at: datetime.datetime
-    updated_by: str | None = Field(
-        None, description="Username; null for the CLI or a deleted credential."
-    )
+    updated_by: str | None = USERNAME_FIELD
 
 
 class PlatformAdapterUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool
+
+
+Protocol = Annotated[str, Field(min_length=1, max_length=32)]
+
+
+class GatewayClientInfo(GatewayClientManifest):
+    id: uuid.UUID
+    enabled: bool
+    created_at: datetime.datetime
+    created_by: str | None = USERNAME_FIELD
+    updated_at: datetime.datetime
+    updated_by: str | None = USERNAME_FIELD
+
+
+class GatewayClientCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    msisdn: str = Field(..., max_length=20, description="Phone number in E.164 format")
+    protocols: list[Protocol] = Field(..., min_length=1, max_length=8)
+    country: str | None = Field(
+        None, max_length=100, description="Resolved from the MSISDN when omitted."
+    )
+    operator: str | None = Field(
+        None, max_length=100, description="Resolved from the MSISDN when omitted."
+    )
+    operator_code: str | None = Field(
+        None,
+        max_length=6,
+        description="PLMN code (MCC + MNC). Resolved from the MSISDN when omitted.",
+    )
+
+
+class GatewayClientUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    country: str | None = Field(None, min_length=1, max_length=100)
+    operator: str | None = Field(None, min_length=1, max_length=100)
+    operator_code: str | None = Field(None, max_length=6)
+    protocols: list[Protocol] | None = Field(None, min_length=1, max_length=8)
+    enabled: bool | None = Field(None, description="Disabled clients aren't listed.")
+
+
+class GatewayClientCandidate(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    operator_code: str = Field(..., description="PLMN code (MCC + MNC)")
+    network: str = Field(..., description="Name in the bundled MCC/MNC table")
+
+
+class GatewayClientSuggestion(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    msisdn: str
+    country: str | None = None
+    iso: str | None = Field(None, description="ISO 3166-1 alpha-2, lowercase")
+    country_code: str | None = Field(None, description="Country calling code")
+    operator: str | None = Field(None, description="Carrier name for the number")
+    operator_code: str | None = Field(
+        None, description="Set only when every candidate has the same PLMN code."
+    )
+    match: Literal["carrier", "region", "none"] = Field(
+        ...,
+        description="carrier: candidates match the number's carrier. region: "
+        "every operator in its country. none: the number couldn't be placed.",
+    )
+    candidates: list[GatewayClientCandidate] = Field(
+        ..., description="Best matches first."
+    )
 
 
 TAG_FIELD = Field(

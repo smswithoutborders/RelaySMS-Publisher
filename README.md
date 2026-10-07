@@ -194,7 +194,7 @@ Each platform is served by an adapter installed from its own repository. `GET /v
 
 ## Gateway clients
 
-Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/gateway-clients` lists them, and [gateway_clients/README.md](gateway_clients/README.md) covers managing them.
+Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/gateway-clients` lists the enabled ones, and [gateway_clients/README.md](gateway_clients/README.md) covers managing them.
 
 ## Credentials
 
@@ -220,7 +220,7 @@ Credentials log in to the REST API, each with its own scopes. One holding every 
 - [gRPC API](docs/grpc.md): linking accounts and syncing keys
 - [SMTP Transport](docs/smtp.md): publishing payloads sent by email
 - [Platform Adapters](platforms/README.md): installing and managing adapters
-- [Gateway Clients](gateway_clients/README.md): managing the gateway client registry
+- [Gateway Clients](gateway_clients/README.md): managing gateway clients
 - [Observability](observability/README.md): tracing, metrics, logs and uptime monitoring
 - [Reference Client](tools/README.md): exercising the gRPC and REST flows by hand
 - [Contributing](CONTRIBUTING.md): setup, workflow, conventions and testing

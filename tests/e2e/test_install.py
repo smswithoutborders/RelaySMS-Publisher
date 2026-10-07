@@ -33,7 +33,6 @@ DATA_DIRS = [
     "data/platforms/adapters",
     "data/platforms/venvs",
     "data/platforms/assets",
-    "data/gateway_clients",
 ]
 DATA_RW_PATHS = "ReadWritePaths=" + " ".join(f"{D}/{path}" for path in DATA_DIRS)
 # Env var, then the path before and after scripts/migrate-runtime-data.sh.

@@ -1,40 +1,39 @@
-# Gateway Clients Module
+# Gateway Clients
 
-Registered clients are also readable via the REST API: see `GET /v1/gateway-clients` in the [REST API reference](../docs/openapi.json).
-
-```bash
-GATEWAY_CLIENTS_REGISTRY_FILE=data/gateway_clients/registry.json
-```
-
-> [!IMPORTANT]
-> Use `./publisher.sh gateway-clients`, not `python3 -m publisher gateway-clients` directly. It resolves the install dir, loads `.env`, and runs as the service user so the registry file's ownership doesn't drift.
+Gateway clients are the phone numbers that relay SMS to this server. They're stored in the `gateway_clients` table and listed publicly at `GET /v1/gateway-clients`; credentials with `gc:read` and `gc:write` manage them over the [REST API](../docs/rest.md#managing-gateway-clients). Every change is in the audit log.
 
 ## Commands
 
 ```bash
+./publisher.sh gateway-clients suggest <MSISDN>                 # details and PLMN candidates; saves nothing
 ./publisher.sh gateway-clients create --msisdn <MSISDN> --protocols <PROTOCOL,...> [--country] [--operator] [--operator-code]
 ./publisher.sh gateway-clients list [--msisdn] [--country] [--operator]
 ./publisher.sh gateway-clients update <MSISDN> [--country] [--operator] [--operator-code] [--protocols]
+./publisher.sh gateway-clients disable <MSISDN>                 # hide it from the public list
+./publisher.sh gateway-clients enable <MSISDN>
 ./publisher.sh gateway-clients delete <MSISDN>
 ./publisher.sh gateway-clients countries
 ./publisher.sh gateway-clients operators --country <COUNTRY>
+./publisher.sh gateway-clients mcc-mnc list [--country-code] [--network] [--iso]   # search the PLMN table
 ```
 
-`create` resolves country, operator, and PLMN code from the MSISDN automatically; you only supply the MSISDN and protocol(s). If that fails or is ambiguous (e.g. AT&T has nine PLMNs in the US), pass `--country`/`--operator`/`--operator-code` directly. The error message lists candidates when ambiguous. This is common for US/Canada numbers, since `phonenumbers` has little NANP carrier data.
+`create` fills in what you leave out from `suggest`, the PLMN code only when it's unambiguous. Otherwise pick a candidate and pass it with `--operator-code`.
 
-## MCC/MNC (PLMN) Lookup
+## How Suggest Works
 
-Resolution uses `phonenumbers` to get a country, ISO region, and carrier name, then matches the carrier against a PLMN table scoped to that region (needed since NANP countries share country code 1). Still best-effort, and only auto-applied when the match is unambiguous.
+`phonenumbers` gives the number's country, region and carrier name. The carrier is matched against that region's operators in `publisher/gateway_clients/mcc_mnc_table.json`, a vendored snapshot of [musalbas/mcc-mnc-table](https://github.com/musalbas/mcc-mnc-table). A territory without rows of its own, like Guernsey, uses its calling code's main region.
 
-The table is two files, checked in order:
+Names are compared word by word, ignoring case, accents, company-type words ("Telecom", "Ltd", "Mobile") and the country's name, so "MTN Cameroon" matches "MTN" and "Beeline" matches "Bee Line/Unitel". Words many of the region's networks share count only weakly.
 
-- `mcc_mnc_overrides.json`: admin-managed, checked first; kept next to the registry (`data/gateway_clients/` by default)
-- `mcc_mnc_table.json` (in `publisher/gateway_clients/`): vendored snapshot of [musalbas/mcc-mnc-table](https://github.com/musalbas/mcc-mnc-table).
+| `match` | Candidates |
+| --- | --- |
+| `carrier` | Networks matching the carrier, best first. The PLMN code is filled in only when they all share one. |
+| `region` | Every operator in the country, because the carrier is unknown (common for US and Canadian numbers) or matched nothing |
+| `none` | None: the number couldn't be placed. Enter the details yourself. |
 
-```bash
-./publisher.sh gateway-clients mcc-mnc list [--country-code] [--network] [--iso]
-./publisher.sh gateway-clients mcc-mnc add-override --mcc <MCC> --mnc <MNC> --country-code <CC> --network <NAME> --country <COUNTRY> [--iso <ISO>]
-./publisher.sh gateway-clients mcc-mnc remove-override --mcc <MCC> --mnc <MNC>
-```
+> [!TIP]
+> A PLMN missing from the snapshot can still be entered with `--operator-code`.
 
-Commit override additions. They're general PLMN fixes useful to any deployment, not local state.
+## Upgrading From the JSON Registry
+
+Migration 019 imports `data/gateway_clients/registry.json` (or `GATEWAY_CLIENTS_REGISTRY_FILE`, if `.env` still sets it). MCC/MNC overrides are no longer used; the migration logs any it finds instead. Both files can then be deleted.

@@ -1,39 +1,29 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 
 from publisher.api.rest.v1.schemas import GatewayClientManifest
-from publisher.gateway_clients.manager import GatewayClientManager
+from publisher.db import get_db
+from publisher.models import gateway_client as gateway_clients
 
 router = APIRouter(prefix="/gateway-clients", tags=["Gateway Clients"])
-
-ALLOWED_GATEWAY_CLIENT_MANIFEST_KEYS = [
-    "msisdn",
-    "country",
-    "operator",
-    "operator_code",
-    "protocols",
-]
 
 
 @router.get("", summary="List gateway clients")
 def get_gateway_clients(
-    request: Request,
-    msisdn: str | None = Query(None, description="Filter by MSISDN"),
-    country: str | None = Query(None, description="Filter by country"),
-    operator: str | None = Query(None, description="Filter by operator"),
+    msisdn: str | None = Query(None, max_length=20, description="Filter by MSISDN"),
+    country: str | None = Query(None, max_length=100, description="Filter by country"),
+    operator: str | None = Query(
+        None, max_length=100, description="Filter by operator"
+    ),
+    db: Session = Depends(get_db),
 ) -> list[GatewayClientManifest]:
     """Numbers that relay SMS to this server. Country and operator ignore case."""
-    manager: GatewayClientManager = request.app.state.gateway_client_manager
-    manifests = manager.list_clients(msisdn=msisdn, country=country, operator=operator)
-
     return [
-        GatewayClientManifest(
-            **{
-                key: getattr(manifest, key)
-                for key in ALLOWED_GATEWAY_CLIENT_MANIFEST_KEYS
-            }
+        GatewayClientManifest.model_validate(client)
+        for client in gateway_clients.find(
+            db, msisdn=msisdn, country=country, operator=operator
         )
-        for manifest in manifests
     ]

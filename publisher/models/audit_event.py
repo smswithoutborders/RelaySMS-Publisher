@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Who did what to credentials and platform adapters, kept for review."""
+"""Who changed what, kept for review."""
 
 import datetime
 import uuid
@@ -14,6 +14,7 @@ from publisher.db import Base, pagination
 from publisher.db.pagination import Cursor, Page
 from publisher.db.types import UTCDateTime, utc_now
 from publisher.models.credential import MAX_USERNAME_LENGTH, Credential, Scope
+from publisher.models.gateway_client import GatewayClient
 from publisher.models.platform_adapter import PlatformAdapter
 
 
@@ -32,6 +33,11 @@ class AuditAction(StrEnum):
     PLATFORMS_REMOVE = "platforms.remove"
     PLATFORMS_ENABLE = "platforms.enable"
     PLATFORMS_DISABLE = "platforms.disable"
+    GATEWAY_CLIENTS_CREATE = "gateway_clients.create"
+    GATEWAY_CLIENTS_UPDATE = "gateway_clients.update"
+    GATEWAY_CLIENTS_ENABLE = "gateway_clients.enable"
+    GATEWAY_CLIENTS_DISABLE = "gateway_clients.disable"
+    GATEWAY_CLIENTS_DELETE = "gateway_clients.delete"
 
 
 class AuditOutcome(StrEnum):
@@ -46,7 +52,20 @@ AREA_SCOPES = {
     "auth": Scope.CREDS_READ,
     "creds": Scope.CREDS_READ,
     "platforms": Scope.PLATFORMS_READ,
+    "gateway_clients": Scope.GC_READ,
 }
+
+Target = Credential | PlatformAdapter | GatewayClient
+
+
+def _label(target: Target) -> str:
+    match target:
+        case Credential():
+            return target.username
+        case PlatformAdapter():
+            return target.name
+        case GatewayClient():
+            return target.msisdn
 
 
 class AuditEvent(Base):
@@ -76,7 +95,7 @@ def record(
     action: AuditAction,
     *,
     actor: Credential | None,
-    target: Credential | PlatformAdapter | None = None,
+    target: Target | None = None,
     outcome: AuditOutcome = AuditOutcome.SUCCESS,
     details: dict[str, Any] | None = None,
 ) -> None:
@@ -86,11 +105,7 @@ def record(
             actor_username=actor.username if actor else None,
             action=action,
             target_id=str(target.id) if target else None,
-            target_label=(
-                target.username if isinstance(target, Credential) else target.name
-            )
-            if target
-            else None,
+            target_label=_label(target) if target else None,
             outcome=outcome,
             details=details,
         )

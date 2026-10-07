@@ -96,7 +96,7 @@ Create the directories referenced in `.env` and assign ownership to the service 
 ```bash
 SERVICE_USER=$(whoami)
 
-sudo mkdir -p data/platforms/adapters data/platforms/venvs data/platforms/assets data/gateway_clients
+sudo mkdir -p data/platforms/adapters data/platforms/venvs data/platforms/assets
 sudo chown -R "$SERVICE_USER": data && sudo chmod -R 750 data
 ```
 

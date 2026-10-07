@@ -35,6 +35,10 @@ A credential can only grant scopes it holds, can't change itself, and can't chan
 
 Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/adapters/{id}/update`) run code from the repository on the server, so they need an administrator and a GitHub repository of an org in `PLATFORMS_GITHUB_ORGS`. Both take an optional `tag`, defaulting to the newest version tag, and return `202` with the job's URL in `Location`. Poll the job until its `state` is `succeeded` or `failed`; its `log` has the end of the git and pip output. An adapter has one job at a time; another gets `409`.
 
+## Managing Gateway Clients
+
+`/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm; see [how suggest works](../gateway_clients/README.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.
+
 ## Pagination
 
 List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first. Follow `next` and `prev` as they are: they keep your filters and `limit`, and are `null` on the last and first page. Don't build the `cursor` yourself.
@@ -43,7 +47,7 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 ## Audit Events
 
-`GET /v1/audit-events` needs `audit:read`, and each area also needs its read scope: `creds:read` for `auth.*` and `creds.*` events, `platforms:read` for `platforms.*`. Events from areas you can't read are left out.
+`GET /v1/audit-events` needs `audit:read`, and each area also needs its read scope: `creds:read` for `auth.*` and `creds.*` events, `platforms:read` for `platforms.*`, `gc:read` for `gateway_clients.*`. Events from areas you can't read are left out.
 
 | Action | Recorded when |
 | :--- | :--- |
@@ -52,6 +56,8 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 | `auth.logout` | A web session ends |
 | `platforms.add`, `platforms.update`, `platforms.remove` | An adapter is installed, updated or removed. `details` has the source URL and commits. |
 | `platforms.enable`, `platforms.disable` | An adapter is offered to users again, or hidden from them |
+| `gateway_clients.create`, `gateway_clients.update`, `gateway_clients.delete` | A gateway client changes. `details` has its fields, or what changed. |
+| `gateway_clients.enable`, `gateway_clients.disable` | A gateway client is listed publicly again, or hidden |
 
 `outcome` is `success`, `denied` (the change went beyond the actor's scopes) or `failed` (a refused login for an existing username: wrong password or disabled). Successful HTTP Basic requests aren't recorded, since every request authenticates. `actor` is the username at the time, and null for the CLI or a failed login. Events are kept for `AUDIT_RETENTION_DAYS` (365 by default).
 
@@ -70,8 +76,8 @@ Error bodies are `{"error": "<message>"}`. The message is meant to be shown to u
 | `400 Bad Request` | Invalid parameters or payload, invalid cursor, or invalid time window |
 | `401 Unauthorized` | Missing or invalid credentials |
 | `403 Forbidden` | Origin not allowed, missing scope, or a credential change beyond your scopes |
-| `404 Not Found` | Platform, key or credential not found |
-| `409 Conflict` | Username taken, or the credential changed during the request; retry |
+| `404 Not Found` | The resource doesn't exist |
+| `409 Conflict` | Already exists, in use, or changed by another request at the same moment; retry |
 | `412 Precondition Failed` | `If-Match` doesn't match the current `ETag`; reload and retry |
 | `422 Unprocessable Entity` | Validation error |
 | `428 Precondition Required` | `If-Match` header missing |

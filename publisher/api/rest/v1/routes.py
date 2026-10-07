@@ -6,6 +6,7 @@ from publisher.api.rest.v1 import (
     audit,
     auth,
     creds,
+    gateway_client_registry,
     gateway_clients,
     platform_adapters,
     platforms,
@@ -25,6 +26,7 @@ for module in (
     platforms,
     platform_adapters,
     gateway_clients,
+    gateway_client_registry,
     server_keys,
 ):
     router.include_router(module.router)

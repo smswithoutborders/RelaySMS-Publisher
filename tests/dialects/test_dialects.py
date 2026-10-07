@@ -3,6 +3,7 @@
 
 import datetime
 import hashlib
+import json
 
 import pytest
 from alembic import command
@@ -16,6 +17,7 @@ from publisher import credentials, db, keys
 from publisher.credentials import CredentialConflictError, CredentialExistsError
 from publisher.db import Base, pagination
 from publisher.models import audit_event, publication_stats
+from publisher.models import gateway_client as gateway_clients
 from publisher.models import platform_adapter_job as jobs
 from publisher.models import token as tokens
 from publisher.models import token_hash as token_hashes
@@ -64,6 +66,33 @@ def add_stats(*created: datetime.datetime) -> list[int]:
 def test_migrations_downgrade_and_upgrade_again(alembic_config):
     command.downgrade(alembic_config, "base")
     command.upgrade(alembic_config, "head")
+
+
+def test_migration_imports_the_gateway_client_registry(
+    alembic_config, tmp_path, monkeypatch
+):
+    registry = tmp_path / "registry.json"
+    client = {
+        "msisdn": "+237670000000",
+        "country": UNICODE,
+        "operator": "MTN Cameroon",
+        "operator_code": "62401",
+        "protocols": ["https", "sms"],
+    }
+    incomplete = {"msisdn": "+237690000000", "protocols": ["sms"]}
+    registry.write_text(json.dumps({c["msisdn"]: c for c in (client, incomplete)}))
+    monkeypatch.setenv("GATEWAY_CLIENTS_REGISTRY_FILE", str(registry))
+
+    command.downgrade(alembic_config, "018")
+    command.upgrade(alembic_config, "head")
+
+    with db.get_session() as session:
+        assert len(gateway_clients.find(session, include_disabled=True)) == 1
+        [imported] = gateway_clients.find(session, country=UNICODE.upper())
+        assert (imported.msisdn, imported.protocols) == (
+            client["msisdn"],
+            ["https", "sms"],
+        )
 
 
 def _same_type(context, inspected_column, metadata_column, inspected, metadata):

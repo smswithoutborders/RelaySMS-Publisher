@@ -48,7 +48,6 @@ class TestAppDirectories:
             f"{install}/data/platforms/adapters",
             f"{install}/data/platforms/venvs",
             f"{install}/data/platforms/assets",
-            f"{install}/data/gateway_clients",
         ]
 
     def test_env_values_are_resolved_against_install_dir(self, install, bash):

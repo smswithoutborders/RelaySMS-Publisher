@@ -2,16 +2,19 @@
 
 import click
 
+from publisher.cli.db import session
 from publisher.cli.output import print_table
-from publisher.gateway_clients import mcc_mnc
-from publisher.gateway_clients.manager import GatewayClientManager
+from publisher.gateway_clients import manager, mcc_mnc
+from publisher.models import gateway_client as gateway_clients
+
+
+def _split(protocols):
+    return [p.strip() for p in protocols.split(",") if p.strip()]
 
 
 @click.group()
-@click.pass_context
-def cli(ctx):
-    """Manage the gateway client registry and MCC/MNC data."""
-    ctx.obj = GatewayClientManager()
+def cli():
+    """Manage gateway clients."""
 
 
 @cli.command()
@@ -36,51 +39,75 @@ def cli(ctx):
     default=None,
     help="PLMN (MCC+MNC) code, if it can't be resolved from the MSISDN.",
 )
-@click.pass_obj
-def create(manager, msisdn, protocols, country, operator, operator_code):
+def create(msisdn, protocols, country, operator, operator_code):
     """Register a gateway client, resolving country/operator/PLMN from the MSISDN."""
-    try:
-        manifest = manager.create_client(
+    with session() as db:
+        client = manager.create(
+            db,
             msisdn,
-            [p.strip() for p in protocols.split(",") if p.strip()],
+            _split(protocols),
             country=country,
             operator=operator,
             operator_code=operator_code,
         )
-        click.echo("Gateway client registered successfully.")
-        print("-" * 60)
-        print(f"{'Gateway Client Details':=^60}")
-        for field in ("msisdn", "country", "operator", "operator_code", "protocols"):
-            print(f"{field.upper()}: {getattr(manifest, field)}")
-    except ValueError as e:
-        click.echo(f"Error: {e}", err=True)
+        details = [
+            (field, getattr(client, field))
+            for field in ("msisdn", "country", "operator", "operator_code", "protocols")
+        ]
+    click.echo("Gateway client registered successfully.")
+    click.echo("-" * 60)
+    click.echo(f"{'Gateway Client Details':=^60}")
+    for field, value in details:
+        click.echo(f"{field.upper()}: {value}")
+
+
+@cli.command()
+@click.argument("msisdn", type=str, required=True)
+def suggest(msisdn):
+    """Show the details create would use for an MSISDN, and PLMN candidates."""
+    try:
+        suggestion = manager.suggest(manager.check_msisdn(msisdn))
+    except manager.GatewayClientError as e:
+        raise click.BadParameter(str(e)) from None
+    for field in ("country", "iso", "country_code", "operator", "operator_code"):
+        click.echo(f"{field.upper()}: {getattr(suggestion, field) or '-'}")
+    click.echo(f"MATCH: {suggestion.match}")
+    print_table(
+        ["Operator Code", "Network"],
+        [[c.operator_code, c.network] for c in suggestion.candidates],
+        "No candidates.",
+    )
 
 
 @cli.command(name="list")
 @click.option("--msisdn", type=str, help="Filter by MSISDN.")
 @click.option("--country", type=str, help="Filter by country.")
 @click.option("--operator", type=str, help="Filter by operator.")
-@click.pass_obj
-def list_command(manager, msisdn, country, operator):
-    """List gateway clients, optionally filtered."""
-    try:
-        clients = manager.list_clients(
-            msisdn=msisdn, country=country, operator=operator
+def list_command(msisdn, country, operator):
+    """List gateway clients, disabled ones included, optionally filtered."""
+    with session() as db:
+        clients = gateway_clients.find(
+            db,
+            msisdn=msisdn,
+            country=country,
+            operator=operator,
+            include_disabled=True,
         )
-        headers = ["MSISDN", "Country", "Operator", "Operator Code", "Protocols"]
-        rows = [
+    print_table(
+        ["MSISDN", "Country", "Operator", "Operator Code", "Protocols", "Enabled"],
+        [
             [
                 c.msisdn,
                 c.country,
                 c.operator,
                 c.operator_code,
                 ",".join(c.protocols),
+                "✓" if c.is_enabled else "-",
             ]
             for c in clients
-        ]
-        print_table(headers, rows, "No matching records found.")
-    except Exception as e:
-        click.echo(f"Error listing gateway clients: {e}", err=True)
+        ],
+        "No matching records found.",
+    )
 
 
 @cli.command()
@@ -89,59 +116,69 @@ def list_command(manager, msisdn, country, operator):
 @click.option("--operator", type=str, help="New operator value.")
 @click.option("--operator-code", type=str, help="New PLMN (MCC+MNC) code.")
 @click.option("--protocols", type=str, help="New protocol(s) value (comma separated).")
-@click.pass_obj
-def update(manager, msisdn, country, operator, operator_code, protocols):
+def update(msisdn, country, operator, operator_code, protocols):
     """Change a gateway client's details."""
-    try:
-        manager.update_client(
-            msisdn,
+    with session() as db:
+        manager.update(
+            db,
+            manager.get_or_raise(db, msisdn),
             country=country,
             operator=operator,
             operator_code=operator_code,
-            protocols=(
-                [p.strip() for p in protocols.split(",") if p.strip()]
-                if protocols
-                else None
-            ),
+            protocols=_split(protocols) if protocols else None,
         )
-        click.echo("Gateway client updated successfully.")
-    except ValueError as e:
-        click.echo(f"Error: {e}", err=True)
+    click.echo("Gateway client updated successfully.")
 
 
 @cli.command()
 @click.argument("msisdn", type=str, required=True)
-@click.pass_obj
-def delete(manager, msisdn):
-    """Delete a gateway client."""
-    try:
-        manager.delete_client(msisdn)
-        click.echo("Gateway client deleted successfully.")
-    except ValueError as e:
-        click.echo(f"Error: {e}", err=True)
+def enable(msisdn):
+    """List a gateway client publicly again."""
+    with session() as db:
+        manager.set_enabled(db, manager.get_or_raise(db, msisdn), True)
+    click.echo(f"Gateway client {msisdn} enabled.")
 
 
 @cli.command()
-@click.pass_obj
-def countries(manager):
+@click.argument("msisdn", type=str, required=True)
+def disable(msisdn):
+    """Hide a gateway client from the public list without deleting it."""
+    with session() as db:
+        manager.set_enabled(db, manager.get_or_raise(db, msisdn), False)
+    click.echo(f"Gateway client {msisdn} disabled.")
+
+
+@cli.command()
+@click.argument("msisdn", type=str, required=True)
+def delete(msisdn):
+    """Delete a gateway client."""
+    with session() as db:
+        manager.delete(db, manager.get_or_raise(db, msisdn))
+    click.echo("Gateway client deleted successfully.")
+
+
+@cli.command()
+def countries():
     """List all unique countries with a registered gateway client."""
-    for country in manager.list_countries():
+    with session() as db:
+        clients = gateway_clients.find(db, include_disabled=True)
+    for country in sorted({c.country for c in clients}):
         click.echo(country)
 
 
 @cli.command()
 @click.option("--country", required=True, help="Country to list operators for.")
-@click.pass_obj
-def operators(manager, country):
+def operators(country):
     """List all unique operators for a country."""
-    for operator in manager.list_operators(country):
+    with session() as db:
+        clients = gateway_clients.find(db, country=country, include_disabled=True)
+    for operator in sorted({c.operator for c in clients}):
         click.echo(operator)
 
 
 @cli.group(name="mcc-mnc")
 def mcc_mnc_group():
-    """Inspect and manage the MCC/MNC (PLMN) lookup data."""
-    pass
+    """Inspect the MCC/MNC (PLMN) lookup data."""
 
 
 @mcc_mnc_group.command(name="list")
@@ -149,7 +186,7 @@ def mcc_mnc_group():
 @click.option("--network", type=str, help="Filter by carrier name (substring).")
 @click.option("--iso", type=str, help="Filter by ISO 3166-1 alpha-2 region.")
 def mcc_mnc_list(country_code, network, iso):
-    """List matching PLMN records from overrides + the vendored snapshot."""
+    """Search the bundled MCC/MNC table."""
     matches = mcc_mnc.find_matches(country_code=country_code, network=network, iso=iso)
     headers = ["MCC", "MNC", "ISO", "Country", "Country Code", "Network"]
     rows = [
@@ -164,34 +201,3 @@ def mcc_mnc_list(country_code, network, iso):
         for m in matches
     ]
     print_table(headers, rows, "No matching records found.")
-
-
-@mcc_mnc_group.command(name="add-override")
-@click.option("--mcc", required=True, help="Mobile Country Code.")
-@click.option("--mnc", required=True, help="Mobile Network Code.")
-@click.option("--country-code", required=True, help="Country calling code.")
-@click.option("--network", required=True, help="Carrier name.")
-@click.option("--country", required=True, help="Country name.")
-@click.option("--iso", default=None, help="ISO 3166-1 alpha-2 country code.")
-def mcc_mnc_add_override(mcc, mnc, country_code, network, country, iso):
-    """Add or replace a PLMN override entry, keyed by (mcc, mnc)."""
-    mcc_mnc.add_override(
-        mcc=mcc,
-        mnc=mnc,
-        country_code=country_code,
-        network=network,
-        country=country,
-        iso=iso,
-    )
-    click.echo(f"Override added for MCC={mcc} MNC={mnc}.")
-
-
-@mcc_mnc_group.command(name="remove-override")
-@click.option("--mcc", required=True, help="Mobile Country Code.")
-@click.option("--mnc", required=True, help="Mobile Network Code.")
-def mcc_mnc_remove_override(mcc, mnc):
-    """Remove a PLMN override entry by (mcc, mnc)."""
-    if mcc_mnc.remove_override(mcc, mnc):
-        click.echo(f"Override removed for MCC={mcc} MNC={mnc}.")
-    else:
-        click.echo(f"No override found for MCC={mcc} MNC={mnc}.", err=True)

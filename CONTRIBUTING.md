@@ -197,7 +197,7 @@ A maintainer reviews every PR. Address comments with new commits; they're squash
 | `migrations/` | Alembic migrations |
 | `protos/` | gRPC service definitions |
 | `tools/` | The reference client |
-| `data/` | Runtime data: adapter files and the gateway client registry (not tracked) |
+| `data/` | Runtime data: adapter files (not tracked) |
 | `tests/` | Tests, see [Testing](#testing) |
 
 Each code row may import only the rows below it, never the other way round, and entry points don't import each other. import-linter enforces this in `make check`.

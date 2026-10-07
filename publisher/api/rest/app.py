@@ -21,7 +21,6 @@ from publisher.api.rest.v1.errors import (
 from publisher.api.rest.v1.routes import router as v1_router
 from publisher.config import ApiDocsConfig, AuthConfig
 from publisher.db import dispose_engine, get_session
-from publisher.gateway_clients.manager import GatewayClientManager
 from publisher.log import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -99,7 +98,6 @@ async def lifespan(app: FastAPI):
     with get_session() as db:
         keys.initialize_server_identity_keys(db)
 
-    app.state.gateway_client_manager = GatewayClientManager()
     yield
     dispose_engine()
 

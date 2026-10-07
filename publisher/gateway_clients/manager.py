@@ -1,226 +1,261 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import logging
-import os
-from pathlib import Path
+import re
+from dataclasses import dataclass, field
+from typing import Literal
 
-import msgspec
 import phonenumbers
 from phonenumbers import carrier, geocoder
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
-from publisher.config import GatewayClientsConfig
+from publisher.errors import PublisherError
 from publisher.gateway_clients import mcc_mnc
+from publisher.models import audit_event
+from publisher.models import gateway_client as gateway_clients
+from publisher.models.audit_event import AuditAction
+from publisher.models.credential import Credential
+from publisher.models.gateway_client import GatewayClient
 
-logger = logging.getLogger(__name__)
-gateway_clients_config = GatewayClientsConfig.get()
+MSISDN_PATTERN = re.compile(r"^\+[1-9]\d{6,14}$")
+OPERATOR_CODE_PATTERN = re.compile(r"^\d{5,6}$")
+_FIELDS = ("country", "operator", "operator_code", "protocols")
 
 
-class GatewayClientManifest(msgspec.Struct, forbid_unknown_fields=False):
-    msisdn: str
-    country: str
-    operator: str
+class GatewayClientError(PublisherError):
+    pass
+
+
+class GatewayClientExistsError(GatewayClientError):
+    pass
+
+
+class GatewayClientConflictError(GatewayClientError):
+    pass
+
+
+@dataclass(frozen=True)
+class Candidate:
     operator_code: str
-    protocols: list[str]
+    network: str
 
 
-def resolve_operator_info(msisdn: str):
-    """Best-effort (country, operator, operator_code, candidates) for an MSISDN.
+@dataclass(frozen=True)
+class Suggestion:
+    """Details for an MSISDN, for an administrator to confirm before creating."""
 
-    operator_code is only set when exactly one PLMN matches; otherwise
-    candidates lists the ambiguous options. Any field may be None.
-    """
+    msisdn: str
+    country: str | None = None
+    iso: str | None = None
+    country_code: str | None = None
+    operator: str | None = None
+    operator_code: str | None = None
+    match: Literal["carrier", "region", "none"] = "none"
+    candidates: list[Candidate] = field(default_factory=list)
+
+
+def _candidates(rows: list[dict]) -> list[Candidate]:
+    return list(
+        dict.fromkeys(Candidate(r["mcc"] + r["mnc"], r["network"]) for r in rows)
+    )
+
+
+def suggest(msisdn: str) -> Suggestion:
+    """Best-effort details for an MSISDN; operator_code only when unambiguous."""
+    msisdn = msisdn.strip()
     try:
         number = phonenumbers.parse(msisdn, None)
-    except phonenumbers.NumberParseException as e:
-        logger.error("Failed to parse MSISDN '%s': %s", msisdn, e)
-        return None, None, None, []
+    except phonenumbers.NumberParseException:
+        return Suggestion(msisdn=msisdn)
 
-    country = geocoder.description_for_number(number, "en") or None
-    country_code = str(number.country_code)
+    code = number.country_code or 0
     region = phonenumbers.region_code_for_number(number)
+    iso = region.lower() if region and region != "001" else None
+    country_code = str(code)
     operator = carrier.name_for_number(number, "en") or None
+    rows = mcc_mnc.region_operators(iso, code)
+    if not rows:
+        return Suggestion(msisdn=msisdn, iso=iso, country_code=country_code)
 
-    operator_code = None
-    candidates: list[str] = []
-    if operator:
-        network = operator.split()[0].lower()
-        matches = mcc_mnc.find_matches(
-            country_code=country_code,
-            network=network,
-            iso=region.lower() if region else None,
+    matched = mcc_mnc.match_carrier(operator, rows) if operator else []
+    candidates = _candidates(matched or sorted(rows, key=lambda r: r["network"]))
+    codes = {c.operator_code for c in candidates}
+    return Suggestion(
+        msisdn=msisdn,
+        country=geocoder.country_name_for_number(number, "en") or rows[0]["country"],
+        iso=iso,
+        country_code=country_code,
+        operator=operator,
+        operator_code=codes.pop() if matched and len(codes) == 1 else None,
+        match="carrier" if matched else "region",
+        candidates=candidates,
+    )
+
+
+def check_msisdn(msisdn: str) -> str:
+    """Return it stripped, or raise if it isn't in E.164 format."""
+    msisdn = msisdn.strip()
+    if not MSISDN_PATTERN.match(msisdn):
+        raise GatewayClientError(f"MSISDN {msisdn!r} isn't in E.164 format")
+    return msisdn
+
+
+def _check(
+    *,
+    operator_code: str | None = None,
+    protocols: list[str] | None = None,
+) -> None:
+    if operator_code is not None and not OPERATOR_CODE_PATTERN.match(operator_code):
+        raise GatewayClientError(
+            f"Operator code {operator_code!r} isn't an MCC + MNC of 5 or 6 digits"
         )
-        candidates = sorted({f"{m['mcc']}{m['mnc']}" for m in matches})
-        if len(candidates) == 1:
-            operator_code = candidates[0]
-
-    return country, operator, operator_code, candidates
+    if protocols is not None and not protocols:
+        raise GatewayClientError("At least one protocol is required")
 
 
-class GatewayClientManager:
-    """Manages gateway client lifecycle operations using a JSON registry."""
+def _flush(session: Session, client: GatewayClient) -> None:
+    # Read before flushing: a failed flush expires the client's attributes.
+    msisdn = client.msisdn
+    try:
+        session.flush()
+    except IntegrityError:
+        raise GatewayClientExistsError(
+            f"Gateway client {msisdn!r} is already registered"
+        ) from None
+    except StaleDataError:
+        raise GatewayClientConflictError(
+            f"Gateway client {msisdn!r} was changed concurrently; retry"
+        ) from None
 
-    def __init__(self, registry_file: Path | None = None):
-        self.registry_file = registry_file or gateway_clients_config.registry_file
-        self._registry: dict[str, GatewayClientManifest] = {}
-        self._last_modified: float = 0.0
 
-    def _load_registry(self) -> dict[str, GatewayClientManifest]:
-        try:
-            current_mtime = os.stat(self.registry_file).st_mtime
-        except FileNotFoundError:
-            return {}
+def get_or_raise(session: Session, msisdn: str) -> GatewayClient:
+    client = gateway_clients.get_by_msisdn(session, msisdn)
+    if client is None:
+        raise GatewayClientError(f"No gateway client found with MSISDN {msisdn!r}")
+    return client
 
-        if current_mtime == self._last_modified:
-            return self._registry
 
-        try:
-            with open(self.registry_file, "rb") as f:
-                registry = msgspec.json.decode(
-                    f.read(), type=dict[str, GatewayClientManifest]
-                )
-            self._registry = registry
-            self._last_modified = current_mtime
-            return self._registry
-        except Exception as e:
-            logger.error("Failed to read registry: %s", e)
-            return self._registry
-
-    def _save_registry(self, data: dict[str, GatewayClientManifest]):
-        try:
-            self.registry_file.parent.mkdir(parents=True, exist_ok=True)
-            self.registry_file.write_bytes(msgspec.json.encode(data))
-            self._last_modified = os.stat(self.registry_file).st_mtime
-            self._registry = data
-        except (OSError, msgspec.ValidationError) as e:
-            logger.error("Failed to write registry: %s", e)
-
-    def create_client(
-        self,
-        msisdn: str,
-        protocols: list[str],
-        country: str | None = None,
-        operator: str | None = None,
-        operator_code: str | None = None,
-    ) -> GatewayClientManifest:
-        """Register a gateway client.
-
-        country/operator/operator_code are resolved from the MSISDN unless given.
-        """
-        registry = self._load_registry()
-        if msisdn in registry:
-            raise ValueError(f"Gateway client '{msisdn}' is already registered.")
-
-        resolved_country, resolved_operator, resolved_operator_code, candidates = (
-            resolve_operator_info(msisdn)
+def create(
+    session: Session,
+    msisdn: str,
+    protocols: list[str],
+    *,
+    country: str | None = None,
+    operator: str | None = None,
+    operator_code: str | None = None,
+    actor: Credential | None = None,
+) -> GatewayClient:
+    """Register a gateway client, filling omitted details from suggest."""
+    msisdn = check_msisdn(msisdn)
+    _check(operator_code=operator_code, protocols=protocols)
+    if gateway_clients.get_by_msisdn(session, msisdn):
+        raise GatewayClientExistsError(
+            f"Gateway client {msisdn!r} is already registered"
         )
-        country = country or resolved_country
-        operator = operator or resolved_operator
-        operator_code = operator_code or resolved_operator_code
 
-        if not (country and operator and operator_code):
-            if candidates:
-                raise ValueError(
-                    f"Multiple PLMNs match operator '{operator}': "
-                    f"{', '.join(candidates)}. Specify one with --operator-code."
-                )
+    suggestion = suggest(msisdn)
+    country = country or suggestion.country
+    operator = operator or suggestion.operator
+    operator_code = operator_code or suggestion.operator_code
 
-            missing = [
-                label
-                for label, value in (
-                    ("country", country),
-                    ("operator", operator),
-                    ("operator_code", operator_code),
-                )
-                if not value
-            ]
-            raise ValueError(
-                "Could not resolve "
-                + ", ".join(missing)
-                + " for this MSISDN. Supply it directly with --country/"
-                "--operator/--operator-code, or if the operator is known but "
-                "its PLMN is missing, add it with 'mcc-mnc add-override'."
-            )
-
-        manifest = GatewayClientManifest(
-            msisdn=msisdn,
-            country=country,
-            operator=operator,
-            operator_code=operator_code,
-            protocols=list(protocols),
+    details = {"country": country, "operator": operator, "operator_code": operator_code}
+    if missing := [name for name, value in details.items() if not value]:
+        message = f"Could not resolve {', '.join(missing)} for this MSISDN."
+        if not operator_code and suggestion.match == "carrier":
+            codes = ", ".join(sorted({c.operator_code for c in suggestion.candidates}))
+            message = f"Multiple PLMNs match operator {operator!r}: {codes}."
+        raise GatewayClientError(
+            f"{message} Supply the missing details; suggest lists the candidates."
         )
-        registry[msisdn] = manifest
-        self._save_registry(registry)
-        logger.info("Registered gateway client: %s", msisdn)
-        return manifest
 
-    def list_clients(
-        self,
-        msisdn: str | None = None,
-        country: str | None = None,
-        operator: str | None = None,
-    ) -> list[GatewayClientManifest]:
-        """Return manifests matching any combination of optional filters."""
-        registry = self._load_registry()
-        if not registry:
-            return []
+    client = GatewayClient(
+        msisdn=msisdn,
+        country=country,
+        operator=operator,
+        operator_code=operator_code,
+        protocols=list(protocols),
+        created_by=actor.id if actor else None,
+        updated_by=actor.id if actor else None,
+    )
+    session.add(client)
+    _flush(session, client)
+    audit_event.record(
+        session,
+        AuditAction.GATEWAY_CLIENTS_CREATE,
+        actor=actor,
+        target=client,
+        details={field: getattr(client, field) for field in _FIELDS},
+    )
+    return client
 
-        m_term = msisdn.strip() if msisdn else None
-        c_term = country.strip().lower() if country else None
-        o_term = operator.strip().lower() if operator else None
 
-        return [
-            manifest
-            for manifest in registry.values()
-            if not (m_term and manifest.msisdn != m_term)
-            and not (c_term and manifest.country.strip().lower() != c_term)
-            and not (o_term and manifest.operator.strip().lower() != o_term)
-        ]
+def update(
+    session: Session,
+    client: GatewayClient,
+    *,
+    country: str | None = None,
+    operator: str | None = None,
+    operator_code: str | None = None,
+    protocols: list[str] | None = None,
+    actor: Credential | None = None,
+) -> None:
+    """Change the given fields; None leaves a field as it is."""
+    _check(operator_code=operator_code, protocols=protocols)
+    new = {
+        "country": country,
+        "operator": operator,
+        "operator_code": operator_code,
+        "protocols": list(protocols) if protocols is not None else None,
+    }
+    changes = {
+        field: {"from": getattr(client, field), "to": value}
+        for field, value in new.items()
+        if value is not None and value != getattr(client, field)
+    }
+    if not changes:
+        return
+    for name, change in changes.items():
+        setattr(client, name, change["to"])
+    client.updated_by = actor.id if actor else None
+    _flush(session, client)
+    audit_event.record(
+        session,
+        AuditAction.GATEWAY_CLIENTS_UPDATE,
+        actor=actor,
+        target=client,
+        details=changes,
+    )
 
-    def update_client(
-        self,
-        msisdn: str,
-        country: str | None = None,
-        operator: str | None = None,
-        operator_code: str | None = None,
-        protocols: list[str] | None = None,
-    ) -> GatewayClientManifest:
-        registry = self._load_registry()
-        manifest = registry.get(msisdn)
-        if not manifest:
-            raise ValueError(f"No gateway client found with MSISDN: {msisdn}")
 
-        updated = GatewayClientManifest(
-            msisdn=manifest.msisdn,
-            country=country or manifest.country,
-            operator=operator or manifest.operator,
-            operator_code=operator_code or manifest.operator_code,
-            protocols=list(protocols) if protocols else manifest.protocols,
-        )
-        registry[msisdn] = updated
-        self._save_registry(registry)
-        logger.info("Updated gateway client: %s", msisdn)
-        return updated
+def set_enabled(
+    session: Session,
+    client: GatewayClient,
+    enabled: bool,
+    actor: Credential | None = None,
+) -> None:
+    if client.is_enabled == enabled:
+        return
+    client.is_enabled = enabled
+    client.updated_by = actor.id if actor else None
+    _flush(session, client)
+    action = (
+        AuditAction.GATEWAY_CLIENTS_ENABLE
+        if enabled
+        else AuditAction.GATEWAY_CLIENTS_DISABLE
+    )
+    audit_event.record(session, action, actor=actor, target=client)
 
-    def delete_client(self, msisdn: str):
-        registry = self._load_registry()
-        if msisdn not in registry:
-            raise ValueError(f"No gateway client found with MSISDN: {msisdn}")
 
-        del registry[msisdn]
-        self._save_registry(registry)
-        logger.info("Removed gateway client: %s", msisdn)
-
-    def list_countries(self) -> list[str]:
-        registry = self._load_registry()
-        return sorted({manifest.country for manifest in registry.values()})
-
-    def list_operators(self, country: str) -> list[str]:
-        registry = self._load_registry()
-        c_term = country.strip().lower()
-        return sorted(
-            {
-                manifest.operator
-                for manifest in registry.values()
-                if manifest.country.strip().lower() == c_term
-            }
-        )
+def delete(
+    session: Session, client: GatewayClient, actor: Credential | None = None
+) -> None:
+    audit_event.record(
+        session,
+        AuditAction.GATEWAY_CLIENTS_DELETE,
+        actor=actor,
+        target=client,
+        details={field: getattr(client, field) for field in _FIELDS},
+    )
+    session.delete(client)
+    _flush(session, client)
