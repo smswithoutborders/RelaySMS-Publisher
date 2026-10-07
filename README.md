@@ -51,7 +51,7 @@ The installer sets up everything else, including the system packages and Rust.
    | --- | --- |
    | `--site-name DOMAIN` | Puts nginx with a Let's Encrypt certificate in front; `--skip-nginx` skips it |
    | `--setup-db mysql\|postgres` | Installs the database server and writes its details to `.env` ([details](INSTALL.md#database)) |
-   | `--setup-broker rabbitmq` | Uses RabbitMQ instead of SQLite as the Celery broker, for heavier load ([details](INSTALL.md#celery-worker--beat)) |
+   | `--setup-broker rabbitmq` | Uses RabbitMQ instead of SQLite as the Celery broker, for heavier load ([details](INSTALL.md#celery-worker-and-beat)) |
    | `--setup-observability` | Adds SigNoz and Uptime Kuma ([details](observability/README.md)) |
    | `--install-dir PATH`, `--instance-name NAME` | Installs elsewhere, or a second copy on the same host ([details](INSTALL.md#running-multiple-instances)) |
 
@@ -64,11 +64,14 @@ The installer sets up everything else, including the system packages and Rust.
    sudo ./manage.sh check
    ```
 
-3. Create an administrator credential for the REST API. The password is printed once:
+3. Create an administrator credential for the REST API:
 
    ```bash
    ./publisher.sh creds create --username ops --administrator
    ```
+
+   > [!IMPORTANT]
+   > The password is printed once. Store it before closing the terminal.
 
 4. Add the platform adapters you want to offer, then follow each adapter's README to configure it:
 
@@ -100,13 +103,14 @@ From the install directory:
 | `sudo ./manage.sh status` | Show each service's state |
 | `sudo ./manage.sh logs` | Follow the service logs |
 | `sudo ./manage.sh start`, `stop`, `restart` | Control every service together |
+| `sudo ./manage.sh enable`, `disable` | Start the services on boot, or stop doing so |
 | `sudo ./manage.sh update` | Pull the latest code, rebuild and restart; add `--migrate` when the release has migrations |
 | `sudo ./manage.sh migrate` | Apply database migrations |
 | `sudo ./manage.sh check` | Report every missing or invalid setting |
-| `sudo ./manage.sh nginx` | Re-render the nginx site and reattach or obtain its certificate |
+| `sudo ./manage.sh nginx [DOMAIN]` | Re-render the nginx site and reattach or obtain its certificate |
 | `sudo ./manage.sh uninstall` | Remove the services and the install directory |
 
-See [Service Management](INSTALL.md#service-management) for more.
+See [Service Management](INSTALL.md#service-management) for log filters and what `update` and `nginx` do.
 
 ## Run with Docker
 
@@ -133,6 +137,9 @@ See [Service Management](INSTALL.md#service-management) for more.
    ```
 
 The container applies pending migrations, then starts every service. It listens on `PORT` (16000) and `GRPC_PORT` (6000) from `.env`, and keeps its data in `./data`.
+
+> [!CAUTION]
+> Back up `.env` with `./data`: its [encryption keys](INSTALL.md#encryption) are the only way to read the data.
 
 ## Development
 
@@ -176,8 +183,10 @@ OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=smtp   # comma-separated; empty allows every p
 OFFLINE_PUBLISH_SHARED_SECRET=           # 64-char hex; empty disables the check
 ```
 
-- Offline payloads from a protocol missing from `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` are discarded. `template.env` allows only `smtp`. `https` is unauthenticated and free to spam, while the SMTP and Twilio listeners authenticate the sender (DKIM and an allowlist for `smtp`, Twilio's signature for `sms`).
-- When `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads over `https` must carry it in the request's `tag` field.
+Offline payloads from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` are discarded. When `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads over `https` must carry it in the request's `tag` field.
+
+> [!WARNING]
+> `https` is unauthenticated, so anyone can send to it. The SMTP and Twilio listeners authenticate the sender (DKIM and an allowlist for `smtp`, Twilio's signature for `sms`), which is why `template.env` allows only `smtp`.
 
 ## Platform adapters
 
@@ -190,11 +199,11 @@ Each platform is served by an adapter installed from its own repository. `GET /v
 - [Bluesky](https://github.com/smswithoutborders/bluesky-oauth2-adapter)
 - [Mastodon](https://github.com/smswithoutborders/mastodon-oauth2-adapter)
 
-[platforms/README.md](platforms/README.md) covers adding, updating, disabling and removing adapters. Each adapter's README covers its own settings.
+[docs/platforms.md](docs/platforms.md) covers adding, updating, disabling and removing adapters. Each adapter's README covers its own settings.
 
 ## Gateway clients
 
-Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/gateway-clients` lists the enabled ones, and [gateway_clients/README.md](gateway_clients/README.md) covers managing them.
+Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/gateway-clients` lists the enabled ones, and [docs/gateway-clients.md](docs/gateway-clients.md) covers managing them.
 
 ## Credentials
 
@@ -219,8 +228,8 @@ Credentials log in to the REST API, each with its own scopes. One holding every 
 - [REST API](docs/rest.md): publishing, authentication and the [OpenAPI reference](docs/openapi.json)
 - [gRPC API](docs/grpc.md): linking accounts and syncing keys
 - [SMTP Transport](docs/smtp.md): publishing payloads sent by email
-- [Platform Adapters](platforms/README.md): installing and managing adapters
-- [Gateway Clients](gateway_clients/README.md): managing gateway clients
+- [Platform Adapters](docs/platforms.md): installing and managing adapters
+- [Gateway Clients](docs/gateway-clients.md): managing gateway clients
 - [Observability](observability/README.md): tracing, metrics, logs and uptime monitoring
 - [Reference Client](tools/README.md): exercising the gRPC and REST flows by hand
 - [Contributing](CONTRIBUTING.md): setup, workflow, conventions and testing

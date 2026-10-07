@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """MCC/MNC (PLMN) lookup in the vendored mcc_mnc_table.json snapshot.
 
-See gateway_clients/README.md.
+See docs/gateway-clients.md.
 """
 
 import json

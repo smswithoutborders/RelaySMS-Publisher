@@ -181,7 +181,7 @@ EOF
 
 ### v3: Revoke and Delete OAuth2 Token
 
-Revokes and deletes an OAuth2 token from the vault using the token ID and the key ID used for its encryption.
+Revokes and deletes a stored OAuth2 token, identified by its token ID and the key ID that encrypted it.
 
 **Request:** `RevokeOAuth2TokenRequest`
 
@@ -396,5 +396,4 @@ EOF
 ---
 
 > [!NOTE]
->
->All gRPC responses return standard status codes. `0 OK` indicates success. See [gRPC Status Codes](https://grpc.github.io/grpc/core/md_doc_statuscodes.html) for error codes.
+> Every RPC returns a standard [gRPC status code](https://grpc.github.io/grpc/core/md_doc_statuscodes.html); `0 OK` is success.

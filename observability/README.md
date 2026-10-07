@@ -60,11 +60,11 @@ curl -X POST http://127.0.0.1:8090/api/v1/register \
 `sqlite` for a single-node setup. Retention isn't a `casting.yaml` field:
 set it in the UI, under Settings > Workspace > Retention Controls.
 
-`casting.yaml` is only generated once. To change
-something on an already-running install, edit the matching line in
-`observability/signoz/casting.yaml` directly, then re-run
-`foundryctl cast -f observability/signoz/casting.yaml`. This only
-recreates the `signoz` container; Postgres and ClickHouse are untouched.
+> [!IMPORTANT]
+> `casting.yaml` is generated only once. To change a running install, edit
+> `observability/signoz/casting.yaml`, then re-run
+> `foundryctl cast -f observability/signoz/casting.yaml`. Only the `signoz`
+> container is recreated; Postgres and ClickHouse are untouched.
 
 ## Uptime Kuma
 
@@ -142,8 +142,9 @@ certbot --nginx -d <your-status-domain>
 
 ## Turning tracing on/off per service
 
-Bare-metal/systemd installs don't have `requirements-observability.txt`
-installed by default:
+> [!NOTE]
+> systemd installs don't include `requirements-observability.txt` until you
+> install it:
 
 ```bash
 cd /opt/relaysms/relaysms-publisher

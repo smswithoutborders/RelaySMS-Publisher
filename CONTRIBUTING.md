@@ -334,7 +334,7 @@ Add it under `publisher/tasks/`. Keep the explicit `tasks.*` name so queued mess
 
 ### Platform adapters
 
-Adapters live in their own repositories. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [platforms/README.md](platforms/README.md).
+Adapters live in their own repositories. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [docs/platforms.md](docs/platforms.md).
 
 ## Documentation
 

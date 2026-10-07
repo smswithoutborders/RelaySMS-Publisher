@@ -1,6 +1,6 @@
 # Gateway Clients
 
-Gateway clients are the phone numbers that relay SMS to this server. They're stored in the `gateway_clients` table and listed publicly at `GET /v1/gateway-clients`; credentials with `gc:read` and `gc:write` manage them over the [REST API](../docs/rest.md#managing-gateway-clients). Every change is in the audit log.
+Gateway clients are the phone numbers that relay SMS to this server. They're stored in the `gateway_clients` table and listed publicly at `GET /v1/gateway-clients`; credentials with `gc:read` and `gc:write` manage them over the [REST API](rest.md#managing-gateway-clients). Every change is in the audit log.
 
 ## Commands
 

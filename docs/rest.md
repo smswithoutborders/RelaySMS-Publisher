@@ -19,7 +19,10 @@ https://<host>/v1
 Credentials and their scopes are managed with [`./publisher.sh creds`](../README.md#credentials) or the `/v1/creds` endpoints.
 
 * **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after 30 minutes idle or 12 hours.
-* **HTTP Basic:** username and password on every request, e.g. `curl -u analyst:<password> .../v1/stats/publications`. HTTPS only.
+* **HTTP Basic:** username and password on every request, e.g. `curl -u analyst:<password> .../v1/stats/publications`.
+
+> [!WARNING]
+> Basic auth sends the password with every request. Use it over HTTPS only.
 
 Scope changes apply on the credential's next request. Each endpoint's description names the scopes it needs.
 
@@ -37,7 +40,7 @@ Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/ada
 
 ## Managing Gateway Clients
 
-`/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm; see [how suggest works](../gateway_clients/README.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.
+`/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm; see [how suggest works](gateway-clients.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.
 
 ## Pagination
 
