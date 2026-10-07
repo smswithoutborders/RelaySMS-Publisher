@@ -74,6 +74,9 @@ reportOperatorIssue = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Adds a results table to the GitHub Actions job summary; idle elsewhere.
+addopts = ["-p", "tests.summary"]
+pythonpath = ["."]
 # make test-dialects and make test-e2e run these on their own.
 norecursedirs = ["dialects", "e2e"]
 

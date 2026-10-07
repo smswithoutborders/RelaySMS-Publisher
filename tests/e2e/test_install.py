@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+# tests/summary.py groups this module's results by test.
+SUMMARY_BY = "test"
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 SUBMODULE = "lib_relaysms_payload_specs"

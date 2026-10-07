@@ -344,7 +344,7 @@ Adapters live in their own repositories. Install one locally with `python -m pub
 
 ## When CI fails
 
-`.github/workflows/checks.yml` runs the hooks on Python 3.14 and the tests on 3.12, 3.13 and 3.14. The 3.12 job also runs the dialect tests, and the 3.14 job puts a coverage table on the run's summary page.
+`.github/workflows/checks.yml` runs each check as its own job: **Hooks**, **Tests** on Python 3.12 and 3.13, **Coverage** on 3.14, **Database dialects**, and **E2E** on pushes. Every pytest job adds a results table to the run's summary page, through `tests/summary.py`, with the failing tests listed under it. A test module can set `SUMMARY_BY` to group its rows by test or by a parametrized fixture instead of by directory.
 
 - **Hook failures:** run `make check` locally. Ruff and the whitespace hooks fix files in place, so re-add and commit the changes.
 - **Pyright:** fix the type, or narrow it with an `assert`. Use `# pyright: ignore[rule]` only with a reason.

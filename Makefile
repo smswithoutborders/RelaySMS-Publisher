@@ -31,11 +31,11 @@ run:
 	PYTHON=$(PYTHON) ./scripts/run.sh
 
 test:
-	$(PYTHON) -m pytest
+	$(PYTHON) -m pytest $(PYTEST_ARGS)
 
 ## Run the suite and list the lines no test runs.
 coverage:
-	$(PYTHON) -m pytest --cov
+	$(PYTHON) -m pytest --cov $(PYTEST_ARGS)
 
 ## Migrate and query SQLite, SQLCipher, and Postgres, MySQL and MariaDB in podman.
 test-dialects:

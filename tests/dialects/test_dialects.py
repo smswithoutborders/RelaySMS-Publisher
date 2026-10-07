@@ -28,6 +28,8 @@ from publisher.models.token import Token
 from publisher.models.token_hash import TokenHash
 from tests.helpers import can_log_in, create_credential
 
+# tests/summary.py groups this module's results by database.
+SUMMARY_BY = "dialect"
 UTC = datetime.UTC
 UNICODE = "Ünïcødé ✉️ 🚀 文字"
 

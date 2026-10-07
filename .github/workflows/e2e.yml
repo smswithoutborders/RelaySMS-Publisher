@@ -14,6 +14,7 @@ on:
 
 jobs:
   e2e:
+    name: E2E (${{ matrix.distro }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
 
