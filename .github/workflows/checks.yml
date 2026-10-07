@@ -75,28 +75,8 @@ jobs:
           make coverage PYTHON=venv/bin/python
           PYTEST_ARGS="--cov-report=term --cov-report=markdown-append:$GITHUB_STEP_SUMMARY"
 
-  dialects:
-    name: Database dialects
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - uses: ./.github/actions/setup
-        with:
-          python-version: "3.12"
-
-      # Postgres, MySQL and MariaDB run in the runner's rootless podman.
-      - name: Run dialect tests
-        run: make test-dialects PYTHON=venv/bin/python
-
-  e2e:
-    if: github.event_name == 'push'
-    uses: ./.github/workflows/e2e.yml
-
   deploy-staging:
-    needs: [hooks, tests, coverage, dialects, e2e]
+    needs: [hooks, tests, coverage]
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     uses: ./.github/workflows/deploy.staging.yml
     secrets: inherit

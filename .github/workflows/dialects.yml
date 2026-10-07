@@ -1,0 +1,43 @@
+name: Database dialects
+
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+    paths:
+      - "publisher/db/**"
+      - "publisher/models/**"
+      - "publisher/config.py"
+      - "publisher/credentials.py"
+      - "publisher/keys.py"
+      - "migrations/**"
+      - "alembic.ini"
+      - "requirements*.txt"
+      - "tests/dialects/**"
+      - "tests/helpers.py"
+      - ".github/workflows/dialects.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dialects:
+    name: Database dialects
+    runs-on: ubuntu-latest
+    concurrency:
+      group: dialects-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+        with:
+          python-version: "3.12"
+
+      # Postgres, MySQL and MariaDB run in the runner's rootless podman.
+      - name: Run dialect tests
+        run: make test-dialects PYTHON=venv/bin/python
