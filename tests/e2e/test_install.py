@@ -31,7 +31,6 @@ DATA_DIRS = [
     "data/platforms/adapters",
     "data/platforms/venvs",
     "data/platforms/assets",
-    "data/platforms",
     "data/gateway_clients",
 ]
 DATA_RW_PATHS = "ReadWritePaths=" + " ".join(f"{D}/{path}" for path in DATA_DIRS)
