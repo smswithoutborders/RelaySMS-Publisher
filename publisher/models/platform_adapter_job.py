@@ -15,7 +15,8 @@ from publisher.errors import PublisherError
 
 # Longer than the task's time limit, so only abandoned jobs are failed.
 STALE_AFTER = datetime.timedelta(hours=1)
-LOG_LIMIT = 64 * 1024
+# Bytes, under MySQL's 65,535-byte TEXT limit.
+LOG_LIMIT = 60 * 1024
 
 
 class JobBusyError(PublisherError):
@@ -109,7 +110,8 @@ def finish(
 ) -> None:
     job = session.get_one(PlatformAdapterJob, job_id)
     job.state = state
-    job.log = "\n".join(log)[-LOG_LIMIT:]
+    # Cutting the bytes can split a character; the partial one is dropped.
+    job.log = "\n".join(log).encode()[-LOG_LIMIT:].decode(errors="ignore")
     job.tag = tag or job.tag
     job.to_commit = to_commit
     job.lock = None
