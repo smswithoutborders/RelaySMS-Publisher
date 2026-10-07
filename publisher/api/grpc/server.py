@@ -4,7 +4,7 @@
 import logging
 import os
 import signal
-import sys
+import threading
 from concurrent import futures
 from pathlib import Path
 
@@ -92,14 +92,6 @@ def _bind_port(grpc_server: grpc.Server) -> None:
     logger.info("Serving with TLS: %s", address)
 
 
-def _shutdown(grpc_server: grpc.Server, signum: int) -> None:
-    logger.info("Shutting down (signal %s) ...", signum)
-    grpc_server.stop(grace=5).wait()
-    dispose_engine()
-    logger.info("Server stopped")
-    sys.exit(0)
-
-
 def serve() -> None:
     logger.info(
         "Starting server | tls=%s | host=%s | port=%s | workers=%s",
@@ -113,8 +105,19 @@ def serve() -> None:
     grpc_server = _build_server(grpc_config.max_workers)
     _bind_port(grpc_server)
 
-    signal.signal(signal.SIGTERM, lambda signum, _frame: _shutdown(grpc_server, signum))
-    signal.signal(signal.SIGINT, lambda signum, _frame: _shutdown(grpc_server, signum))
+    # Stopping inside the handler hangs if a second signal arrives mid-stop.
+    stop_requested = threading.Event()
+
+    def request_stop(signum: int, _frame) -> None:
+        if not stop_requested.is_set():
+            logger.info("Shutting down (signal %s) ...", signum)
+        stop_requested.set()
+
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
 
     grpc_server.start()
-    grpc_server.wait_for_termination()
+    stop_requested.wait()
+    grpc_server.stop(grace=5).wait()
+    dispose_engine()
+    logger.info("Server stopped")
