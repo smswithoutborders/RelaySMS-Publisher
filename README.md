@@ -1,201 +1,198 @@
 # RelaySMS Publisher
 
-Publish content to online platforms (Gmail, Twitter, Telegram, etc.) using SMS when internet connectivity is unavailable.
+Publishes to online platforms (Gmail, X, Telegram and more) from content sent by SMS, so people can post without an internet connection.
 
-## Table of Contents
+## Contents
 
+- [How it works](#how-it-works)
 - [Requirements](#requirements)
-- [Installation](#installation)
+- [Install on a server](#install-on-a-server)
+- [Manage the services](#manage-the-services)
+- [Run with Docker](#run-with-docker)
+- [Development](#development)
 - [Configuration](#configuration)
-- [Platform Adapters](#platform-adapters)
-- [Gateway Clients](#gateway-clients)
+- [Platform adapters](#platform-adapters)
+- [Gateway clients](#gateway-clients)
+- [Credentials](#credentials)
 - [Documentation](#documentation)
-- [Testing](#testing)
 - [License](#license)
+
+## How it works
+
+1. A user links an account (Gmail, X, ...) through the gRPC API, which stores its token encrypted.
+2. Offline, the user's app encrypts the content and sends it by SMS to a gateway client: a phone number that relays SMS to this server.
+3. The payload arrives over REST, the Twilio webhook or SMTP and is queued.
+4. A Celery worker decrypts it and publishes it through the platform's adapter.
 
 ## Requirements
 
-- **Python:** >= 3.8.10
-- **Database:** SQLite, MySQL (>= 8.0.28) / MariaDB, or PostgreSQL (>= 12)
+- Ubuntu 24.04 or Debian 13
+- Python 3.12 or newer
+- A database: SQLite (the default), MySQL 8.0.28 or newer, MariaDB, or PostgreSQL 12 or newer
 
-**Ubuntu Dependencies:**
+The installer sets up everything else, including the system packages and Rust.
+
+## Install on a server
+
+1. Run the installer. It installs to `/opt/relaysms/relaysms-publisher`, generates the encryption keys and starts the services under systemd:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | sudo bash
+   ```
+
+   With no flags it asks about each option. To choose up front, pass flags after `bash -s --`:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | \
+     sudo bash -s -- --site-name publisher.example.com --setup-db postgres
+   ```
+
+   | Flag | Does |
+   | --- | --- |
+   | `--site-name DOMAIN` | Puts nginx with a Let's Encrypt certificate in front; `--skip-nginx` skips it |
+   | `--setup-db mysql\|postgres` | Installs the database server and writes its details to `.env` ([details](INSTALL.md#database)) |
+   | `--setup-broker rabbitmq` | Uses RabbitMQ instead of SQLite as the Celery broker, for heavier load ([details](INSTALL.md#celery-worker-and-beat)) |
+   | `--setup-observability` | Adds SigNoz and Uptime Kuma ([details](observability/README.md)) |
+   | `--install-dir PATH`, `--instance-name NAME` | Installs elsewhere, or a second copy on the same host ([details](INSTALL.md#running-multiple-instances)) |
+
+   `install.sh --help` lists every flag.
+
+2. Go to the install directory and check the configuration:
+
+   ```bash
+   cd /opt/relaysms/relaysms-publisher
+   sudo ./manage.sh check
+   ```
+
+3. Create an administrator credential for the REST API:
+
+   ```bash
+   ./publisher.sh creds create --username ops --administrator
+   ```
+
+   > [!IMPORTANT]
+   > The password is printed once. Store it before closing the terminal.
+
+4. Add the platform adapters you want to offer, then follow each adapter's README to configure it:
+
+   ```bash
+   ./publisher.sh platforms add https://github.com/smswithoutborders/gmail-oauth2-adapter
+   ```
+
+5. Register the gateway clients that relay SMS to this server:
+
+   ```bash
+   ./publisher.sh gateway-clients create --msisdn +237123456789 --protocols https
+   ```
+
+6. Check that the services are up:
+
+   ```bash
+   sudo ./manage.sh status
+   curl http://127.0.0.1:16000/health
+   ```
+
+[INSTALL.md](INSTALL.md) covers installing by hand and every setting.
+
+## Manage the services
+
+From the install directory:
+
+| Command | Does |
+| --- | --- |
+| `sudo ./manage.sh status` | Show each service's state |
+| `sudo ./manage.sh logs` | Follow the service logs |
+| `sudo ./manage.sh start`, `stop`, `restart` | Control every service together |
+| `sudo ./manage.sh enable`, `disable` | Start the services on boot, or stop doing so |
+| `sudo ./manage.sh update` | Pull the latest code, rebuild and restart; add `--migrate` when the release has migrations |
+| `sudo ./manage.sh migrate` | Apply database migrations |
+| `sudo ./manage.sh check` | Report every missing or invalid setting |
+| `sudo ./manage.sh nginx [DOMAIN]` | Re-render the nginx site and reattach or obtain its certificate |
+| `sudo ./manage.sh uninstall` | Remove the services and the install directory |
+
+See [Service Management](INSTALL.md#service-management) for log filters and what `update` and `nginx` do.
+
+## Run with Docker
+
+1. Clone the repository with its submodule:
+
+   ```bash
+   git clone --recurse-submodules https://github.com/smswithoutborders/RelaySMS-Publisher.git
+   cd RelaySMS-Publisher
+   ```
+
+2. Create `.env` with fresh encryption keys:
+
+   ```bash
+   cp template.env .env
+   for key in DATABASE_ENCRYPTION_KEY DATABASE_FIELD_ENCRYPTION_KEY DATA_ENCRYPTION_KEY; do
+     sed -i "s/^$key=$/$key=$(openssl rand -hex 32)/" .env
+   done
+   ```
+
+3. Build and start:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+The container applies pending migrations, then starts every service. It listens on `PORT` (16000) and `GRPC_PORT` (6000) from `.env`, and keeps its data in `./data`.
+
+> [!CAUTION]
+> Back up `.env` with `./data`: its [encryption keys](INSTALL.md#encryption) are the only way to read the data.
+
+## Development
+
+[CONTRIBUTING.md](CONTRIBUTING.md) walks through setting up, running the services locally, testing and making common changes. In short:
 
 ```bash
-sudo apt install python3-dev build-essential libsqlcipher-dev libmagic1 pkg-config make git
+git clone --recurse-submodules https://github.com/smswithoutborders/RelaySMS-Publisher.git
+cd RelaySMS-Publisher
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements-dev.txt
+pre-commit install --install-hooks
+make build
 ```
 
-## Installation
-
-### Production
-
-Quick install:
+Then follow [Run locally](CONTRIBUTING.md#run-locally). To fill a local database with sample data:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | sudo bash
-```
-
-Defaults to SQLite. To install and provision MySQL or PostgreSQL instead, add `--setup-db`:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | \
-    sudo bash -s -- --setup-db postgres
-```
-
-This installs the database server if it's not already present, creates a dedicated database and user with a generated password, and writes the connection details into `.env`. See [INSTALL.md](INSTALL.md#database) for `--db-name`/`--db-user`/`--db-password` and manual configuration.
-
-Add `--setup-broker rabbitmq` to install RabbitMQ and switch Celery's broker to it (SQLite is fine for light load, but doesn't scale under heavier throughput). See [INSTALL.md](INSTALL.md#celery-worker--beat) for `--broker-vhost`/`--broker-user`/`--broker-password` and manual configuration.
-
-Add `--setup-observability` to also stand up self-hosted tracing/metrics/uptime monitoring (SigNoz + Uptime Kuma). See [Observability](#logging--observability) below.
-
-Run with no flags at all and the installer walks you through each of these choices interactively instead.
-
-Add `--install-dir PATH` to install somewhere other than `/opt/relaysms/relaysms-publisher`, and `--instance-name NAME` to run a second, independent copy on the same host. See [Running Multiple Instances](INSTALL.md#running-multiple-instances).
-
-Manage services:
-
-```bash
-cd /opt/relaysms/relaysms-publisher
-./manage.sh {start|stop|restart|status|logs|update}
-```
-
-See [INSTALL.md](INSTALL.md) for manual installation and detailed configuration.
-
-### Development
-
-```bash
-# Setup environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Configure
-cp template.env .env
-# Edit .env as needed
-
-# Build
-make build-setup
-
-# Run database migrations
-make migrate-up
-
-# Start gRPC, REST API, Celery worker, and Celery beat together
-./scripts/run.sh
-```
-
-### Docker
-
-```bash
-cp template.env .env
-# Edit .env as needed
-
-docker compose up -d --build
-```
-
-The container entrypoint runs pending database migrations, then starts the gRPC server, REST API, Celery worker, and Celery beat scheduler together (via `scripts/run.sh`). `docker-compose.yml` forces `HOST`/`GRPC_HOST` to `0.0.0.0` regardless of what's in `.env`, since `127.0.0.1` (the `template.env` default, meant for bare-metal) would make the container unreachable from outside.
-
-To customize the exposed ports, set `PORT`/`GRPC_PORT` in `.env` before starting; `docker-compose.yml` reads them for its port mappings. To run without Compose:
-
-```bash
-docker build -t relaysms-publisher:latest .
-docker run -d \
-  --name relaysms-publisher \
-  --env-file .env \
-  -e HOST=0.0.0.0 -e GRPC_HOST=0.0.0.0 \
-  -p 16000:16000 \
-  -p 6000:6000 \
-  -v $(pwd)/data:/publisher/data \
-  -v $(pwd)/platforms:/publisher/platforms \
-  -v $(pwd)/gateway_clients:/publisher/gateway_clients \
-  relaysms-publisher:latest
+python -m publisher seed stats --count 5000 --days 90   # publication stats
+python -m publisher seed creds --count 5                # credentials; prints their passwords
+python -m publisher seed platforms                      # adapter rows, without their files
+python -m publisher seed gateway-clients --count 10     # gateway clients, some disabled
 ```
 
 ## Configuration
 
-Configure via environment variables in `.env` file:
+Settings live in `.env`. `template.env` lists every setting with its default and what it does, and `python -m publisher config check` (or `sudo ./manage.sh check` on a server) reports any that are missing or invalid.
 
-### Server
-
-```bash
-MODE=production                 # development or production
-HOST=127.0.0.1                  # REST API host
-PORT=16000                      # REST API port
-GRPC_HOST=127.0.0.1             # gRPC server host
-GRPC_PORT=6000                  # gRPC server port
-GRPC_SSL_PORT=6001              # gRPC SSL port
-SSL_CERTIFICATE=                # SSL certificate path (optional)
-SSL_KEY=                        # SSL key path (optional)
-```
-
-### Database
-
-**SQLite (default):**
-
-```bash
-SQLITE_DATABASE_PATH=data/relaysms.db
-```
-
-**MySQL:**
-
-```bash
-DATABASE_DIALECT=mysql
-MYSQL_HOST=127.0.0.1
-MYSQL_USER=your_user
-MYSQL_PASSWORD=your_password
-MYSQL_DATABASE=relaysms_publisher
-```
-
-**PostgreSQL:**
-
-```bash
-DATABASE_DIALECT=postgres
-POSTGRES_HOST=127.0.0.1
-POSTGRES_USER=your_user
-POSTGRES_PASSWORD=your_password
-POSTGRES_DATABASE=relaysms_publisher
-```
-
-Whole-database encryption (`DATABASE_ENCRYPTION_ENABLED`) is SQLCipher for SQLite and TDE for MySQL; Postgres has no built-in equivalent, use disk-level encryption on the server instead.
-
-### Adapters
-
-```bash
-PLATFORMS_ADAPTERS_DIR=platforms/adapters
-PLATFORMS_ADAPTERS_VENV_DIR=platforms/adapters_venv
-PLATFORMS_ADAPTERS_ASSETS_DIR=platforms/adapters_assets
-```
+| Settings | Documented in |
+| --- | --- |
+| Server, database, encryption, Celery, adapters | [INSTALL.md](INSTALL.md#configuration) |
+| REST API login and sessions (`AUTH_*`) | [REST API](docs/rest.md#authentication) |
+| SMTP transport (`SMTP_*`) | [SMTP Transport](docs/smtp.md#configuration) |
+| Twilio SMS transport (`TWILIO_*`) | The comments in `template.env` |
+| Tracing, metrics and logs (`OTEL_*`) | [Observability](observability/README.md) |
+| Offline publishing (`OFFLINE_PUBLISH_*`) | [Below](#offline-publishing) |
 
 ### Offline Publishing
 
-```bash
-OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=      # Comma-separated allowlist of ingestion protocols allowed to publish offline payloads, e.g. smtp,sms (empty allows all)
-OFFLINE_PUBLISH_SHARED_SECRET=          # Shared secret required in the "tag" field for offline payloads over https (empty disables the check). 64-char hex (32 bytes).
-```
-
-Offline payloads are tagged with the protocol they came in on: `https` for [REST `/publications`](docs/rest.md#7-publish-content), `smtp` for the [SMTP transport](docs/smtp.md), `sms` for the [Twilio transport](docs/rest.md#8-twilio-incoming-sms). If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set, offline payloads from any other protocol are discarded.
-
-`https` is excluded by default since it's unauthenticated and free to spam. `smtp` and `sms` are allowed because their listeners authenticate the sender first (DKIM + allowlist for `smtp`, signature check for `sms`).
-
-If `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads submitted over `https` must also carry a matching `tag` value in the request body (`PublishContentRequest.tag`).
-
-### Logging & Observability
+Offline payloads are tagged with the protocol they arrived on: `https` for [REST `/publications`](docs/rest.md#publishing), `smtp` for the [SMTP transport](docs/smtp.md) and `sms` for the [Twilio webhook](docs/rest.md#publishing).
 
 ```bash
-LOG_LEVEL=info                  # debug, info, warning, error
+OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=smtp   # comma-separated; empty allows every protocol
+OFFLINE_PUBLISH_SHARED_SECRET=           # 64-char hex; empty disables the check
 ```
 
-Tracing, metrics, log export, and uptime monitoring are available via a self-hosted [SigNoz](https://signoz.io) + [Uptime Kuma](https://github.com/louislam/uptime-kuma) stack. Off by default (`OTEL_EXPORTER_OTLP_ENDPOINT` is blank in `template.env`), no impact on running Publisher without it. Install with `--setup-observability` (installer flag above) or `sudo ./scripts/setup-observability.sh` against an existing install. See [observability/README.md](observability/README.md) for setup.
+Offline payloads from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` are discarded. When `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads over `https` must carry it in the request's `tag` field.
 
-## Platform Adapters
+> [!WARNING]
+> `https` is unauthenticated, so anyone can send to it. The SMTP and Twilio listeners authenticate the sender (DKIM and an allowlist for `smtp`, Twilio's signature for `sms`), which is why `template.env` allows only `smtp`.
 
-Supported platforms can be retrieved via the REST API: `/v1/platforms`.
+## Platform adapters
 
-> [!TIP]
-> Each adapter has its own configuration requirements. See:
->
-> - [Platform Adapters Documentation](platforms/README.md)
-> - Individual adapter READMEs: `platforms/adapters/*/README.md`
-
-**Available adapters:**
+Each platform is served by an adapter installed from its own repository. `GET /v1/platforms` lists the enabled ones.
 
 - [Gmail](https://github.com/smswithoutborders/gmail-oauth2-adapter)
 - [X (formerly Twitter)](https://github.com/smswithoutborders/twitter-oauth2-adapter)
@@ -204,26 +201,41 @@ Supported platforms can be retrieved via the REST API: `/v1/platforms`.
 - [Bluesky](https://github.com/smswithoutborders/bluesky-oauth2-adapter)
 - [Mastodon](https://github.com/smswithoutborders/mastodon-oauth2-adapter)
 
-## Gateway Clients
+[docs/platforms.md](docs/platforms.md) covers adding, updating, disabling and removing adapters. Each adapter's README covers its own settings.
 
-Registered gateway clients can be retrieved via the REST API: `/v1/gateway-clients`.
+## Gateway clients
 
-> [!TIP]
-> See [Gateway Clients Documentation](gateway_clients/README.md) for managing the registry.
+Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/gateway-clients` lists the enabled ones, and [docs/gateway-clients.md](docs/gateway-clients.md) covers managing them.
+
+## Credentials
+
+Credentials log in to the REST API, each with its own scopes. One holding every scope is an administrator. They can also be managed over the [REST API](docs/rest.md#managing-credentials).
+
+```bash
+./publisher.sh creds scopes                                        # list scopes
+./publisher.sh creds create --username ops --administrator         # prints the password once
+./publisher.sh creds create --username analyst --scope stats:publications:read
+./publisher.sh creds set-scopes --username analyst --scope stats:publications:read --scope stats:publications:reasons
+./publisher.sh creds list
+./publisher.sh creds reset-password --username analyst
+./publisher.sh creds disable --username analyst
+./publisher.sh creds enable --username analyst
+./publisher.sh creds revoke-sessions --username analyst
+./publisher.sh creds delete --username analyst
+```
 
 ## Documentation
 
-- [Installation Guide](INSTALL.md) - Detailed setup instructions
-- [gRPC API](docs/grpc.md) - gRPC interface documentation
-- [REST API](docs/rest.md) - REST API reference
-- [Platform Adapters](platforms/README.md) - Extending functionality
-- [Gateway Clients](gateway_clients/README.md) - Managing the gateway client registry
-- [Observability](observability/README.md) - Tracing, metrics, logs, uptime monitoring
-
-## Testing
-
-See [Test Documentation](tests/README.md) for running tests.
+- [Installation Guide](INSTALL.md): installing by hand and every setting
+- [REST API](docs/rest.md): publishing, authentication and the [OpenAPI reference](docs/openapi.json)
+- [gRPC API](docs/grpc.md): linking accounts and syncing keys
+- [SMTP Transport](docs/smtp.md): publishing payloads sent by email
+- [Platform Adapters](docs/platforms.md): installing and managing adapters
+- [Gateway Clients](docs/gateway-clients.md): managing gateway clients
+- [Observability](observability/README.md): tracing, metrics, logs and uptime monitoring
+- [Reference Client](tools/README.md): exercising the gRPC and REST flows by hand
+- [Contributing](CONTRIBUTING.md): setup, workflow, conventions and testing
 
 ## License
 
-Licensed under the GNU General Public License (GPL) v3. See [LICENSE](LICENSE.md) for details.
+Licensed under the GNU General Public License v3. See [LICENSE](LICENSE.md).

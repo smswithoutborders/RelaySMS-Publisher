@@ -1,0 +1,205 @@
+# SPDX-License-Identifier: GPL-3.0-only
+"""Poll the relay mailbox over IMAP and queue each message for publication."""
+
+import imaplib
+import json
+import logging
+import socket
+import ssl
+import time
+import traceback
+
+import requests
+from imap_tools import (
+    AND,
+    MailBox,
+    MailboxDeleteError,
+    MailboxFolderSelectError,
+    MailboxLoginError,
+    MailboxLogoutError,
+    MailMessage,
+)
+from pydantic import ValidationError
+
+from publisher import publications
+from publisher.config import SmtpConfig
+from publisher.publications import (
+    PayloadMalformedError,
+    PayloadNotSupportedError,
+    PublishContentRequest,
+)
+from publisher.smtp import auth as smtp_auth
+from publisher.tasks.publication_task import publish_message
+
+logger = logging.getLogger(__name__)
+
+smtp_config = SmtpConfig.get()
+
+
+def _ping_heartbeat() -> None:
+    """Best-effort ping to the Uptime Kuma push monitor. No-op if unset."""
+    url = smtp_config.heartbeat_url
+    if not url:
+        return
+
+    try:
+        requests.get(url, timeout=5)
+    except requests.RequestException as exc:
+        logger.warning("Failed to ping SMTP listener heartbeat: %s", exc)
+
+
+def _mask_email(address: str) -> str:
+    local, _, domain = (address or "").partition("@")
+    if not domain:
+        return "***"
+    return f"{local[:2]}***@{domain}"
+
+
+def process_incoming_email(msg: MailMessage) -> bool:
+    """Validate, authenticate, and queue an incoming email for publication.
+
+    Returns whether the email is done with (should be deleted). False means
+    an unexpected error occurred and it should be left for a retry next
+    cycle; every other outcome, handled or intentionally rejected, is done.
+    """
+    email_uid = msg.uid
+    from_email = msg.from_
+
+    try:
+        if not from_email:
+            logger.warning("No valid 'From' found. Discarding email %s.", email_uid)
+            return True
+
+        if not smtp_auth.is_sender_allowed(from_email):
+            logger.warning(
+                "Dropping email %s from unauthorized sender: %s",
+                email_uid,
+                _mask_email(from_email),
+            )
+            return True
+
+        # as_bytes() re-serializes rather than returning the literal wire
+        # bytes, but dkimpy tolerates that (see auth.verify_dkim_independently).
+        auth_passed, auth_reason = smtp_auth.evaluate(
+            msg.obj, msg.obj.as_bytes(), from_email
+        )
+        if not auth_passed:
+            logger.warning(
+                "Dropping email %s failing authentication (sender %s): %s",
+                email_uid,
+                _mask_email(from_email),
+                auth_reason,
+            )
+            return True
+
+        try:
+            request = PublishContentRequest(**json.loads(msg.text))
+        except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+            logger.warning("Discarding email %s with invalid body: %s", email_uid, exc)
+            return True
+
+        try:
+            publications.validate(request.text)
+        except (PayloadMalformedError, PayloadNotSupportedError) as exc:
+            logger.warning(
+                "Discarding email %s with invalid payload: %s", email_uid, exc
+            )
+            return True
+
+        publish_message.delay(request.text, request.address, "smtp")
+        logger.info(
+            "Successfully queued publication request from email %s via protocol %r.",
+            email_uid,
+            "smtp",
+        )
+        return True
+
+    except Exception:
+        logger.exception("Error processing email %s", email_uid)
+        return False
+
+
+def main() -> None:
+    """Run the SMTP (IMAP-polling) ingestion loop."""
+    if not smtp_config.transport_enabled:
+        logger.info(
+            "SMTP transport disabled (SMTP_TRANSPORT_ENABLED != true). Exiting."
+        )
+        return
+
+    server = smtp_config.imap_server
+    username, password = smtp_config.imap_username, smtp_config.imap_password
+    assert server and username and password  # config requires them when enabled
+
+    ssl_context = ssl.create_default_context()
+    if smtp_config.tls_client_certificate:
+        ssl_context.load_cert_chain(
+            certfile=smtp_config.tls_client_certificate,
+            keyfile=smtp_config.tls_client_key,
+        )
+
+    done = False
+    while not done:
+        connection_start_time = time.monotonic()
+        connection_live_time = 0.0
+        try:
+            with MailBox(server, smtp_config.imap_port, ssl_context=ssl_context).login(
+                username, password
+            ) as mailbox:
+                logger.info(
+                    "Connected to mailbox %s on %s",
+                    smtp_config.imap_server,
+                    time.asctime(),
+                )
+                while connection_live_time < 29 * 60:
+                    try:
+                        responses = mailbox.idle.wait(timeout=20)
+                        if responses:
+                            logger.debug("IMAP IDLE responses: %s", responses)
+
+                        for folder in smtp_config.mail_folders:
+                            try:
+                                mailbox.folder.set(folder)
+                            except MailboxFolderSelectError:
+                                logger.error(
+                                    "Folder %r does not exist, skipping", folder
+                                )
+                                continue
+                            to_delete = [
+                                msg.uid
+                                for msg in mailbox.fetch(
+                                    criteria=AND(seen=False),
+                                    bulk=50,
+                                    mark_seen=False,
+                                )
+                                if process_incoming_email(msg) and msg.uid
+                            ]
+                            if to_delete:
+                                try:
+                                    mailbox.delete(to_delete)
+                                except MailboxDeleteError as exc:
+                                    logger.error(
+                                        "Failed to delete %d email(s): %s",
+                                        len(to_delete),
+                                        exc,
+                                    )
+
+                    except KeyboardInterrupt:
+                        logger.info("Received KeyboardInterrupt, exiting...")
+                        done = True
+                        break
+                    _ping_heartbeat()
+                    connection_live_time = time.monotonic() - connection_start_time
+        except (
+            TimeoutError,
+            ConnectionError,
+            imaplib.IMAP4.abort,
+            MailboxLoginError,
+            MailboxLogoutError,
+            socket.herror,
+            socket.gaierror,
+        ) as e:
+            logger.error("Error occurred: %s", e)
+            logger.error(traceback.format_exc())
+            logger.info("Reconnecting in a minute...")
+            time.sleep(60)

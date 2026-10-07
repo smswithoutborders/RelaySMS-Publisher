@@ -1,0 +1,4 @@
+ignored:
+  # The base image tag pins the distro; pinning apt packages too breaks
+  # the build whenever Debian drops an old point release.
+  - DL3008

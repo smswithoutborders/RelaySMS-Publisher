@@ -1,6 +1,6 @@
 # SMTP Transport
 
-Publishes RelaySMS payloads received by email. Incoming mails are picked up by polling a mailbox over IMAP (`smtp_listener.py`), authenticated, and queued for publication.
+Publishes RelaySMS payloads received by email. Incoming mails are picked up by polling a mailbox over IMAP (`publisher/smtp/listener.py`), authenticated, and queued for publication.
 
 ## Message Format
 
@@ -20,21 +20,22 @@ The body of each email must be a JSON object:
 
 ## How It Works
 
-1. Poll `SMTP_IMAP_MAIL_FOLDER` (comma-separated, e.g. `INBOX,Spam`) for unseen mail via IMAP IDLE. Including Spam catches legitimate mail a provider misfiled.
-2. Reject each email unless the sender is allow-listed and authenticated (see [Security](#-security)).
-3. Parse the body as JSON and validate the payload.
-4. Queue the payload for publication.
-5. Delete every handled email in one batched call per folder, rather than one round trip each - keeps a mailbox with a large backlog from being slow to work through.
+1. Waits for unseen mail in `SMTP_IMAP_MAIL_FOLDER` with IMAP IDLE. List several folders, such as `INBOX,Spam`, to catch mail a provider misfiled.
+2. Rejects each email unless the sender is allowlisted and authenticated (see [Security](#security)).
+3. Parses the body as JSON and validates the payload.
+4. Queues the payload for publication.
+5. Deletes the handled emails, in one call per folder.
 
 ## Security
 
 Two checks must both pass before a message is queued:
 
-**Allowlist**: `SMTP_ALLOWED_SENDERS` is a comma-separated list of exact addresses and/or domains. Empty means nothing is allowed. A domain entry trusts *any* authenticated sender on that domain, since DKIM authenticates the domain, not the specific mailbox - use an exact address if only one sender should be trusted.
+**Allowlist:** `SMTP_ALLOWED_SENDERS` lists exact addresses and domains, comma-separated. Empty allows nothing.
 
-**Authentication**: SPF/DKIM aren't re-checked here (that would need the sender's connecting IP, which isn't available after the fact). Instead, the listener trusts the `Authentication-Results` header ([RFC 8601](https://www.rfc-editor.org/rfc/rfc8601)) already stamped by the mailbox's own receiving server, but only when its `authserv-id` matches `SMTP_TRUSTED_AUTHSERV_ID`; otherwise a sender could forge their own passing header. `SMTP_REQUIRE_DKIM`/`SMTP_REQUIRE_SPF` control which verdicts are required.
+> [!WARNING]
+> A domain entry trusts every authenticated sender on that domain, since DKIM vouches for the domain, not the mailbox. List an exact address when only one sender should be trusted.
 
-Set `SMTP_VERIFY_DKIM_INDEPENDENTLY=true` to additionally re-verify the DKIM signature against DNS ourselves, as defense-in-depth.
+**Authentication:** the listener can't re-check SPF, which needs the sender's IP. It reads the `Authentication-Results` header ([RFC 8601](https://www.rfc-editor.org/rfc/rfc8601)) that the mailbox's own server added, and only from the `authserv-id` in `SMTP_TRUSTED_AUTHSERV_ID`, since a sender can forge such a header from anyone else. `SMTP_REQUIRE_DKIM` and `SMTP_REQUIRE_SPF` choose the verdicts required. `SMTP_VERIFY_DKIM_INDEPENDENTLY=true` also re-verifies the DKIM signature against DNS.
 
 ## Configuration
 
@@ -57,7 +58,7 @@ Set `SMTP_VERIFY_DKIM_INDEPENDENTLY=true` to additionally re-verify the DKIM sig
 ## Running
 
 ```sh
-make smtp-listener-start
+python3 -m publisher.smtp
 ```
 
-`scripts/run.sh` and the `relaysms-publisher-smtp.service` systemd unit also start it, conditionally on `SMTP_TRANSPORT_ENABLED`.
+`scripts/run.sh` and the `relaysms-publisher-smtp` unit start it too; it exits at once while `SMTP_TRANSPORT_ENABLED` is off.

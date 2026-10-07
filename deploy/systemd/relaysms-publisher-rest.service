@@ -1,0 +1,35 @@
+[Unit]
+Description=RelaySMS Publisher REST API
+PartOf=relaysms-publisher.target
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=relaysms
+WorkingDirectory=/opt/relaysms/relaysms-publisher
+EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
+Environment=OTEL_SERVICE_NAME=relaysms-publisher-rest
+Environment=PATH=/opt/relaysms/relaysms-publisher/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# uvicorn keeps replacing workers that fail on startup, so systemd would never see
+# the failure. Importing the app once first makes a config error fail the unit.
+ExecStartPre=/opt/relaysms/relaysms-publisher/venv/bin/python3 -c "import publisher.api.rest.app"
+ExecStart=/opt/relaysms/relaysms-publisher/scripts/otel-wrap.sh /opt/relaysms/relaysms-publisher/venv/bin/python3 -m uvicorn publisher.api.rest.app:app --host "${HOST}" --port "${PORT}" --workers 4 --proxy-headers --forwarded-allow-ips "*"
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=relaysms-publisher-rest
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+NoNewPrivileges=true
+ReadWritePaths=__RW_PATHS__
+
+[Install]
+WantedBy=relaysms-publisher.target

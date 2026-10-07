@@ -5,16 +5,16 @@ Revises: 008
 Create Date: 2026-08-07 00:00:00.000000
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "009"
-down_revision: Union[str, None] = "008"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "008"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -31,8 +31,12 @@ def upgrade() -> None:
         batch_op.alter_column(
             "platform_name", existing_type=sa.String(length=100), nullable=True
         )
+        # Without existing_nullable, MySQL's MODIFY makes the column nullable.
         batch_op.alter_column(
-            "status", existing_type=sa.String(length=50), type_=sa.String(length=20)
+            "status",
+            existing_type=sa.String(length=50),
+            existing_nullable=False,
+            type_=sa.String(length=20),
         )
 
     op.create_index(
@@ -55,7 +59,10 @@ def downgrade() -> None:
         batch_op.drop_column("failure_reason")
         batch_op.drop_column("protocol")
         batch_op.alter_column(
-            "status", existing_type=sa.String(length=20), type_=sa.String(length=50)
+            "status",
+            existing_type=sa.String(length=20),
+            existing_nullable=False,
+            type_=sa.String(length=50),
         )
         batch_op.add_column(sa.Column("updated_at", sa.DateTime(), nullable=True))
         batch_op.add_column(

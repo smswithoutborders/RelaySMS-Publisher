@@ -1,9 +1,8 @@
 name: Build and Deploy (staging)
 
+# Called by Checks once it passes on a push to staging.
 on:
-  push:
-    branches:
-      - staging
+  workflow_call:
 
 jobs:
   deploy:
@@ -17,11 +16,14 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.5
+        env:
+          # Any pushed commit message with [migrate] also runs the migrations.
+          MIGRATE_FLAG: ${{ contains(toJSON(github.event.commits.*.message), '[migrate]') && '--migrate' || '' }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
           key: ${{ secrets.SSH_KEY }}
-          envs: PATH
+          envs: PATH,MIGRATE_FLAG
           script: |
             set -e
-            sudo /opt/relaysms/relaysms-publisher/manage.sh update
+            sudo /opt/relaysms/relaysms-publisher/manage.sh update $MIGRATE_FLAG

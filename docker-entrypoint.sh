@@ -1,9 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
 
-set -Ee
+set -Eeuo pipefail
 
-on_err() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: aborted at line $1 (last command: $2)" >&2; }
-trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
+source "$SCRIPT_DIR/scripts/lib.sh"
 
 export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-80}"
@@ -11,5 +13,7 @@ export WORKERS="${WORKERS:-4}"
 export GRPC_HOST="${GRPC_HOST:-0.0.0.0}"
 
 python3 -m alembic upgrade head
+# Registers adapters installed before the registry moved to the database.
+python3 -m publisher platforms import
 
-exec ./scripts/run.sh
+exec "$SCRIPT_DIR/scripts/run.sh"

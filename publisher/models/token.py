@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: GPL-3.0-only
+"""Platform tokens stored for each linked account."""
+
+import datetime
+import secrets
+from typing import Any
+
+from sqlalchemy import BigInteger, Index, SmallInteger, String, func, select
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+
+from publisher.db import Base
+from publisher.db.types import EncryptedJSON, utc_now
+from publisher.models.token_hash import TokenHash
+
+
+def _generate_uint32_token() -> int:
+    return secrets.randbits(32)
+
+
+class Token(Base):
+    """token_data is {"account_id": "...", "token": {...}}."""
+
+    __tablename__ = "tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    token_id: Mapped[int] = mapped_column(
+        BigInteger, default=_generate_uint32_token, unique=True
+    )
+    platform: Mapped[str] = mapped_column(String(100))
+    cat_id: Mapped[int] = mapped_column(SmallInteger)
+    proto_id: Mapped[int] = mapped_column(SmallInteger)
+    token_data: Mapped[dict[str, Any]] = mapped_column(EncryptedJSON)
+    created_at: Mapped[datetime.datetime] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        default=utc_now, onupdate=utc_now
+    )
+    token_hash: Mapped[TokenHash] = relationship(
+        "TokenHash", back_populates="token", cascade="all, delete-orphan", uselist=False
+    )
+
+    __table_args__ = (Index("ix_tokens_platform_proto_id", "platform", "proto_id"),)
+
+
+def create(
+    session: Session,
+    platform: str,
+    cat_id: int,
+    proto_id: int,
+    token_data: dict[str, Any],
+) -> Token:
+    token = Token(
+        platform=platform, cat_id=cat_id, proto_id=proto_id, token_data=token_data
+    )
+    session.add(token)
+    session.flush()
+    return token
+
+
+def update_token_data(
+    session: Session, token: Token, new_token_data: dict[str, Any]
+) -> Token:
+    token.token_data = new_token_data
+    session.flush()
+    return token
+
+
+def get_idle(session: Session, older_than: datetime.datetime) -> list[Token]:
+    return list(
+        session.scalars(
+            select(Token)
+            .join(TokenHash)
+            .where(func.coalesce(TokenHash.last_used_at, Token.created_at) < older_than)
+        )
+    )
+
+
+def count_for_platform(session: Session, platform: str, proto_id: int) -> int:
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(Token)
+            .where(Token.platform == platform, Token.proto_id == proto_id)
+        )
+        or 0
+    )

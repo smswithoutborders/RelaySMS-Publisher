@@ -11,15 +11,16 @@ RUN --mount=type=cache,sharing=locked,target=/var/cache/apt \
   pkg-config \
   curl \
   git \
-  make && \
-  apt-get clean && rm -rf /var/lib/apt/lists/*
+  make \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
   | sh -s -- -y --no-modify-path
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN python3 -m venv /venv
-COPY requirements.txt requirements-observability.txt .
+COPY requirements.txt requirements-observability.txt ./
 RUN --mount=type=cache,sharing=locked,target=/root/.cache/pip \
   /venv/bin/pip install --disable-pip-version-check \
   -r requirements.txt -r requirements-observability.txt
@@ -28,8 +29,12 @@ COPY . .
 ENV PATH="/venv/bin:${PATH}"
 # Submodule URL is SSH-based; rewrite to HTTPS since no SSH key is
 # available in the build environment (same fix install.sh applies).
-RUN git config --global url."https://github.com/".insteadOf "git@github.com:" \
-  && make build-setup
+# The cargo caches outlive the layer, so source edits don't redo the Rust build.
+RUN --mount=type=cache,sharing=locked,target=/root/.cargo/registry \
+  --mount=type=cache,sharing=locked,target=/root/.cargo/git \
+  --mount=type=cache,sharing=locked,target=/publisher/lib_relaysms_payload_specs/target \
+  git config --global url."https://github.com/".insteadOf "git@github.com:" \
+  && make build
 
 
 FROM python:3.14.7-slim-bookworm
@@ -41,8 +46,8 @@ RUN --mount=type=cache,sharing=locked,target=/var/cache/apt \
   apt-get update && apt-get install -y --no-install-recommends \
   libsqlcipher0 \
   libmagic1 \
-  git && \
-  apt-get clean && rm -rf /var/lib/apt/lists/*
+  git \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /venv /venv
 COPY --from=builder /publisher /publisher
@@ -50,6 +55,5 @@ COPY --from=builder /publisher /publisher
 RUN chmod +x /publisher/docker-entrypoint.sh /publisher/scripts/run.sh /publisher/scripts/otel-wrap.sh
 
 ENV PATH="/venv/bin:${PATH}"
-ENV MODE=production
 
 ENTRYPOINT ["/publisher/docker-entrypoint.sh"]

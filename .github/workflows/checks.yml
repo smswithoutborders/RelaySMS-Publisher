@@ -1,0 +1,99 @@
+name: Checks
+
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+  push:
+    branches:
+      - staging
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  hooks:
+    name: Hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+        with:
+          python-version: "3.14"
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: pre-commit-
+
+      - name: Run hooks
+        run: venv/bin/pre-commit run --all-files --show-diff-on-failure
+
+  tests:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    # Ubuntu 24.04 LTS and Debian 13. The coverage job covers 3.14, the Docker image's.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run tests
+        run: make test PYTHON=venv/bin/python
+
+  coverage:
+    name: Coverage (Python 3.14)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+        with:
+          python-version: "3.14"
+
+      - name: Run tests with coverage
+        run: >-
+          make coverage PYTHON=venv/bin/python
+          PYTEST_ARGS="--cov-report=term --cov-report=markdown-append:$GITHUB_STEP_SUMMARY"
+
+  dialects:
+    name: Database dialects
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+        with:
+          python-version: "3.12"
+
+      # Postgres, MySQL and MariaDB run in the runner's rootless podman.
+      - name: Run dialect tests
+        run: make test-dialects PYTHON=venv/bin/python
+
+  e2e:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/e2e.yml
+
+  deploy-staging:
+    needs: [hooks, tests, coverage, dialects, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    uses: ./.github/workflows/deploy.staging.yml
+    secrets: inherit

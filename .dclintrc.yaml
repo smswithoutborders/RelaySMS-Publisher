@@ -1,0 +1,4 @@
+rules:
+  # A project name in the signoz override would rename Foundry's project.
+  require-project-name-field: 0
+  require-quotes-in-ports: [2, { quoteType: double }]

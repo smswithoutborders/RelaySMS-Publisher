@@ -1,0 +1,57 @@
+name: Set up the app
+description: Python, system packages, the venv, and the generated gRPC and payload-specs code.
+
+inputs:
+  python-version:
+    description: Python version to set up.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      id: python
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install system packages
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends libsqlcipher-dev libmagic1
+
+    # A hit skips pip entirely. The venv links to its interpreter, so the key
+    # has the exact Python version.
+    - uses: actions/cache@v6
+      id: venv-cache
+      with:
+        path: venv
+        key: venv-${{ runner.os }}-${{ steps.python.outputs.python-version }}-${{ hashFiles('requirements*.txt') }}
+
+    - name: Install dependencies
+      if: steps.venv-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        python -m venv venv
+        venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
+
+    - name: Get payload-specs commit
+      id: specs
+      shell: bash
+      run: echo "sha=$(git rev-parse HEAD:lib_relaysms_payload_specs)" >> "$GITHUB_OUTPUT"
+
+    # The bindings don't depend on the Python version, so every job shares them.
+    - uses: actions/cache@v6
+      id: specs-cache
+      with:
+        path: lib_relaysms_payload_specs/generated
+        key: payload-specs-${{ runner.os }}-${{ steps.specs.outputs.sha }}
+
+    - name: Build payload specs
+      if: steps.specs-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: make specs PYTHON=venv/bin/python
+
+    - name: Build protos
+      shell: bash
+      run: make protos PYTHON=venv/bin/python

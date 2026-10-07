@@ -3,7 +3,9 @@
 # Re-runnable: an existing install or database/role is left as-is.
 set -Eeuo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
+source "$SCRIPT_DIR/lib.sh"
 
 INSTALL_DIR="/opt/relaysms/relaysms-publisher"
 DB_EXISTING=0
@@ -28,76 +30,80 @@ Usage: setup-postgres.sh [OPTIONS]
 EOF
 }
 
-while [ $# -gt 0 ]; do
-  case "$1" in
-  --install-dir)
-    INSTALL_DIR="$2"
-    shift 2
-    ;;
-  --existing)
-    DB_EXISTING=1
-    shift
-    ;;
-  --db-host)
-    DB_HOST="$2"
-    shift 2
-    ;;
-  --db-port)
-    DB_PORT="$2"
-    shift 2
-    ;;
-  --db-name)
-    DB_NAME="$2"
-    shift 2
-    ;;
-  --db-user)
-    DB_USER="$2"
-    shift 2
-    ;;
-  --db-password)
-    DB_PASSWORD="$2"
-    shift 2
-    ;;
-  -h | --help)
-    usage
-    exit 0
-    ;;
-  *)
-    usage
-    error "Unknown option: $1"
-    ;;
-  esac
-done
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    --install-dir)
+      INSTALL_DIR="$2"
+      shift 2
+      ;;
+    --existing)
+      DB_EXISTING=1
+      shift
+      ;;
+    --db-host)
+      DB_HOST="$2"
+      shift 2
+      ;;
+    --db-port)
+      DB_PORT="$2"
+      shift 2
+      ;;
+    --db-name)
+      DB_NAME="$2"
+      shift 2
+      ;;
+    --db-user)
+      DB_USER="$2"
+      shift 2
+      ;;
+    --db-password)
+      DB_PASSWORD="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      error "Unknown option: $1"
+      ;;
+    esac
+  done
+}
 
-[ "$EUID" -eq 0 ] || error "Run with sudo"
-[ -f "$INSTALL_DIR/.env" ] || error "$INSTALL_DIR/.env not found, run install.sh first"
-validate_identifier "--db-name" "$DB_NAME"
-validate_identifier "--db-user" "$DB_USER"
-if [ "$DB_EXISTING" != "1" ] && { [ "$DB_HOST" != "127.0.0.1" ] || [ "$DB_PORT" != "5432" ]; }; then
-  error "--db-host/--db-port only apply with --existing; a new local install always uses 127.0.0.1:5432"
-fi
-
-if [ "$DB_EXISTING" = "1" ]; then
-  [ -n "$DB_PASSWORD" ] || error "--db-password is required with --existing"
-  validate_secret "--db-password" "$DB_PASSWORD"
-
-  log "Checking connection to existing PostgreSQL server at $DB_HOST:$DB_PORT"
-  db_err=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1;" 2>&1) || error "Could not connect to existing PostgreSQL database '$DB_NAME' at $DB_HOST:$DB_PORT as '$DB_USER': $db_err
-Re-run without --existing (or choose 'new' at the prompt) to create a new local database instead."
-  log "Connected successfully"
-else
-  [ -n "$DB_PASSWORD" ] || DB_PASSWORD=$(openssl rand -hex 24)
-  validate_secret "--db-password" "$DB_PASSWORD"
-
-  if ! command -v psql &>/dev/null; then
-    log "Installing PostgreSQL server"
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postgresql
+main() {
+  parse_args "$@"
+  require_root
+  [ -f "$INSTALL_DIR/.env" ] || error "$INSTALL_DIR/.env not found, run install.sh first"
+  validate_identifier "--db-name" "$DB_NAME"
+  validate_identifier "--db-user" "$DB_USER"
+  if [ "$DB_EXISTING" != "1" ] && { [ "$DB_HOST" != "127.0.0.1" ] || [ "$DB_PORT" != "5432" ]; }; then
+    error "--db-host/--db-port only apply with --existing; a new local install always uses 127.0.0.1:5432"
   fi
-  systemctl enable postgresql &>/dev/null || true
-  systemctl start postgresql
 
-  log "Creating role '$DB_USER'"
-  sudo -u postgres psql -v ON_ERROR_STOP=1 -c "
+  if [ "$DB_EXISTING" = "1" ]; then
+    [ -n "$DB_PASSWORD" ] || error "--db-password is required with --existing"
+    validate_secret "--db-password" "$DB_PASSWORD"
+
+    log "Checking connection to existing PostgreSQL server at $DB_HOST:$DB_PORT"
+    db_err=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1;" 2>&1) || error "Could not connect to existing PostgreSQL database '$DB_NAME' at $DB_HOST:$DB_PORT as '$DB_USER': $db_err
+Re-run without --existing (or choose 'new' at the prompt) to create a new local database instead."
+    log "Connected successfully"
+  else
+    [ -n "$DB_PASSWORD" ] || DB_PASSWORD=$(openssl rand -hex 24)
+    validate_secret "--db-password" "$DB_PASSWORD"
+
+    if ! command -v psql &>/dev/null; then
+      log "Installing PostgreSQL server"
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends postgresql
+    fi
+    systemctl enable postgresql &>/dev/null || true
+    systemctl start postgresql
+
+    log "Creating role '$DB_USER'"
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -c "
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$DB_USER') THEN
@@ -109,30 +115,33 @@ END
 \$\$;
 "
 
-  log "Creating database '$DB_NAME'"
-  db_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
-  if [ "$db_exists" != "1" ]; then
-    sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_USER\";"
-  else
-    sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"$DB_NAME\" OWNER TO \"$DB_USER\";"
+    log "Creating database '$DB_NAME'"
+    db_exists=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
+    if [ "$db_exists" != "1" ]; then
+      sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_USER\";"
+    else
+      sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"$DB_NAME\" OWNER TO \"$DB_USER\";"
+    fi
+
+    # Needed on Postgres < 15: owner doesn't get public-schema CREATE by
+    # default there, and migrations fail with "permission denied for schema public".
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO \"$DB_USER\";"
   fi
 
-  # Needed on Postgres < 15: owner doesn't get public-schema CREATE by
-  # default there, and migrations fail with "permission denied for schema public".
-  sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO \"$DB_USER\";"
-fi
+  sed -i "s|^DATABASE_DIALECT=.*|DATABASE_DIALECT=postgres|" "$INSTALL_DIR/.env"
+  sed -i "s|^POSTGRES_HOST=.*|POSTGRES_HOST=$DB_HOST|" "$INSTALL_DIR/.env"
+  sed -i "s|^POSTGRES_PORT=.*|POSTGRES_PORT=$DB_PORT|" "$INSTALL_DIR/.env"
+  sed -i "s|^POSTGRES_USER=.*|POSTGRES_USER=$DB_USER|" "$INSTALL_DIR/.env"
+  sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$DB_PASSWORD|" "$INSTALL_DIR/.env"
+  sed -i "s|^POSTGRES_DATABASE=.*|POSTGRES_DATABASE=$DB_NAME|" "$INSTALL_DIR/.env"
 
-sed -i "s|^DATABASE_DIALECT=.*|DATABASE_DIALECT=postgres|" "$INSTALL_DIR/.env"
-sed -i "s|^POSTGRES_HOST=.*|POSTGRES_HOST=$DB_HOST|" "$INSTALL_DIR/.env"
-sed -i "s|^POSTGRES_PORT=.*|POSTGRES_PORT=$DB_PORT|" "$INSTALL_DIR/.env"
-sed -i "s|^POSTGRES_USER=.*|POSTGRES_USER=$DB_USER|" "$INSTALL_DIR/.env"
-sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$DB_PASSWORD|" "$INSTALL_DIR/.env"
-sed -i "s|^POSTGRES_DATABASE=.*|POSTGRES_DATABASE=$DB_NAME|" "$INSTALL_DIR/.env"
+  highlight \
+    "Postgres ready" \
+    "Host     : $DB_HOST:$DB_PORT" \
+    "Database : $DB_NAME" \
+    "User     : $DB_USER" \
+    "Password : $DB_PASSWORD" \
+    "Written to $INSTALL_DIR/.env. Not stored anywhere else, save it now."
+}
 
-highlight \
-  "Postgres ready" \
-  "Host     : $DB_HOST:$DB_PORT" \
-  "Database : $DB_NAME" \
-  "User     : $DB_USER" \
-  "Password : $DB_PASSWORD" \
-  "Written to $INSTALL_DIR/.env. Not stored anywhere else, save it now."
+main "$@"

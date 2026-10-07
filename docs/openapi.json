@@ -1,0 +1,4926 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "RelaySMS Publisher",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log in",
+        "description": "Sets an HttpOnly session cookie for the web client; scripts use HTTP Basic.",
+        "operationId": "login_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentCredential"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong username or password, or the credential is disabled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The Origin isn't this API's or one in AUTH_WEB_ORIGINS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log out",
+        "description": "Ends the current session and clears its cookie.",
+        "operationId": "logout_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request used Basic auth, which has no session to end.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Current credential",
+        "description": "Call it on page load to check the session.",
+        "operationId": "me_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentCredential"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": []
+          },
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/creds": {
+      "get": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "List credentials",
+        "description": "Scope: creds:read.",
+        "operationId": "list_credentials_v1_creds_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CredentialInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Credentials V1 Creds Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:read"
+            ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Create credential",
+        "description": "The generated password is shown only in this response. Scope: creds:write.",
+        "operationId": "create_credential_v1_creds_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialWithPassword"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid username, an unknown scope, or a scope without the one it requires.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when granting scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That username is already taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/creds/{username}": {
+      "get": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Get credential",
+        "description": "Returns the ETag to send as If-Match. Scope: creds:read.",
+        "operationId": "get_credential_v1_creds__username__get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Update credential",
+        "description": "Deactivating ends its sessions. Needs If-Match. Scope: creds:write.",
+        "operationId": "update_credential_v1_creds__username__patch",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nothing to change, an unknown scope, or a scope without the one it requires.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when changing your own credential or one with scopes you don't hold, or granting scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Delete credential",
+        "description": "Needs If-Match. Scope: creds:write.",
+        "operationId": "delete_credential_v1_creds__username__delete",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when changing your own credential or one with scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/creds/{username}/reset-password": {
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Reset password",
+        "description": "New password shown once; sessions end. Needs If-Match. Scope: creds:write.",
+        "operationId": "reset_credential_password_v1_creds__username__reset_password_post",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialWithPassword"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when changing your own credential or one with scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/creds/{username}/revoke-sessions": {
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Revoke sessions",
+        "description": "Logs it out everywhere; Basic auth still works. Scope: creds:write.",
+        "operationId": "revoke_credential_sessions_v1_creds__username__revoke_sessions_post",
+        "security": [
+          {
+            "HTTPBasic": [
+              "creds:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "creds:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "title": "Username"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks creds:write, or a cookie request came from an origin that isn't allowed. Also when changing your own credential or one with scopes you don't hold.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No credential with that username.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audit-events": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "summary": "List audit events",
+        "description": "Newest first. Scope: audit:read, plus creds:read or platforms:read per area.",
+        "operationId": "list_audit_events_v1_audit_events_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "audit:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "audit:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AuditAction"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by action",
+              "title": "Action"
+            },
+            "description": "Filter by action"
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by actor username",
+              "title": "Actor"
+            },
+            "description": "Filter by actor username"
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by target name",
+              "title": "Target"
+            },
+            "description": "Filter by target name"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "At or after (ISO-8601, UTC if no offset)",
+              "title": "Since"
+            },
+            "description": "At or after (ISO-8601, UTC if no offset)"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Before (ISO-8601, UTC if no offset)",
+              "title": "Until"
+            },
+            "description": "Before (ISO-8601, UTC if no offset)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Set by the next and prev links",
+              "title": "Cursor"
+            },
+            "description": "Set by the next and prev links"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An invalid cursor, or 'since' not before 'until'.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks audit:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats/publications": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "List publications",
+        "description": "Newest first. Scope: stats:publications:read.\n\n`failure_reason` is null without stats:publications:reasons.",
+        "operationId": "list_publication_stats_v1_stats_publications_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "stats:publications:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "stats:publications:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Page size"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Set by the next and prev links",
+              "title": "Cursor"
+            },
+            "description": "Set by the next and prev links"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            },
+            "description": "Filter by status"
+          },
+          {
+            "name": "platform_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by platform name",
+              "title": "Platform Name"
+            },
+            "description": "Filter by platform name"
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by ingestion protocol",
+              "title": "Protocol"
+            },
+            "description": "Filter by ingestion protocol"
+          },
+          {
+            "name": "country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 10,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by ISO country code",
+              "title": "Country Code"
+            },
+            "description": "Filter by ISO country code"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Created at or after (ISO-8601, UTC if no offset)",
+              "title": "Since"
+            },
+            "description": "Created at or after (ISO-8601, UTC if no offset)"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Created before (ISO-8601, UTC if no offset)",
+              "title": "Until"
+            },
+            "description": "Created before (ISO-8601, UTC if no offset)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationStatsPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An invalid cursor, or 'since' not before 'until'.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks stats:publications:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats/publications/summary": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Summarize publications",
+        "description": "Counts per group; last 30 days by default. Scope: stats:publications:read.\n\nGrouping by `failure_reason` also needs stats:publications:reasons. Groups sort by\nperiod, then count, highest first. Periods with no rows are left out; chart them\nas 0.",
+        "operationId": "summarize_publication_stats_v1_stats_publications_summary_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "stats:publications:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "stats:publications:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/StatsGroupBy"
+              },
+              "description": "Columns to group by. Repeatable.",
+              "default": [
+                "status"
+              ],
+              "title": "Group By"
+            },
+            "description": "Columns to group by. Repeatable."
+          },
+          {
+            "name": "interval",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsInterval"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Also group by period start, in UTC. Weeks start Monday.",
+              "title": "Interval"
+            },
+            "description": "Also group by period start, in UTC. Weeks start Monday."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            },
+            "description": "Filter by status"
+          },
+          {
+            "name": "platform_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by platform name",
+              "title": "Platform Name"
+            },
+            "description": "Filter by platform name"
+          },
+          {
+            "name": "protocol",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by ingestion protocol",
+              "title": "Protocol"
+            },
+            "description": "Filter by ingestion protocol"
+          },
+          {
+            "name": "country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 10,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by ISO country code",
+              "title": "Country Code"
+            },
+            "description": "Filter by ISO country code"
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Created at or after (ISO-8601, UTC if no offset)",
+              "title": "Since"
+            },
+            "description": "Created at or after (ISO-8601, UTC if no offset)"
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Created before (ISO-8601, UTC if no offset)",
+              "title": "Until"
+            },
+            "description": "Created before (ISO-8601, UTC if no offset)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationStatsSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "'since' isn't before 'until'.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks stats:publications:read. Also when grouping by failure_reason without stats:publications:reasons.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/publications": {
+      "post": {
+        "tags": [
+          "Publishing"
+        ],
+        "summary": "Publish",
+        "description": "Queues an SMS payload for publishing.\n\nMulti-part payloads are kept until every segment arrives, then published. Payloads\nare tagged with protocol `https`; see Offline Publishing in the README for\n`OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors\nhappen later in the queue, so they're logged, not returned.",
+        "operationId": "create_publications_v1_publications_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRestContentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishContentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The payload isn't base64, or isn't a RelaySMS payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/twilio-sms": {
+      "post": {
+        "tags": [
+          "Publishing"
+        ],
+        "summary": "Twilio SMS webhook",
+        "description": "Checks the Twilio signature, then queues the SMS for publishing.\n\nPayloads are tagged with protocol `sms`. Each SMS is also forwarded to\n`TWILIO_FORWARD_URLS_RAW` as Twilio's form and to `TWILIO_FORWARD_URLS_JSON` as\n`{\"sender\", \"text\", \"received_at\"}`.",
+        "operationId": "twilio_incoming_sms_v1_twilio_sms_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "From": {
+                    "type": "string",
+                    "description": "Sender phone number"
+                  },
+                  "Body": {
+                    "type": "string",
+                    "description": "Base64-encoded SMS payload"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object",
+                "required": [
+                  "From",
+                  "Body"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Empty TwiML, so Twilio sends no reply.",
+            "content": {
+              "text/xml": {
+                "example": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response />"
+              }
+            }
+          },
+          "400": {
+            "description": "No From or Body field. The payload isn't base64, or isn't a RelaySMS payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No valid X-Twilio-Signature.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "TWILIO_SMS_TRANSPORT_ENABLED isn't true.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms": {
+      "get": {
+        "tags": [
+          "Platforms"
+        ],
+        "summary": "List platforms",
+        "description": "Platforms users can link: those with an installed, enabled adapter.",
+        "operationId": "get_platforms_v1_platforms_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 50,
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by platform name",
+              "title": "Name"
+            },
+            "description": "Filter by platform name"
+          },
+          {
+            "name": "proto_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by protocol ID",
+              "title": "Proto Id"
+            },
+            "description": "Filter by protocol ID"
+          },
+          {
+            "name": "cat_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by category ID",
+              "title": "Cat Id"
+            },
+            "description": "Filter by category ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformManifest"
+                  },
+                  "title": "Response Get Platforms V1 Platforms Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/{platform_name}/oauth/client-metadata.json": {
+      "get": {
+        "tags": [
+          "Platforms"
+        ],
+        "summary": "OAuth client metadata",
+        "description": "Only for platforms with dynamic client registration, such as Bluesky.",
+        "operationId": "get_platform_oauth_client_metadata_v1_platforms__platform_name__oauth_client_metadata_json_get",
+        "parameters": [
+          {
+            "name": "platform_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "description": "Platform name",
+              "title": "Platform Name"
+            },
+            "description": "Platform name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthClientMetadata"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No enabled adapter for the platform, or the platform has no client metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/{platform_name}/oauth/callback": {
+      "get": {
+        "tags": [
+          "Platforms"
+        ],
+        "summary": "OAuth callback",
+        "description": "Shows the callback query parameters, as a redirect target for OAuth2 testing.",
+        "operationId": "oauth_callback_v1_platforms__platform_name__oauth_callback_get",
+        "parameters": [
+          {
+            "name": "platform_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "description": "Platform name",
+              "title": "Platform Name"
+            },
+            "description": "Platform name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The query parameters as an HTML table.",
+            "content": {
+              "text/html": {}
+            }
+          },
+          "404": {
+            "description": "No enabled adapter for the platform, or the platform has no client metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/adapters": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "List adapters",
+        "description": "Every installed adapter, disabled ones included. Scope: platforms:read.",
+        "operationId": "list_adapters_v1_platforms_adapters_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlatformAdapterInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Adapters V1 Platforms Adapters Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:read"
+            ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Install adapter",
+        "description": "Queues an install; poll the job at Location. Administrators only.",
+        "operationId": "install_adapter_v1_platforms_adapters_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdapterInstall"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterJobInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "source_url isn't a GitHub repository of an org in PLATFORMS_GITHUB_ORGS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed. Also when the credential isn't an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already installed, or an install of it is already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The job queue is unavailable. Try again later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/platforms/adapters/{adapter_id}": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Get adapter",
+        "description": "Returns the ETag to send as If-Match. Scope: platforms:read.",
+        "operationId": "get_adapter_v1_platforms_adapters__adapter_id__get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdapterInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Enable or disable",
+        "description": "Needs If-Match. Scope: platforms:write.\n\nA disabled adapter is hidden from users but still revokes tokens.",
+        "operationId": "update_adapter_v1_platforms_adapters__adapter_id__patch",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformAdapterUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAdapterInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Uninstall adapter",
+        "description": "Needs If-Match. Scope: platforms:write.\n\nRefused while accounts are linked through it; disable it instead.",
+        "operationId": "delete_adapter_v1_platforms_adapters__adapter_id__delete",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Accounts are linked through it, or it changed at the same moment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/adapters/{adapter_id}/update": {
+      "post": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Update adapter",
+        "description": "Queues a move to a version tag; poll the job at Location. Administrators only.",
+        "operationId": "update_adapter_version_v1_platforms_adapters__adapter_id__update_post",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdapterUpgrade"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterJobInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The adapter's source isn't a GitHub repository of an org in PLATFORMS_GITHUB_ORGS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed. Also when the credential isn't an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An install or update of it is already running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The job queue is unavailable. Try again later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/adapters/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Get job",
+        "description": "Poll until the state is succeeded or failed. Scope: platforms:write.",
+        "operationId": "get_job_v1_platforms_adapters_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterJobInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No job with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/adapters/{adapter_id}/jobs": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "List jobs",
+        "description": "The last 20 installs and updates, newest first. Scope: platforms:write.",
+        "operationId": "list_jobs_v1_platforms_adapters__adapter_id__jobs_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdapterJobInfo"
+                  },
+                  "title": "Response List Jobs V1 Platforms Adapters  Adapter Id  Jobs Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/gateway-clients": {
+      "get": {
+        "tags": [
+          "Gateway Clients"
+        ],
+        "summary": "List gateway clients",
+        "description": "Numbers that relay SMS to this server. Country and operator ignore case.",
+        "operationId": "get_gateway_clients_v1_gateway_clients_get",
+        "parameters": [
+          {
+            "name": "msisdn",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by MSISDN",
+              "title": "Msisdn"
+            },
+            "description": "Filter by MSISDN"
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by country",
+              "title": "Country"
+            },
+            "description": "Filter by country"
+          },
+          {
+            "name": "operator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by operator",
+              "title": "Operator"
+            },
+            "description": "Filter by operator"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GatewayClientManifest"
+                  },
+                  "title": "Response Get Gateway Clients V1 Gateway Clients Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/gateway-clients/registry": {
+      "get": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "List all clients",
+        "description": "Every gateway client, disabled ones included. Scope: gc:read.",
+        "operationId": "list_clients_v1_gateway_clients_registry_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GatewayClientInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Clients V1 Gateway Clients Registry Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:read"
+            ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Add client",
+        "description": "Country, operator and operator code are resolved if omitted. Scope: gc:write.",
+        "operationId": "create_client_v1_gateway_clients_registry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GatewayClientCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayClientInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An invalid MSISDN or operator code, or details that can't be resolved from the MSISDN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That MSISDN is already registered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:write"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/gateway-clients/registry/suggest": {
+      "get": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Suggest client details",
+        "description": "Details and PLMN candidates to confirm before adding. Scope: gc:write.",
+        "operationId": "suggest_client_v1_gateway_clients_registry_suggest_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "msisdn",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 20,
+              "description": "Phone number in E.164",
+              "title": "Msisdn"
+            },
+            "description": "Phone number in E.164"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayClientSuggestion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The MSISDN isn't in E.164 format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:write.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/gateway-clients/registry/{client_id}": {
+      "get": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Get client",
+        "description": "Returns the ETag to send as If-Match. Scope: gc:read.",
+        "operationId": "get_client_v1_gateway_clients_registry__client_id__get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:read"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayClientInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No gateway client with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Change client",
+        "description": "Needs If-Match. Omitted fields stay as they are. Scope: gc:write.",
+        "operationId": "update_client_v1_gateway_clients_registry__client_id__patch",
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GatewayClientUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayClientInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "An invalid operator code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No gateway client with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Gateway Client Registry"
+        ],
+        "summary": "Delete client",
+        "description": "Needs If-Match. To hide it for a while, disable it instead. Scope: gc:write.",
+        "operationId": "delete_client_v1_gateway_clients_registry__client_id__delete",
+        "security": [
+          {
+            "HTTPBasic": [
+              "gc:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "gc:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Client Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks gc:write, or a cookie request came from an origin that isn't allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No gateway client with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/server-keys": {
+      "get": {
+        "tags": [
+          "Server Keys"
+        ],
+        "summary": "List server keys",
+        "description": "Static keys for gRPC v3 encryption.",
+        "operationId": "list_server_static_keys_v1_server_keys_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ServerStaticPublicKey"
+                  },
+                  "type": "array",
+                  "title": "Response List Server Static Keys V1 Server Keys Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/server-keys/{key_id}": {
+      "get": {
+        "tags": [
+          "Server Keys"
+        ],
+        "summary": "Get server key",
+        "operationId": "get_server_static_key_v1_server_keys__key_id__get",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 255,
+              "minimum": 0,
+              "description": "Static key identifier, 0-255",
+              "title": "Key Id"
+            },
+            "description": "Static key identifier, 0-255"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerStaticPublicKey"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No key with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "description": "Liveness and readiness for uptime monitoring.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "The database is unreachable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdapterInstall": {
+        "properties": {
+          "source_url": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Source Url",
+            "description": "https://github.com/<org>/<repo>, an org in PLATFORMS_GITHUB_ORGS."
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "A version tag such as v1.2.0. Defaults to the newest one."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_url"
+        ],
+        "title": "AdapterInstall"
+      },
+      "AdapterJobInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "adapter_id": {
+            "type": "string",
+            "title": "Adapter Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "install or update"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "Requested, then the one installed."
+          },
+          "from_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Commit"
+          },
+          "to_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Commit"
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "description": "queued, running, succeeded or failed"
+          },
+          "log": {
+            "type": "string",
+            "title": "Log",
+            "description": "The end of the git and pip output."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "adapter_id",
+          "action",
+          "state",
+          "log",
+          "created_at"
+        ],
+        "title": "AdapterJobInfo"
+      },
+      "AdapterUpgrade": {
+        "properties": {
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "A version tag such as v1.2.0. Defaults to the newest one."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AdapterUpgrade"
+      },
+      "AuditAction": {
+        "type": "string",
+        "enum": [
+          "auth.login",
+          "auth.logout",
+          "creds.create",
+          "creds.update",
+          "creds.reset_password",
+          "creds.revoke_sessions",
+          "creds.delete",
+          "platforms.add",
+          "platforms.update",
+          "platforms.remove",
+          "platforms.enable",
+          "platforms.disable",
+          "gateway_clients.create",
+          "gateway_clients.update",
+          "gateway_clients.enable",
+          "gateway_clients.disable",
+          "gateway_clients.delete"
+        ],
+        "title": "AuditAction",
+        "description": "Named <area>.<verb>. Reading an area's events also needs its read scope."
+      },
+      "AuditEventInfo": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor",
+            "description": "Username at the time; null for the CLI or a failed login."
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "e.g. creds.update"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target",
+            "description": "Target's name at the time."
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome",
+            "description": "success, denied or failed."
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "action",
+          "outcome"
+        ],
+        "title": "AuditEventInfo"
+      },
+      "AuditEventPage": {
+        "properties": {
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next",
+            "description": "URL of the next (older) page; null on the last page."
+          },
+          "prev": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev",
+            "description": "URL of the previous (newer) page; null on the first page."
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEventInfo"
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "AuditEventPage"
+      },
+      "CredentialCreate": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Username"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Scopes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "username",
+          "scopes"
+        ],
+        "title": "CredentialCreate"
+      },
+      "CredentialInfo": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "administrator": {
+            "type": "boolean",
+            "title": "Administrator",
+            "description": "Holds every scope."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "title": "Active Sessions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "active",
+          "scopes",
+          "administrator",
+          "created_at",
+          "active_sessions"
+        ],
+        "title": "CredentialInfo"
+      },
+      "CredentialUpdate": {
+        "properties": {
+          "scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 32,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scopes"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CredentialUpdate"
+      },
+      "CredentialWithPassword": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "administrator": {
+            "type": "boolean",
+            "title": "Administrator",
+            "description": "Holds every scope."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "title": "Active Sessions"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "Shown only in this response."
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "active",
+          "scopes",
+          "administrator",
+          "created_at",
+          "active_sessions",
+          "password"
+        ],
+        "title": "CredentialWithPassword"
+      },
+      "CurrentCredential": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "administrator": {
+            "type": "boolean",
+            "title": "Administrator",
+            "description": "Holds every scope."
+          },
+          "auth_method": {
+            "type": "string",
+            "enum": [
+              "session",
+              "basic"
+            ],
+            "title": "Auth Method"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "Session expiry (session auth only)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "scopes",
+          "administrator",
+          "auth_method"
+        ],
+        "title": "CurrentCredential"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "description": "What went wrong, safe to show to users."
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "description": "The body of every error response."
+      },
+      "GatewayClientCandidate": {
+        "properties": {
+          "operator_code": {
+            "type": "string",
+            "title": "Operator Code",
+            "description": "PLMN code (MCC + MNC)"
+          },
+          "network": {
+            "type": "string",
+            "title": "Network",
+            "description": "Name in the bundled MCC/MNC table"
+          }
+        },
+        "type": "object",
+        "required": [
+          "operator_code",
+          "network"
+        ],
+        "title": "GatewayClientCandidate"
+      },
+      "GatewayClientCreate": {
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Msisdn",
+            "description": "Phone number in E.164 format"
+          },
+          "protocols": {
+            "items": {
+              "type": "string",
+              "maxLength": 32,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Protocols"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country",
+            "description": "Resolved from the MSISDN when omitted."
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator",
+            "description": "Resolved from the MSISDN when omitted."
+          },
+          "operator_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 6
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Code",
+            "description": "PLMN code (MCC + MNC). Resolved from the MSISDN when omitted."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "msisdn",
+          "protocols"
+        ],
+        "title": "GatewayClientCreate"
+      },
+      "GatewayClientInfo": {
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "title": "Msisdn",
+            "description": "Phone number in E.164 format"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "operator": {
+            "type": "string",
+            "title": "Operator"
+          },
+          "operator_code": {
+            "type": "string",
+            "title": "Operator Code",
+            "description": "PLMN code (MCC + MNC)"
+          },
+          "protocols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Protocols",
+            "description": "How clients reach this server"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "Username; null for the CLI or a deleted credential."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Username; null for the CLI or a deleted credential."
+          }
+        },
+        "type": "object",
+        "required": [
+          "msisdn",
+          "country",
+          "operator",
+          "operator_code",
+          "protocols",
+          "id",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GatewayClientInfo"
+      },
+      "GatewayClientManifest": {
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "title": "Msisdn",
+            "description": "Phone number in E.164 format"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "operator": {
+            "type": "string",
+            "title": "Operator"
+          },
+          "operator_code": {
+            "type": "string",
+            "title": "Operator Code",
+            "description": "PLMN code (MCC + MNC)"
+          },
+          "protocols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Protocols",
+            "description": "How clients reach this server"
+          }
+        },
+        "type": "object",
+        "required": [
+          "msisdn",
+          "country",
+          "operator",
+          "operator_code",
+          "protocols"
+        ],
+        "title": "GatewayClientManifest"
+      },
+      "GatewayClientSuggestion": {
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "title": "Msisdn"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "iso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iso",
+            "description": "ISO 3166-1 alpha-2, lowercase"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code",
+            "description": "Country calling code"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator",
+            "description": "Carrier name for the number"
+          },
+          "operator_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Code",
+            "description": "Set only when every candidate has the same PLMN code."
+          },
+          "match": {
+            "type": "string",
+            "enum": [
+              "carrier",
+              "region",
+              "none"
+            ],
+            "title": "Match",
+            "description": "carrier: candidates match the number's carrier. region: every operator in its country. none: the number couldn't be placed."
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/GatewayClientCandidate"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "description": "Best matches first."
+          }
+        },
+        "type": "object",
+        "required": [
+          "msisdn",
+          "match",
+          "candidates"
+        ],
+        "title": "GatewayClientSuggestion"
+      },
+      "GatewayClientUpdate": {
+        "properties": {
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator"
+          },
+          "operator_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 6
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Code"
+          },
+          "protocols": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 32,
+                  "minLength": 1
+                },
+                "type": "array",
+                "maxItems": 8,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocols"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled",
+            "description": "Disabled clients aren't listed."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GatewayClientUpdate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "OAuthClientMetadata": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "title": "Client Id"
+          },
+          "dpop_bound_access_tokens": {
+            "type": "boolean",
+            "title": "Dpop Bound Access Tokens"
+          },
+          "application_type": {
+            "type": "string",
+            "title": "Application Type"
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Redirect Uris"
+          },
+          "grant_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Grant Types"
+          },
+          "response_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Response Types"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "token_endpoint_auth_method": {
+            "type": "string",
+            "title": "Token Endpoint Auth Method"
+          },
+          "client_name": {
+            "type": "string",
+            "title": "Client Name"
+          },
+          "client_uri": {
+            "type": "string",
+            "title": "Client Uri"
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_id",
+          "dpop_bound_access_tokens",
+          "application_type",
+          "redirect_uris",
+          "grant_types",
+          "response_types",
+          "scope",
+          "token_endpoint_auth_method",
+          "client_name",
+          "client_uri"
+        ],
+        "title": "OAuthClientMetadata"
+      },
+      "PlatformAdapterInfo": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "proto_id": {
+            "type": "integer",
+            "title": "Proto Id",
+            "description": "0 = oauth2, 1 = pnba"
+          },
+          "cat_id": {
+            "type": "integer",
+            "title": "Cat Id",
+            "description": "0 = email, 1 = message, 2 = text, 3 = bridge"
+          },
+          "auth_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Provider"
+          },
+          "supports_offline_first": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Offline First"
+          },
+          "icon_svg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Svg"
+          },
+          "icon_png": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Png"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "Null for a default-branch clone."
+          },
+          "commit": {
+            "type": "string",
+            "title": "Commit"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By",
+            "description": "Username; null for the CLI or a deleted credential."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By",
+            "description": "Username; null for the CLI or a deleted credential."
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name",
+          "name",
+          "proto_id",
+          "cat_id",
+          "id",
+          "source_url",
+          "commit",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PlatformAdapterInfo"
+      },
+      "PlatformAdapterUpdate": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "PlatformAdapterUpdate"
+      },
+      "PlatformManifest": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "proto_id": {
+            "type": "integer",
+            "title": "Proto Id",
+            "description": "0 = oauth2, 1 = pnba"
+          },
+          "cat_id": {
+            "type": "integer",
+            "title": "Cat Id",
+            "description": "0 = email, 1 = message, 2 = text, 3 = bridge"
+          },
+          "auth_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Provider"
+          },
+          "supports_offline_first": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Offline First"
+          },
+          "icon_svg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Svg"
+          },
+          "icon_png": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Png"
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name",
+          "name",
+          "proto_id",
+          "cat_id"
+        ],
+        "title": "PlatformManifest"
+      },
+      "PublicationStat": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "platform_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform Name"
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "created_at"
+        ],
+        "title": "PublicationStat"
+      },
+      "PublicationStatsPage": {
+        "properties": {
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next",
+            "description": "URL of the next (older) page; null on the last page."
+          },
+          "prev": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev",
+            "description": "URL of the previous (newer) page; null on the first page."
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationStat"
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "PublicationStatsPage"
+      },
+      "PublicationStatsSummary": {
+        "properties": {
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since"
+          },
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Until"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatsInterval"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PublicationStatsSummaryGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "since",
+          "until",
+          "total",
+          "groups"
+        ],
+        "title": "PublicationStatsSummary"
+      },
+      "PublicationStatsSummaryGroup": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "title": "PublicationStatsSummaryGroup",
+        "description": "group_by column values plus their count."
+      },
+      "PublishContentResponse": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Always null here; errors come back with a 4xx status."
+          }
+        },
+        "type": "object",
+        "title": "PublishContentResponse"
+      },
+      "PublishRestContentRequest": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Sender phone number in E.164 format",
+            "examples": [
+              "+12025550123"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Base64-encoded SMS payload"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag",
+            "description": "Shared secret for offline payloads, if the server sets one."
+          }
+        },
+        "type": "object",
+        "required": [
+          "address",
+          "text"
+        ],
+        "title": "PublishRestContentRequest"
+      },
+      "ServerStaticPublicKey": {
+        "properties": {
+          "key_id": {
+            "type": "integer",
+            "title": "Key Id",
+            "description": "0-255"
+          },
+          "public_key": {
+            "type": "string",
+            "title": "Public Key",
+            "description": "Base64url-encoded X25519 public key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key_id",
+          "public_key"
+        ],
+        "title": "ServerStaticPublicKey"
+      },
+      "StatsGroupBy": {
+        "type": "string",
+        "enum": [
+          "status",
+          "platform_name",
+          "protocol",
+          "country_code",
+          "failure_reason"
+        ],
+        "title": "StatsGroupBy"
+      },
+      "StatsInterval": {
+        "type": "string",
+        "enum": [
+          "day",
+          "week",
+          "month",
+          "year"
+        ],
+        "title": "StatsInterval"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBasic": {
+        "type": "http",
+        "scheme": "basic"
+      },
+      "SessionCookie": {
+        "type": "apiKey",
+        "description": "Set by POST /v1/auth/login.",
+        "in": "cookie",
+        "name": "relaysms_session"
+      }
+    }
+  }
+}

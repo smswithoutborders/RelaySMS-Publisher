@@ -1,0 +1,83 @@
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+# Hooks without their own stages run only before a commit, not on commit-msg or push.
+default_stages: [pre-commit]
+# protocol_interfaces.py is copied verbatim into adapter repositories.
+exclude: ^(protos/|lib_relaysms_payload_specs/|platforms/protocol_interfaces\.py$)
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=no]
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
+        args: [--external-sources]
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.14.1-1
+    hooks:
+      - id: shfmt
+        args: [--write, --indent=2]
+
+  - repo: https://github.com/AleksaC/hadolint-py
+    rev: v2.15.1
+    hooks:
+      - id: hadolint
+
+  - repo: https://github.com/reteps/dockerfmt
+    rev: v0.5.4
+    hooks:
+      - id: dockerfmt
+        args: [--write, --newline, --indent=2]
+
+  - repo: https://github.com/docker-compose-linter/pre-commit-dclint
+    rev: v3.1.0
+    hooks:
+      - id: dclint
+        args: [--fix]
+        files: (^|/)(docker-)?compose(\.[\w-]+)?\.ya?ml$
+
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.19.1
+    hooks:
+      - id: commitizen
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: venv/bin/pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: import-linter
+        name: import-linter
+        entry: venv/bin/lint-imports
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: venv/bin/python -m pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

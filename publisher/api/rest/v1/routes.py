@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: GPL-3.0-only
+
+from fastapi import APIRouter
+
+from publisher.api.rest.v1 import (
+    audit,
+    auth,
+    creds,
+    gateway_client_registry,
+    gateway_clients,
+    platform_adapters,
+    platforms,
+    publications,
+    server_keys,
+    stats,
+)
+
+router = APIRouter()
+# The docs sidebar lists tags in this order.
+for module in (
+    auth,
+    creds,
+    audit,
+    stats,
+    publications,
+    platforms,
+    platform_adapters,
+    gateway_clients,
+    gateway_client_registry,
+    server_keys,
+):
+    router.include_router(module.router)

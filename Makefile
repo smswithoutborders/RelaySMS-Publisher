@@ -1,91 +1,57 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-python        := python3
-grpc_host     := $${HOST:-127.0.0.1}
-grpc_port     := $${GRPC_PORT:-6000}
-fastapi_port  := $${PORT:-16000}
+PYTHON ?= python3
+SPECS_DIR := lib_relaysms_payload_specs
+SPECS_LIB := $(SPECS_DIR)/target/release/librelaysms_spec_payload.so
 
-define log
-	@echo "[$(shell date +'%Y-%m-%d %H:%M:%S')] [$1] $2"
-endef
+.PHONY: build protos specs migrate run test coverage test-dialects test-e2e docs check clean
 
-.PHONY: \
-	grpc-compile \
-	grpc-server-start \
-	fastapi-server-start \
-	celery-worker-start \
-	smtp-listener-start \
-	run \
-	payload-specs-fetch \
-	payload-specs-build \
-	payload-specs-compile \
-	build-setup \
-	migrate-up
+## Generate the gRPC code and the payload-specs bindings.
+build: protos specs
 
-grpc-compile:
-	$(call log,INFO,Compiling gRPC protos ...)
-	@for v in v3; do \
-		$(python) -m grpc_tools.protoc \
-			--proto_path=. \
-			--python_out=. \
-			--pyi_out=. \
-			--grpc_python_out=. \
-			./protos/$$v/*.proto; \
-	done
-	$(call log,INFO,gRPC compilation complete)
+protos:
+	$(PYTHON) -m grpc_tools.protoc --proto_path=. --python_out=. --pyi_out=. \
+		--grpc_python_out=. protos/*/*.proto
 
-payload-specs-fetch:
-	$(call log,INFO,Fetching payload specs submodule ...)
-	@git submodule update --init --recursive --remote --merge
-	$(call log,INFO,Payload specs fetched)
+## Build the pinned payload-specs commit and generate its Python bindings.
+specs:
+	git submodule update --init --recursive
+	cd $(SPECS_DIR) && cargo build --release
+	mkdir -p $(SPECS_DIR)/generated
+	cd $(SPECS_DIR) && cargo run --bin uniffi_bindgen -- generate \
+		--library target/release/librelaysms_spec_payload.so \
+		--language python --out-dir generated/
+	cp $(SPECS_LIB) $(SPECS_DIR)/generated/
 
-payload-specs-build:
-	$(call log,INFO,Building payload specs library ...)
-	@cd lib_relaysms_payload_specs && \
-		cargo build --release
-	$(call log,INFO,Payload specs built)
+migrate:
+	$(PYTHON) -m alembic upgrade head
 
-payload-specs-compile: payload-specs-fetch payload-specs-build
-	$(call log,INFO,Compiling payload specs bindings ...)
-	@cd lib_relaysms_payload_specs && \
-		mkdir -p generated && \
-		cargo run --bin uniffi_bindgen -- generate \
-			--library target/release/librelaysms_spec_payload.so \
-			--language python \
-			--out-dir generated/ && \
-		cp target/release/librelaysms_spec_payload.so generated/
-	$(call log,INFO,Payload specs compiled)
-
-build-setup: grpc-compile payload-specs-compile
-
-migrate-up:
-	$(call log,INFO,Running database migrations ...)
-	@$(python) -m alembic upgrade head
-	$(call log,INFO,Migrations complete)
-
-grpc-server-start:
-	$(call log,INFO,Starting gRPC server ...)
-	@$(python) -u grpc_server.py
-
-fastapi-server-start:
-	$(call log,INFO,Starting FastAPI server ...)
-	@$(python) -m uvicorn app:app --workers 1 --host $(grpc_host) --port $(fastapi_port)
-
-celery-worker-start:
-	$(call log,INFO,Starting Celery worker ...)
-	@$(python) -m celery -A tasks.celery_app:celery_app worker \
-		--loglevel=info \
-		--without-gossip \
-		--without-mingle \
-		--without-heartbeat
-
-celery-beat-start:
-	$(call log,INFO,Starting Celery beat scheduler ...)
-	@$(python) -m celery -A tasks.celery_app:celery_app beat --loglevel=info
-
-smtp-listener-start:
-	$(call log,INFO,Starting SMTP listener ...)
-	@$(python) -u smtp_listener.py
-
+## Start every service in the foreground.
 run:
-	@PYTHON=$(python) HOST=$(grpc_host) PORT=$(fastapi_port) ./scripts/run.sh
+	PYTHON=$(PYTHON) ./scripts/run.sh
+
+test:
+	$(PYTHON) -m pytest $(PYTEST_ARGS)
+
+## Run the suite and list the lines no test runs.
+coverage:
+	$(PYTHON) -m pytest --cov $(PYTEST_ARGS)
+
+## Migrate and query SQLite, SQLCipher, and Postgres, MySQL and MariaDB in podman.
+test-dialects:
+	$(PYTHON) -m pytest tests/dialects $(PYTEST_ARGS)
+
+## Install and update in a systemd container with podman (slow, needs network).
+test-e2e:
+	$(PYTHON) -m pytest --noconftest tests/e2e $(PYTEST_ARGS)
+
+## Regenerate docs/openapi.json from the REST app. A test fails when it's stale.
+docs:
+	$(PYTHON) -m publisher.api.rest.openapi
+
+check:
+	$(PYTHON) -m pre_commit run --all-files
+
+clean:
+	rm -f protos/*/*_pb2.py protos/*/*_pb2.pyi protos/*/*_pb2_grpc.py
+	rm -f $(SPECS_DIR)/generated/*.py $(SPECS_DIR)/generated/*.so

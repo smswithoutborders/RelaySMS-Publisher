@@ -8,20 +8,20 @@
 # re-check with:
 #   docker compose -f pours/deployment/compose.yaml config --services
 services:
-  relaysms-publisher-signoz-telemetrystore-clickhouse-0-0:
-    security_opt:
-      - no-new-privileges:true
-    mem_limit: 3g
-    mem_reservation: 1g
-
   ingester:
-    security_opt:
-      - no-new-privileges:true
     mem_limit: 512m
     mem_reservation: 128m
-
-  relaysms-publisher-signoz-signoz-0:
     security_opt:
       - no-new-privileges:true
+
+  relaysms-publisher-signoz-signoz-0:
     mem_limit: 1g
     mem_reservation: 256m
+    security_opt:
+      - no-new-privileges:true
+
+  relaysms-publisher-signoz-telemetrystore-clickhouse-0-0:
+    mem_limit: 3g
+    mem_reservation: 1g
+    security_opt:
+      - no-new-privileges:true

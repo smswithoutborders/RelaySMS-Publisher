@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: GPL-3.0-only
+
+from unittest.mock import MagicMock
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from twilio.request_validator import RequestValidator
+
+from publisher.api.rest.v1 import publications as publications_routes
+from publisher.api.rest.v1 import routes
+from publisher.publications import validate as real_validate
+
+AUTH_TOKEN = "test-auth-token"
+WEBHOOK_URL = "http://testserver/v1/twilio-sms"
+
+
+@pytest.fixture
+def client():
+    app = FastAPI()
+    app.include_router(routes.router, prefix="/v1")
+    return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _enabled(set_config, monkeypatch):
+    set_config(
+        publications_routes,
+        "twilio_config",
+        sms_transport_enabled=True,
+        auth_token=AUTH_TOKEN,
+    )
+    monkeypatch.setattr(publications_routes, "publish_message", MagicMock())
+    monkeypatch.setattr(publications_routes, "forward_twilio_webhook", MagicMock())
+    monkeypatch.setattr(
+        publications_routes.publications,
+        "validate",
+        lambda text: None,
+    )
+
+
+def _signed_post(client, params, auth_token=AUTH_TOKEN, url=WEBHOOK_URL):
+    signature = RequestValidator(auth_token).compute_signature(url, params)
+    return client.post(
+        "/v1/twilio-sms", data=params, headers={"X-Twilio-Signature": signature}
+    )
+
+
+def test_valid_signature_queues_publication(client):
+    params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
+    response = _signed_post(client, params)
+
+    assert response.status_code == 200
+    assert "text/xml" in response.headers["content-type"]
+    publications_routes.publish_message.delay.assert_called_once_with(
+        "cGF5bG9hZA==", "+237123456789", "sms"
+    )
+
+
+def test_invalid_signature_rejected(client):
+    params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
+    response = _signed_post(client, params, auth_token="wrong-token")
+
+    assert response.status_code == 403
+    publications_routes.publish_message.delay.assert_not_called()
+
+
+def test_missing_signature_header_rejected(client):
+    response = client.post(
+        "/v1/twilio-sms", data={"From": "+237123456789", "Body": "cGF5bG9hZA=="}
+    )
+
+    assert response.status_code == 403
+    publications_routes.publish_message.delay.assert_not_called()
+
+
+def test_missing_body_field_rejected(client):
+    params = {"From": "+237123456789"}
+    response = _signed_post(client, params)
+
+    assert response.status_code == 400
+    publications_routes.publish_message.delay.assert_not_called()
+
+
+def test_malformed_payload_rejected(client, monkeypatch):
+    monkeypatch.setattr(publications_routes.publications, "validate", real_validate)
+
+    params = {"From": "+237123456789", "Body": "not-base64"}
+    response = _signed_post(client, params)
+
+    assert response.status_code == 400
+    publications_routes.publish_message.delay.assert_not_called()
+
+
+def test_transport_disabled_returns_404(client, set_config):
+    set_config(publications_routes, "twilio_config", sms_transport_enabled=False)
+
+    params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
+    response = _signed_post(client, params)
+
+    assert response.status_code == 404
+    publications_routes.publish_message.delay.assert_not_called()
+
+
+def test_forwarding_queued(client):
+    params = {"From": "+237123456789", "Body": "cGF5bG9hZA=="}
+    response = _signed_post(client, params)
+
+    assert response.status_code == 200
+    publications_routes.forward_twilio_webhook.delay.assert_called_once_with(
+        params, "+237123456789", "cGF5bG9hZA=="
+    )

@@ -5,25 +5,12 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from db import (
-    Base,
-    _build_mysql_url,
-    _build_postgres_url,
-    _build_sqlite_url,
-    _has_mysql_config,
-    _has_postgres_config,
-    get_engine,
-)
-from models import (
-    ClientEphemeralKey,
-    PayloadSegment,
-    PayloadSession,
-    PublicationStats,
-    ServerEphemeralKey,
-    Token,
-    TokenHash,
-)
-from utils import get_configs
+import publisher.models  # noqa: F401  (registers every table on Base.metadata)
+from publisher.config import DatabaseConfig
+from publisher.db import Base, build_url, get_engine
+from publisher.log import setup_logging
+
+setup_logging()
 
 config = context.config
 target_metadata = Base.metadata
@@ -31,17 +18,8 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in offline mode."""
-    engine_type = get_configs("DATABASE_DIALECT", default_value="sqlite")
-
-    if engine_type.lower() == "mysql" and _has_mysql_config():
-        url = _build_mysql_url()
-    elif engine_type.lower() == "postgres" and _has_postgres_config():
-        url = _build_postgres_url()
-    else:
-        url = _build_sqlite_url()
-
     context.configure(
-        url=url,
+        url=build_url(DatabaseConfig.get()),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

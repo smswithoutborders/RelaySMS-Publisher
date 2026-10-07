@@ -1,0 +1,9 @@
+# Secrets reach the container through env_file and never go into the image.
+.env
+.env.*
+data/
+venv/
+.claude/
+**/__pycache__/
+.pytest_cache/
+.mypy_cache/

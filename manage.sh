@@ -1,88 +1,58 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
 
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib.sh
 source "$SCRIPT_DIR/scripts/lib.sh"
 
 INSTALL_DIR="$SCRIPT_DIR"
 CARGO_BIN="$HOME/.cargo/bin"
 
 INSTANCE_NAME="$(read_instance_name)"
-TARGET_UNIT="$(unit_name_for "$TARGET_UNIT_TEMPLATE")"
-SERVICE_UNITS=()
-for _template in "${SERVICE_UNIT_TEMPLATES[@]}"; do
-  SERVICE_UNITS+=("$(unit_name_for "$_template")")
-done
-unset _template
+set_unit_names
 ALL_UNITS=("$TARGET_UNIT" "${SERVICE_UNITS[@]}")
+SERVICE_USER="$(installed_service_user)"
 
-check_sudo() { [ "$EUID" -eq 0 ] || error "Run with sudo"; }
-
-# Only targets an already-installed service, so no fallback beyond the unit file.
-detect_service_user() {
-  local unit="/etc/systemd/system/$(unit_name_for "relaysms-publisher-rest.service")"
-  grep -E "^User=" "$unit" 2>/dev/null | head -1 | cut -d= -f2
-}
-
-# git pull doesn't fix ownership for directories .env added since the last run.
-sync_app_directories() {
-  local service_user
-  service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || return
-
-  local envfile="$INSTALL_DIR/.env"
-  local dirs=(
-    "$(dirname "$(read_env_var SQLITE_DATABASE_PATH "$envfile")")"
-    "$(dirname "$(read_env_var CELERY_BROKER_DB_PATH "$envfile")")"
-    "$(dirname "$(read_env_var CELERY_RESULT_DB_PATH "$envfile")")"
-    "$(dirname "$(read_env_var CELERY_BEAT_SCHEDULE_PATH "$envfile")")"
-    "$(read_env_var PLATFORMS_ADAPTERS_DIR "$envfile")"
-    "$(read_env_var PLATFORMS_ADAPTERS_VENV_DIR "$envfile")"
-    "$(read_env_var PLATFORMS_ADAPTERS_ASSETS_DIR "$envfile")"
-    "$(dirname "$(read_env_var PLATFORMS_REGISTRY_FILE "$envfile")")"
-    "$(dirname "$(read_env_var GATEWAY_CLIENTS_REGISTRY_FILE "$envfile")")"
-  )
-
-  local dir
-  for dir in "${dirs[@]}"; do
-    [ -n "$dir" ] && [ "$dir" != "." ] || continue
-    [[ "$dir" = /* ]] || dir="$INSTALL_DIR/$dir"
-    mkdir -p "$dir"
-    chown "$service_user:" "$dir"
-    chmod 750 "$dir"
-  done
+require_installed() {
+  [ -n "$SERVICE_USER" ] ||
+    error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher config check"
 }
 
 run_migrations() {
-  local service_user
-  service_user="$(detect_service_user)"
-  [ -n "$service_user" ] || error "Could not detect service user from installed unit files"
-
+  require_installed
   log "Running database migrations"
-  sudo -u "$service_user" bash -c "
-    set -a
-    # shellcheck disable=SC1091
-    . '$INSTALL_DIR/.env'
-    set +a
-    cd '$INSTALL_DIR'
-    PATH='$INSTALL_DIR/venv/bin:$PATH' make migrate-up
-  "
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
+  # Registers adapters installed before the registry moved to the database.
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher platforms import)
+}
+
+run_config_check() {
+  require_installed
+  log "Checking configuration"
+  # config reads .env itself the same way systemd does, so it is not sourced here.
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
+}
+
+cmd_check() {
+  require_root
+  run_config_check
 }
 
 cmd_migrate() {
-  check_sudo
+  require_root
   run_migrations
 }
 
 cmd_start() {
-  check_sudo
+  require_root
   systemctl start "$TARGET_UNIT"
   log "Services started"
 }
 
 cmd_stop() {
-  check_sudo
+  require_root
   local svc
   for svc in "${SERVICE_UNITS[@]}"; do
     systemctl stop "$svc"
@@ -92,7 +62,9 @@ cmd_stop() {
 }
 
 cmd_restart() {
-  check_sudo
+  require_root
+  # Pick up unit files edited since the last reload.
+  systemctl daemon-reload
   local svc
   for svc in "${SERVICE_UNITS[@]}"; do
     systemctl restart "$svc"
@@ -189,13 +161,13 @@ cmd_logs() {
 }
 
 cmd_enable() {
-  check_sudo
+  require_root
   systemctl enable "$TARGET_UNIT"
   log "Services enabled on boot"
 }
 
 cmd_disable() {
-  check_sudo
+  require_root
   systemctl disable "$TARGET_UNIT"
   log "Services disabled on boot"
 }
@@ -210,11 +182,15 @@ EOF
 }
 
 cmd_update() {
-  local migrate=0
+  local migrate=0 pulled=0
   while [ $# -gt 0 ]; do
     case "$1" in
     -m | --migrate)
       migrate=1
+      shift
+      ;;
+    --pulled)
+      pulled=1
       shift
       ;;
     -h | --help)
@@ -228,15 +204,20 @@ cmd_update() {
     esac
   done
 
-  check_sudo
-  local svc
-  for svc in "${SERVICE_UNITS[@]}"; do
-    systemctl stop "$svc"
-  done
-
+  require_root
   cd "$INSTALL_DIR"
-  git pull
-  git submodule update --init --recursive --remote --merge
+  local svc
+  if [ "$pulled" = "0" ]; then
+    for svc in "${SERVICE_UNITS[@]}"; do
+      systemctl stop "$svc"
+    done
+    git pull
+    git submodule update --init --recursive
+    # Finish with the manage.sh just pulled, so changed update steps apply now.
+    local args=(--pulled)
+    [ "$migrate" = "1" ] && args+=(--migrate)
+    exec "$INSTALL_DIR/manage.sh" update "${args[@]}"
+  fi
 
   venv/bin/pip install --quiet --upgrade pip
   venv/bin/pip install --quiet -r requirements.txt
@@ -246,9 +227,17 @@ cmd_update() {
   fi
 
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
-  make build-setup
+  make build
 
-  sync_app_directories
+  # Directories and units follow .env, which the migration may have just changed.
+  "$INSTALL_DIR/scripts/migrate-runtime-data.sh"
+  require_installed
+  ensure_app_directories "$SERVICE_USER"
+  render_units "$SERVICE_USER"
+
+  # Each service fails only on the settings it uses, so restart all and report after.
+  local config_ok=1
+  run_config_check || config_ok=0
 
   [ "$migrate" = "1" ] && run_migrations
 
@@ -257,11 +246,80 @@ cmd_update() {
     systemctl restart "$svc"
   done
   systemctl start "$TARGET_UNIT"
+  [ "$config_ok" = "1" ] || error "Update applied, but .env has errors (above); services using those settings won't start"
   log "Update complete"
 }
 
+nginx_usage() {
+  cat <<'EOF'
+Usage: manage.sh nginx [DOMAIN]
+
+Re-renders the nginx site from the template, reattaches or obtains its
+certificate, enables HTTP/2 for gRPC and reloads nginx. DOMAIN defaults to
+this install's site. The previous file is kept as <site>.conf.bak and
+restored on failure.
+EOF
+}
+
+# Matches publisher_rest_<PORT> (this install) or an unsuffixed publisher_rest.
+detect_nginx_site() {
+  local port sites=()
+  port=$(read_env_var PORT "$INSTALL_DIR/.env")
+  mapfile -t sites < <(grep -lE "upstream publisher_rest(_${port:-16000})? \{" \
+    /etc/nginx/sites-available/*.conf 2>/dev/null)
+  [ "${#sites[@]}" -eq 1 ] ||
+    error "Found ${#sites[@]} matching nginx sites; pass the domain: $0 nginx DOMAIN"
+  basename "${sites[0]}" .conf
+}
+
+install_nginx_site() {
+  local site="$1" conf="$2"
+  render_nginx_site "$site" "$conf" || return 1
+  ln -sf "$conf" "/etc/nginx/sites-enabled/${site}.conf" || return 1
+
+  # Re-adds the 443 block that re-rendering dropped.
+  if [ -f "/etc/letsencrypt/live/${site}/fullchain.pem" ]; then
+    certbot install --nginx --cert-name "$site" --redirect --non-interactive || return 1
+  else
+    request_certificate "$site" "${LETSENCRYPT_EMAIL:-}" || return 1
+  fi
+
+  enable_nginx_http2 "$conf" || return 1
+  nginx -t || return 1
+}
+
+cmd_nginx() {
+  case "${1:-}" in
+  -h | --help)
+    nginx_usage
+    return
+    ;;
+  esac
+  require_root
+  if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
+    error "nginx and certbot must be installed"
+  fi
+
+  local site="${1:-}"
+  [ -n "$site" ] || site=$(detect_nginx_site)
+  validate_hostname "DOMAIN" "$site"
+
+  local conf="/etc/nginx/sites-available/${site}.conf"
+  [ -f "$conf" ] && cp -p "$conf" "$conf.bak"
+
+  if ! install_nginx_site "$site" "$conf"; then
+    if [ -f "$conf.bak" ]; then
+      cp -p "$conf.bak" "$conf"
+      nginx -t && systemctl reload nginx
+    fi
+    error "nginx setup failed for $site; previous config restored"
+  fi
+  systemctl reload nginx
+  log "nginx site $site updated"
+}
+
 cmd_uninstall() {
-  check_sudo
+  require_root
   local confirm
   read -r -p "Remove all services and data? (yes/no): " confirm || confirm="no"
   if [ "$confirm" != "yes" ]; then
@@ -277,7 +335,7 @@ cmd_uninstall() {
   systemctl disable "$TARGET_UNIT" 2>/dev/null || true
 
   for unit in "${ALL_UNITS[@]}"; do
-    rm -f "/etc/systemd/system/$unit"
+    rm -f "$SYSTEMD_DIR/$unit"
   done
   systemctl daemon-reload
 
@@ -289,7 +347,7 @@ cmd_uninstall() {
 }
 
 usage() {
-  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|migrate|update|uninstall}"
+  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|check|migrate|update|nginx|uninstall}"
   exit 1
 }
 
@@ -305,7 +363,12 @@ main() {
     ;;
   enable) cmd_enable ;;
   disable) cmd_disable ;;
+  check) cmd_check ;;
   migrate) cmd_migrate ;;
+  nginx)
+    shift
+    cmd_nginx "$@"
+    ;;
   update)
     shift
     cmd_update "$@"

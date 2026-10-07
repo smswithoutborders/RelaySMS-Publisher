@@ -1,254 +1,88 @@
-# Publisher REST API Documentation
+# Publisher REST API
 
-The Publisher REST API provides metadata about supported platforms, registered gateway clients, and server identity keys required for gRPC v3 communication, as well as an endpoint for publishing encrypted content.
+The REST API serves platform, gateway client and server key metadata, accepts encrypted payloads for publishing, and lets credentials read stats, manage credentials and read the audit log.
+
+The endpoint reference is [openapi.json](openapi.json), generated from the app. Open it in any OpenAPI viewer, or set `API_DOCS_ENABLED=true` on a dev server and browse `/docs`. After changing an endpoint, run `make docs`; a test fails while the file is stale.
+
+This page covers what the reference doesn't show well.
 
 ## Base URL
 
 ```
-http://<host>:<port>/v1
+https://<host>/v1
 ```
 
-## Endpoints
+`/health` is the only endpoint outside `/v1`.
 
-### 1. List Platforms
+## Authentication
 
-Retrieve a list of supported platform adapter manifests. Supports optional query filters.
+Credentials and their scopes are managed with [`./publisher.sh creds`](../README.md#credentials) or the `/v1/creds` endpoints.
 
-**URL:** `/platforms`
-**Method:** `GET`
+* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after 30 minutes idle or 12 hours.
+* **HTTP Basic:** username and password on every request, e.g. `curl -u analyst:<password> .../v1/stats/publications`.
 
-**Query Parameters:**
+> [!WARNING]
+> Basic auth sends the password with every request. Use it over HTTPS only.
 
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| name | string | No | Filter by platform name (alphanumeric, `_`, `-`; max 50 chars) |
-| proto_id | integer | No | Filter by protocol ID (e.g., `0` = oauth2, `1` = pnba) |
-| cat_id | integer | No | Filter by category ID |
+Scope changes apply on the credential's next request. Each endpoint's description names the scopes it needs.
 
-**Response Body:** `List[PlatformManifest]`
+## Managing Credentials
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| name | string | Full name of the platform (e.g., `"gmail"`) |
-| shortcode | string | Platform shortcode (e.g., `"g"`) |
-| proto_id | integer | Protocol identifier (`0` = oauth2, `1` = pnba) |
-| cat_id | integer | Category identifier |
-| icon_svg | string | (Optional) Inline SVG icon data |
-| icon_png | string | (Optional) PNG icon URL or data |
-| supports_offline_first | boolean | (Optional) Whether the platform adapter supports offline-first payloads |
+A credential can only grant scopes it holds, can't change itself, and can't change a credential holding scopes it lacks. These return `403`.
 
-### 2. List Gateway Clients
+`GET /v1/creds/{username}` returns an opaque `ETag`. Send it back unchanged as `If-Match` to change, reset or delete that credential: a missing header gets `428`, a stale one `412`. Responses that change a credential return its new `ETag`. Generated passwords appear only in the response that creates them.
 
-Retrieve a list of registered gateway clients. Supports optional query filters.
+## Managing Platform Adapters
 
-**URL:** `/gateway-clients`
-**Method:** `GET`
+`/v1/platforms/adapters` lists every installed adapter, with its source, version tag, commit and who last changed it, and takes the same `ETag` and `If-Match` rules as credentials. A disabled adapter disappears from `/v1/platforms` and can't publish or link accounts, but still revokes tokens so users can unlink. Uninstalling is refused with `409` while accounts are linked through the adapter; disable it instead, or remove it with `./publisher.sh platforms remove --force`.
 
-**Query Parameters:**
+Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/adapters/{id}/update`) run code from the repository on the server, so they need an administrator and a GitHub repository of an org in `PLATFORMS_GITHUB_ORGS`. Both take an optional `tag`, defaulting to the newest version tag, and return `202` with the job's URL in `Location`. Poll the job until its `state` is `succeeded` or `failed`; its `log` has the end of the git and pip output. An adapter has one job at a time; another gets `409`.
 
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| msisdn | string | No | Filter by MSISDN |
-| country | string | No | Filter by country |
-| operator | string | No | Filter by operator |
+## Managing Gateway Clients
 
-**Response Body:** `List[GatewayClientManifest]`
+`/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm; see [how suggest works](gateway-clients.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| msisdn | string | Gateway client's phone number in E.164 format |
-| country | string | Country the MSISDN belongs to |
-| operator | string | Mobile network operator |
-| operator_code | string | PLMN (MCC+MNC) code |
-| protocols | list[string] | Protocol(s) the client uses to reach this server |
+## Pagination
 
-### 3. List Server Static Keys
+List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first. Follow `next` and `prev` as they are: they keep your filters and `limit`, and are `null` on the last and first page. Don't build the `cursor` yourself.
 
-Retrieve all server static public keys used for gRPC v3 encryption.
+`since` and `until` take ISO-8601 times, UTC if there's no offset. `since` is inclusive and `until` exclusive.
 
-**URL:** `/server-keys`
-**Method:** `GET`
+## Audit Events
 
-**Response Body:** `List[ServerStaticPublicKey]`
+`GET /v1/audit-events` needs `audit:read`, and each area also needs its read scope: `creds:read` for `auth.*` and `creds.*` events, `platforms:read` for `platforms.*`, `gc:read` for `gateway_clients.*`. Events from areas you can't read are left out.
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| key_id | integer | Static key identifier (0–255) |
-| public_key | string | Base64url-encoded X25519 public key |
-
-### 4. Get Server Static Key
-
-Retrieve a specific server static public key by its ID.
-
-**URL:** `/server-keys/{key_id}`
-**Method:** `GET`
-
-**Path Parameters:**
-
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| key_id | integer | Yes | Key identifier, must be in range 0–255 |
-
-**Response Body:** `ServerStaticPublicKey` (see above)
-
-**Error Responses:**
-
-| Status | Condition |
+| Action | Recorded when |
 | :--- | :--- |
-| `404 Not Found` | No key exists for the given `key_id` |
+| `creds.create`, `creds.update`, `creds.reset_password`, `creds.revoke_sessions`, `creds.delete` | A credential changes, over the API or the CLI. `details` says what changed, never secrets. |
+| `auth.login` | A web session starts, or a login for an existing username is refused |
+| `auth.logout` | A web session ends |
+| `platforms.add`, `platforms.update`, `platforms.remove` | An adapter is installed, updated or removed. `details` has the source URL and commits. |
+| `platforms.enable`, `platforms.disable` | An adapter is offered to users again, or hidden from them |
+| `gateway_clients.create`, `gateway_clients.update`, `gateway_clients.delete` | A gateway client changes. `details` has its fields, or what changed. |
+| `gateway_clients.enable`, `gateway_clients.disable` | A gateway client is listed publicly again, or hidden |
 
-### 5. Get OAuth Client Metadata
+`outcome` is `success`, `denied` (the change went beyond the actor's scopes) or `failed` (a refused login for an existing username: wrong password or disabled). Successful HTTP Basic requests aren't recorded, since every request authenticates. `actor` is the username at the time, and null for the CLI or a failed login. Events are kept for `AUDIT_RETENTION_DAYS` (365 by default).
 
-Retrieve OAuth2 client metadata for platforms that support dynamic registration (e.g., Bluesky). Only available for a fixed allow-list of platforms.
+## Publishing
 
-**URL:** `/platforms/{platform_name}/oauth/client-metadata.json`
-**Method:** `GET`
+`POST /v1/publications` takes JSON and tags payloads with protocol `https`. `POST /v1/twilio-sms` takes Twilio's webhook and tags them `sms`. See [Offline Publishing](../README.md#offline-publishing) for how the protocol and `tag` decide whether offline payloads publish.
 
-**Path Parameters:**
+Both only check the payload's structure before queueing it. Decryption, payload type and adapter errors happen later, so they're logged on the server, not returned.
 
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| platform_name | string | Yes | Platform name (alphanumeric, `_`, `-`) |
+## Errors
 
-**Response Body:** `OAuthClientMetadata`
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| client_id | string | OAuth2 Client ID |
-| client_name | string | Application name |
-| client_uri | string | Application URI |
-| application_type | string | Application type (e.g., `"web"`) |
-| redirect_uris | list[string] | Allowed redirect URIs |
-| grant_types | list[string] | Supported grant types |
-| response_types | list[string] | Supported response types |
-| scope | string | Requested scopes |
-| token_endpoint_auth_method | string | Authentication method for the token endpoint |
-| dpop_bound_access_tokens | boolean | Whether DPoP-bound access tokens are required |
-
-**Error Responses:**
-
-| Status | Condition |
-| :--- | :--- |
-| `404 Not Found` | Platform not found, not in the allow-list, or `credentials.json` is missing |
-
-### 6. OAuth Callback
-
-Displays the OAuth2 callback parameters returned by a platform. Intended as a redirect target during the OAuth2 authorization flow.
-
-**URL:** `/platforms/{platform_name}/oauth/callback`
-**Method:** `GET`
-
-**Path Parameters:**
-
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| platform_name | string | Yes | Platform name (alphanumeric, `_`, `-`) |
-
-**Query Parameters:** All query parameters forwarded by the OAuth provider (e.g., `code`, `state`) are captured and displayed in an HTML table.
-
-**Response:** `200 OK`, HTML page listing all callback parameters.
-
-**Error Responses:**
-
-| Status | Condition |
-| :--- | :--- |
-| `404 Not Found` | Platform not found or not in the allow-list |
-
-### 7. Publish Content
-
-Submit an encrypted SMS payload for decryption and publication to its target platform. Handles both single-part payloads and multi-part segmented payloads (assembled before publishing).
-
-**URL:** `/publications`
-**Method:** `POST`
-
-**Request Body:** `PublishContentRequest`
-
-| Field | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| address | string | Yes | Sender phone number in E.164 format (e.g., `+12025550123`) |
-| text | string | Yes | Base64-encoded serialized payload |
-| tag | string | No | Shared secret matching `OFFLINE_PUBLISH_SHARED_SECRET`; required for offline payloads when that variable is set. See [Offline Publishing](../README.md#offline-publishing). |
-
-**Response Body:** `PublishContentResponse`
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| message | string | (Optional) Status message (e.g., confirmation or waiting-for-segments notice) |
-
-**Payload types handled:**
-
-| Type | Behaviour |
-| :--- | :--- |
-| `WITHOUT_ATTACHMENT` | Deserialized and published immediately |
-| `WITH_ATTACHMENT_HEADER` / `WITH_ATTACHMENT_NO_HEADER` | Segment stored; once all segments are assembled the full payload is published |
-
-Payloads queued here are tagged with protocol `https`. If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set without `https`, offline payloads are discarded instead of published. If `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads also require a matching `tag`. See [Offline Publishing](../README.md#offline-publishing).
-
-**Error Responses:**
-
-| Status | Condition |
-| :--- | :--- |
-| `400 Bad Request` | Invalid base64 text or invalid payload structure |
-
-Decryption, unsupported payload type, unsupported protocol, and adapter errors are all detected later, inside the async publish pipeline, so they never surface as an HTTP error here. They're logged server-side only.
-
-### 8. Twilio Incoming SMS
-
-Ingests an inbound SMS relayed by Twilio's messaging webhook and queues it for publication. Disabled unless `TWILIO_SMS_TRANSPORT_ENABLED=true`.
-
-**URL:** `/twilio-sms`
-**Method:** `POST`
-**Content-Type:** `application/x-www-form-urlencoded` (Twilio's webhook format)
-
-**Request Parameters** (subset of Twilio's webhook payload that's used):
-
-| Field | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| From | string | Yes | Sender phone number in E.164 format |
-| Body | string | Yes | Base64-encoded serialized payload |
-
-**Authentication:** requires a valid `X-Twilio-Signature` header, verified against `TWILIO_AUTH_TOKEN`. Requests failing this check are rejected before the payload is touched.
-
-**Response:** empty TwiML (`<Response/>`), `Content-Type: text/xml`.
-
-Payloads queued here are tagged with protocol `sms`. If `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is set without `sms`, offline payloads are discarded instead of published. See [Offline Publishing](../README.md#offline-publishing).
-
-**Forwarding to additional URLs:** Twilio only supports one webhook URL. Set `TWILIO_FORWARD_URLS_RAW` and/or `TWILIO_FORWARD_URLS_JSON` (comma-separated) to forward each inbound SMS.
-
-* `TWILIO_FORWARD_URLS_RAW`: same form-encoded params Twilio sent (`From`, `Body`, `MessageSid`, ...)
-* `TWILIO_FORWARD_URLS_JSON`: normalized `{"sender", "text", "received_at"}` JSON body
-
-**Error Responses:**
-
-| Status | Condition |
-| :--- | :--- |
-| `400 Bad Request` | Missing `From`/`Body`, invalid base64 text, or invalid payload structure |
-| `403 Forbidden` | Missing or invalid `X-Twilio-Signature` |
-| `404 Not Found` | `TWILIO_SMS_TRANSPORT_ENABLED` is not `true` |
-
-Decryption, unsupported payload type, unsupported protocol, and adapter errors are all detected later, inside the async publish pipeline, so they never surface as an HTTP error here. They're logged server-side only.
-
-### 9. Health Check
-
-Liveness/readiness check for uptime monitoring. Verifies a database session can be opened.
-
-**URL:** `/health` (not under `/v1`)
-**Method:** `GET`
-
-**Response Body:**
-
-```json
-{ "status": "ok" }
-```
-
-## Error Handling
-
-The API uses standard HTTP status codes:
+Error bodies are `{"error": "<message>"}`. The message is meant to be shown to users; the server logs more detail.
 
 | Status | Meaning |
 | :--- | :--- |
-| `200 OK` | Request successful |
-| `400 Bad Request` | Invalid request parameters or payload |
-| `404 Not Found` | Platform or key not found |
-| `422 Unprocessable Entity` | Unsupported payload type or validation error |
-| `500 Internal Server Error` | Unexpected server-side error |
+| `400 Bad Request` | Invalid parameters or payload, invalid cursor, or invalid time window |
+| `401 Unauthorized` | Missing or invalid credentials |
+| `403 Forbidden` | Origin not allowed, missing scope, or a credential change beyond your scopes |
+| `404 Not Found` | The resource doesn't exist |
+| `409 Conflict` | Already exists, in use, or changed by another request at the same moment; retry |
+| `412 Precondition Failed` | `If-Match` doesn't match the current `ETag`; reload and retry |
+| `422 Unprocessable Entity` | Validation error |
+| `428 Precondition Required` | `If-Match` header missing |
+| `429 Too Many Requests` | Rate limited (login and Basic auth) |
+| `500 Internal Server Error` | Unexpected server error |
