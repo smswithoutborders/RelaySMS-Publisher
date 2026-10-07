@@ -74,8 +74,8 @@ reportOperatorIssue = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# make test-e2e runs these on their own.
-norecursedirs = ["e2e"]
+# make test-dialects and make test-e2e run these on their own.
+norecursedirs = ["dialects", "e2e"]
 
 [tool.coverage.run]
 source = ["publisher"]

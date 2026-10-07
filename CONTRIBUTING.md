@@ -107,6 +107,7 @@ Each service can also run on its own:
 | `make test` | Run pytest |
 | `make coverage` | Run pytest and list the lines no test runs |
 | `make docs` | Regenerate `docs/openapi.json` from the REST app |
+| `make test-dialects` | Migrate and query SQLite, SQLCipher, Postgres, MySQL and MariaDB (podman) |
 | `make test-e2e` | Install, update and uninstall in a systemd container (podman) |
 | `make check` | Run every pre-commit hook on all files |
 | `make clean` | Remove generated code |
@@ -247,7 +248,10 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 | --- | --- | --- |
 | `tests/` (mirroring `publisher/`) | The Python package | `make test` |
 | `tests/scripts` | The shell scripts, run with bash | `make test` |
+| `tests/dialects` | Migrations and queries on SQLite, SQLCipher, Postgres 16, MySQL 8.0 and MariaDB 10.11 | `make test-dialects` |
 | `tests/e2e` | Install, update and uninstall on Ubuntu 24.04 and Debian 13 | `make test-e2e` |
+
+`make test-dialects` starts Postgres, MySQL and MariaDB in rootless podman and removes them afterwards; `PYTEST_ARGS="-k mysql"` runs one dialect. MariaDB is skipped on a machine with MariaDB installed, since its AppArmor profile stops the container's server. Add a test there when a query or migration could behave differently on another database.
 
 `make test-e2e` installs the working tree, uncommitted changes included, into systemd containers. It needs rootless podman and network access, and takes a few minutes; `PYTEST_ARGS="-k debian"` runs one distro. The staging deploy waits for it.
 
@@ -340,12 +344,13 @@ Adapters live in their own repositories. Install one locally with `python -m pub
 
 ## When CI fails
 
-`.github/workflows/checks.yml` runs the hooks on Python 3.14 and the tests on 3.12, 3.13 and 3.14. The 3.14 job also puts a coverage table on the run's summary page.
+`.github/workflows/checks.yml` runs the hooks on Python 3.14 and the tests on 3.12, 3.13 and 3.14. The 3.12 job also runs the dialect tests, and the 3.14 job puts a coverage table on the run's summary page.
 
 - **Hook failures:** run `make check` locally. Ruff and the whitespace hooks fix files in place, so re-add and commit the changes.
 - **Pyright:** fix the type, or narrow it with an `assert`. Use `# pyright: ignore[rule]` only with a reason.
 - **import-linter:** a lower layer imports a higher one. Move the code down a layer or pass the dependency in as an argument.
 - **Tests pass on newer Pythons but fail on 3.12:** look for newer syntax or an unquoted forward reference.
+- **Dialect tests:** run `PYTEST_ARGS="-k mysql" make test-dialects` for the failing dialect.
 - **e2e:** run `make test-e2e`, or `PYTEST_ARGS="-k debian" make test-e2e` for the failing distro.
 - **Requirements check:** the pinned dependencies conflict. Run `pip install --dry-run -r requirements.txt -r requirements-observability.txt` to see the conflict.
 

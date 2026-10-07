@@ -76,6 +76,11 @@ jobs:
         if: matrix.python-version != '3.14'
         run: venv/bin/python -m pytest
 
+      # Postgres, MySQL and MariaDB run in the runner's rootless podman.
+      - name: Run dialect tests
+        if: matrix.python-version == '3.12'
+        run: make test-dialects PYTHON=venv/bin/python
+
       # Measured once; the table also goes on the run's summary page.
       - name: Run tests with coverage
         if: matrix.python-version == '3.14'
