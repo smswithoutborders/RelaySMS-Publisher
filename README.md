@@ -159,6 +159,8 @@ Then follow [Run locally](CONTRIBUTING.md#run-locally). To fill a local database
 ```bash
 python -m publisher seed stats --count 5000 --days 90   # publication stats
 python -m publisher seed creds --count 5                # credentials; prints their passwords
+python -m publisher seed platforms                      # adapter rows, without their files
+python -m publisher seed gateway-clients --count 10     # gateway clients, some disabled
 ```
 
 ## Configuration

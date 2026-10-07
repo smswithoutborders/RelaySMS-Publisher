@@ -8,6 +8,9 @@ from click.testing import CliRunner
 from publisher import credentials
 from publisher.cli import seed
 from publisher.db import get_session
+from publisher.gateway_clients import manager
+from publisher.models import gateway_client
+from publisher.models import platform_adapter as platform_adapters
 from publisher.models.publication_stats import PublicationStats
 
 pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
@@ -39,3 +42,28 @@ def test_creds_adds_working_non_administrators():
             assert credential is not None
             assert not credential.is_administrator
             assert ",".join(sorted(credential.scopes)) == scope_list
+
+
+def test_platforms_adds_each_adapter_once():
+    first = CliRunner().invoke(seed.cli, ["platforms"])
+    again = CliRunner().invoke(seed.cli, ["platforms"])
+
+    assert first.exit_code == 0, first.output
+    assert "Added 0 adapter(s)" in again.stdout
+    with get_session() as db:
+        adapters = platform_adapters.find(db)
+    assert {(a.name, a.proto_id) for a in adapters} == {
+        (name, proto_id) for name, _, proto_id, _ in seed.ADAPTERS
+    }
+
+
+def test_gateway_clients_adds_resolvable_clients():
+    result = CliRunner().invoke(seed.cli, ["gateway-clients", "--count", "8"])
+
+    assert result.exit_code == 0, result.output
+    with get_session() as db:
+        clients = gateway_client.find(db, include_disabled=True)
+    assert len(clients) == 8
+    for c in clients:
+        candidates = manager.suggest(c.msisdn).candidates
+        assert c.operator_code in {candidate.operator_code for candidate in candidates}

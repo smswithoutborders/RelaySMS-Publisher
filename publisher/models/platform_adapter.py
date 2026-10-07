@@ -14,6 +14,7 @@ from publisher.db.types import UTCDateTime, utc_now
 
 OAUTH2 = 0
 PNBA = 1
+PROTOCOL_NAMES = {OAUTH2: "oauth2", PNBA: "pnba"}
 
 
 class PlatformAdapter(Base):
@@ -95,7 +96,7 @@ def get_for_protocol(
         session, name=platform, proto_id=proto_id, include_disabled=include_disabled
     )
     if not adapters:
-        protocol = {OAUTH2: "oauth2", PNBA: "pnba"}[proto_id]
+        protocol = PROTOCOL_NAMES[proto_id]
         raise NotImplementedError(
             f"Platform '{platform.lower()}' with protocol '{protocol}' is not "
             "supported. Contact the developers for implementation status."

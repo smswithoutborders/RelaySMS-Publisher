@@ -6,14 +6,24 @@ import random
 import secrets
 
 import click
+import phonenumbers
 from sqlalchemy import insert
 
 from publisher import credentials
 from publisher.credentials import parse_scopes
 from publisher.db import get_session
 from publisher.db.types import utc_now
+from publisher.gateway_clients import manager as gateway_clients
+from publisher.models import platform_adapter as platform_adapters
 from publisher.models.credential import ALL_SCOPES, Scope
+from publisher.models.platform_adapter import (
+    OAUTH2,
+    PNBA,
+    PROTOCOL_NAMES,
+    PlatformAdapter,
+)
 from publisher.models.publication_stats import PublicationStats
+from publisher.platforms.manager import adapter_id
 
 PLATFORMS = ("gmail", "twitter", "telegram", "slack", "bluesky", "mastodon")
 PROTOCOLS = ("https", "smtp", "sms")
@@ -28,7 +38,17 @@ FAILURE_REASONS = (
     "unexpected_error",
 )
 FAILURE_RATE = 0.2
+DISABLED_RATE = 0.1
 BATCH_SIZE = 1000
+# name, display name, protocol, category (0 email, 1 message, 2 text).
+ADAPTERS = (
+    ("gmail", "Gmail", OAUTH2, 0),
+    ("twitter", "X", OAUTH2, 2),
+    ("telegram", "Telegram", PNBA, 1),
+    ("slack", "Slack", OAUTH2, 1),
+    ("bluesky", "Bluesky", OAUTH2, 2),
+    ("mastodon", "Mastodon", OAUTH2, 2),
+)
 
 
 def _random_stat(now: datetime.datetime, days: int) -> dict:
@@ -97,3 +117,75 @@ def creds(count):
 
     click.echo("\n".join(lines))
     click.echo(f"Added {count} credentials. Passwords are shown only here.", err=True)
+
+
+@cli.command()
+def platforms():
+    """Register the well-known adapters, without their files."""
+    added = []
+    with get_session() as db:
+        for name, display_name, proto_id, cat_id in ADAPTERS:
+            if platform_adapters.find(
+                db, name=name, proto_id=proto_id, include_disabled=True
+            ):
+                continue
+            protocol = PROTOCOL_NAMES[proto_id]
+            url = f"https://github.com/smswithoutborders/{name}-{protocol}-adapter"
+            db.add(
+                PlatformAdapter(
+                    id=adapter_id(url),
+                    source_url=url,
+                    # No tag, so platforms update installs the newest release.
+                    commit=secrets.token_hex(20),
+                    name=name,
+                    display_name=display_name,
+                    proto_id=proto_id,
+                    cat_id=cat_id,
+                )
+            )
+            added.append(name)
+
+    click.echo(f"Added {len(added)} adapter(s): {', '.join(added) or 'none'}.")
+    if added:
+        click.echo(
+            "They have no files. Run platforms update <NAME> to install one.",
+            err=True,
+        )
+
+
+def _random_mobile(region: str) -> str:
+    example = phonenumbers.example_number_for_type(
+        region, phonenumbers.PhoneNumberType.MOBILE
+    )
+    assert example is not None, f"phonenumbers has no mobile example for {region}"
+    digits = str(example.national_number)
+    tail = "".join(random.choices("0123456789", k=4))
+    return f"+{example.country_code}{digits[:-4]}{tail}"
+
+
+@cli.command(name="gateway-clients")
+@click.option("--count", default=10, show_default=True, help="Clients to add.")
+def gateway_clients_command(count):
+    """Add gateway clients with random, resolvable numbers."""
+    added = 0
+    with get_session() as db:
+        while added < count:
+            msisdn = _random_mobile(random.choice(COUNTRIES))
+            suggestion = gateway_clients.suggest(msisdn)
+            # Picks for the ambiguous ones, as an administrator would.
+            candidate = suggestion.candidates[0]
+            try:
+                client = gateway_clients.create(
+                    db,
+                    msisdn,
+                    random.sample(PROTOCOLS, random.randint(1, len(PROTOCOLS))),
+                    operator=suggestion.operator or candidate.network,
+                    operator_code=candidate.operator_code,
+                )
+            except gateway_clients.GatewayClientExistsError:
+                continue
+            if random.random() < DISABLED_RATE:
+                gateway_clients.set_enabled(db, client, False)
+            added += 1
+
+    click.echo(f"Added {added} gateway clients.")
