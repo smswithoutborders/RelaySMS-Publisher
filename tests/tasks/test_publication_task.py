@@ -43,7 +43,7 @@ def _stub_publications(monkeypatch, *, publish_return=None, publish_side_effect=
 
 def _run_with_publish_error(monkeypatch, error):
     stub = _stub_publications(monkeypatch, publish_side_effect=error)
-    publication_task.publish_message("text", "+12025550123", "https")
+    publication_task.publish_message("text", "sender", "https")
     return stub
 
 
@@ -94,20 +94,22 @@ def test_unexpected_error_is_caught_logged_and_recorded(monkeypatch, caplog):
 def test_success_records_published_stat(monkeypatch):
     stub = _stub_publications(monkeypatch, publish_return="gmail")
 
-    publication_task.publish_message("text", "+12025550123", "https")
+    publication_task.publish_message("text", "sender", "https", country_code="CM")
 
     stub.publish.assert_called_once()
+    assert stub.publish.call_args.kwargs["sender_id"] == "sender"
     publication_task.record_publication.assert_called_once()
     kwargs = publication_task.record_publication.call_args.kwargs
     assert kwargs["status"] == "published"
     assert kwargs["platform_name"] == "gmail"
+    assert kwargs["country_code"] == "CM"
 
 
 def test_incomplete_segment_session_skips_recording(monkeypatch):
     """Return early without recording an outcome while awaiting more segments."""
     _stub_publications(monkeypatch, publish_return=None)
 
-    publication_task.publish_message("text", "+12025550123", "smtp")
+    publication_task.publish_message("text", "sender", "smtp")
 
     publication_task.record_publication.assert_not_called()
 
@@ -115,6 +117,6 @@ def test_incomplete_segment_session_skips_recording(monkeypatch):
 def test_tag_is_forwarded_to_service_publish(monkeypatch):
     stub = _stub_publications(monkeypatch, publish_return="rmail")
 
-    publication_task.publish_message("text", "+12025550123", "https", "s3cret-tag")
+    publication_task.publish_message("text", "sender", "https", "s3cret-tag")
 
     assert stub.publish.call_args.kwargs["tag"] == "s3cret-tag"

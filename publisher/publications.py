@@ -2,6 +2,7 @@
 """Publication pipeline: assemble, decrypt and route payloads to adapters."""
 
 import base64
+import hmac
 import logging
 import secrets
 import uuid
@@ -9,11 +10,12 @@ from collections.abc import Callable
 from typing import Any
 
 import magic
-from pydantic import BaseModel, Field
+import phonenumbers
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
-from publisher.config import OfflinePublishConfig
+from publisher.config import DatabaseConfig, OfflinePublishConfig
 from publisher.errors import PublisherError
 from publisher.keys import pop_token_keys
 from publisher.models import platform_adapter as platform_adapters
@@ -38,10 +40,19 @@ OFFLINE_CONTENT_PLATFORM = "rmail"
 class PublishContentRequest(BaseModel):
     """A payload as REST and SMTP receive it."""
 
+    # Keeps the sender's address out of logged validation errors.
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     address: str = Field(
         ...,
-        description="Sender phone number in E.164 format",
-        examples=["+12025550123"],
+        description="Sender ID from the gateway client, or an E.164 phone number",
+        examples=["5447c1f50558292bd9df723f9fdc0b06b892199c7dcfaad5164f2d94dfd3470a"],
+    )
+    dialing_code: str | None = Field(
+        None,
+        pattern=r"^[1-9]\d{0,2}$",
+        description="Sender's country calling code",
+        examples=["237"],
     )
     text: str = Field(
         ...,
@@ -81,6 +92,23 @@ class OfflineTagInvalidError(OfflineTagError):
     pass
 
 
+def pseudonymize_sender(address: str) -> str:
+    """Return a keyed hash of the sender's address."""
+    key = hmac.digest(DatabaseConfig.get().data_encryption_key, b"sender-id", "sha256")
+    return hmac.digest(key, address.encode(), "sha256").hex()
+
+
+def sender_country(address: str, dialing_code: str | None = None) -> str | None:
+    """Best-effort ISO region code from the dialing code or an E.164 address."""
+    if dialing_code:
+        region = phonenumbers.region_code_for_country_code(int(dialing_code))
+        return None if region == phonenumbers.UNKNOWN_REGION else region
+    try:
+        return phonenumbers.region_code_for_number(phonenumbers.parse(address, None))
+    except phonenumbers.NumberParseException:
+        return None
+
+
 def _recipient(content: rrs.V1ContentsContainer) -> str:
     to = content.get_to()
     if to is None:
@@ -108,7 +136,7 @@ def validate(text_payload: str) -> tuple[bytes, bytes, rrs.V1PayloadsTypes]:
 def publish(
     session: Session,
     payload_raw: bytes,
-    sender_address: str,
+    sender_id: str,
     raw_segment: bytes,
     payload_type: rrs.V1PayloadsTypes,
     protocol: str | None = None,
@@ -118,7 +146,7 @@ def publish(
     payload = _assemble(
         session,
         payload_raw=payload_raw,
-        sender_address=sender_address,
+        sender_id=sender_id,
         raw_segment=raw_segment,
         payload_type=payload_type,
     )
@@ -132,7 +160,7 @@ def publish(
 def _assemble(
     session: Session,
     payload_raw: bytes,
-    sender_address: str,
+    sender_id: str,
     raw_segment: bytes,
     payload_type: rrs.V1PayloadsTypes,
 ) -> rrs.V1Payloads | None:
@@ -150,7 +178,7 @@ def _assemble(
         ):
             return _store_segment_and_try_join(
                 session,
-                sender_id=sender_address,
+                sender_id=sender_id,
                 payload_raw=payload_raw,
                 raw_segment=raw_segment,
             )

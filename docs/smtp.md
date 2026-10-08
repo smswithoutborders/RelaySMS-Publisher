@@ -8,14 +8,16 @@ The body of each email must be a JSON object:
 
 ```json
 {
-  "address": "+12025550123",
+  "address": "5447c1f50558292bd9df723f9fdc0b06b892199c7dcfaad5164f2d94dfd3470a",
+  "dialing_code": "237",
   "text": "<base64-encoded serialized payload>"
 }
 ```
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| address | string | Sender phone number in E.164 format |
+| address | string | Sender ID from the gateway client, or an E.164 phone number |
+| dialing_code | string | Optional. Sender's country calling code, for publication stats |
 | text | string | Base64-encoded serialized payload |
 
 ## How It Works

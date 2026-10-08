@@ -9,7 +9,9 @@ from twilio.request_validator import RequestValidator
 
 from publisher.api.rest.v1 import publications as publications_routes
 from publisher.api.rest.v1 import routes
+from publisher.publications import pseudonymize_sender
 from publisher.publications import validate as real_validate
+from publisher.tasks import publication_task
 
 AUTH_TOKEN = "test-auth-token"
 WEBHOOK_URL = "http://testserver/v1/twilio-sms"
@@ -30,7 +32,7 @@ def _enabled(set_config, monkeypatch):
         sms_transport_enabled=True,
         auth_token=AUTH_TOKEN,
     )
-    monkeypatch.setattr(publications_routes, "publish_message", MagicMock())
+    monkeypatch.setattr(publication_task.publish_message, "delay", MagicMock())
     monkeypatch.setattr(publications_routes, "forward_twilio_webhook", MagicMock())
     monkeypatch.setattr(
         publications_routes.publications,
@@ -52,8 +54,8 @@ def test_valid_signature_queues_publication(client):
 
     assert response.status_code == 200
     assert "text/xml" in response.headers["content-type"]
-    publications_routes.publish_message.delay.assert_called_once_with(
-        "cGF5bG9hZA==", "+237123456789", "sms"
+    publication_task.publish_message.delay.assert_called_once_with(
+        "cGF5bG9hZA==", pseudonymize_sender("+237123456789"), "sms", None, "CM"
     )
 
 
@@ -62,7 +64,7 @@ def test_invalid_signature_rejected(client):
     response = _signed_post(client, params, auth_token="wrong-token")
 
     assert response.status_code == 403
-    publications_routes.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_missing_signature_header_rejected(client):
@@ -71,7 +73,7 @@ def test_missing_signature_header_rejected(client):
     )
 
     assert response.status_code == 403
-    publications_routes.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_missing_body_field_rejected(client):
@@ -79,7 +81,7 @@ def test_missing_body_field_rejected(client):
     response = _signed_post(client, params)
 
     assert response.status_code == 400
-    publications_routes.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_malformed_payload_rejected(client, monkeypatch):
@@ -89,7 +91,7 @@ def test_malformed_payload_rejected(client, monkeypatch):
     response = _signed_post(client, params)
 
     assert response.status_code == 400
-    publications_routes.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_transport_disabled_returns_404(client, set_config):
@@ -99,7 +101,7 @@ def test_transport_disabled_returns_404(client, set_config):
     response = _signed_post(client, params)
 
     assert response.status_code == 404
-    publications_routes.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_forwarding_queued(client):
