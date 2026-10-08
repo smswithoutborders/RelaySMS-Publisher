@@ -15,7 +15,7 @@ from publisher.api.rest.v1.schemas import (
 from publisher.config import TwilioConfig
 from publisher.publications import PayloadMalformedError
 from publisher.tasks.forward_task import forward_twilio_webhook
-from publisher.tasks.publication_task import publish_message
+from publisher.tasks.publication_task import queue_publication
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,9 @@ def create_publications(body: PublishRestContentRequest) -> PublishContentRespon
     except PayloadMalformedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    publish_message.delay(body.text, body.address, "https", body.tag)
+    queue_publication(
+        body.text, body.address, "https", tag=body.tag, dialing_code=body.dialing_code
+    )
     logger.info("Successfully queued publication request via protocol %r.", "https")
     return PublishContentResponse(message="Publication request queued successfully.")
 
@@ -118,7 +120,7 @@ async def twilio_incoming_sms(request: Request) -> Response:
     except PayloadMalformedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    publish_message.delay(text_payload, sender_address, "sms")
+    queue_publication(text_payload, sender_address, "sms")
     logger.info("Successfully queued publication request via protocol %r.", "sms")
 
     forward_twilio_webhook.delay(params, sender_address, text_payload)

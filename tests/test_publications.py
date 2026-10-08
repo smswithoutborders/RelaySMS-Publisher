@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import base64
+import hashlib
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
 
@@ -24,6 +25,8 @@ from publisher.publications import (
     ProtocolNotAllowedError,
 )
 from tests.helpers import add_adapter
+
+SENDER_HASH = "5447c1f50558292bd9df723f9fdc0b06b892199c7dcfaad5164f2d94dfd3470a"
 
 
 def _payload(t_id=None):
@@ -49,6 +52,28 @@ def offline(monkeypatch):
 @pytest.fixture(autouse=True)
 def _reset_config(set_config):
     set_config(publications, "offline_config", allowed_protocols=[], shared_secret=None)
+
+
+def test_sender_id_is_a_stable_keyed_hash():
+    sender_id = publications.pseudonymize_sender("+237123456789")
+
+    assert sender_id == publications.pseudonymize_sender("+237123456789")
+    assert sender_id != publications.pseudonymize_sender("+237123456780")
+    assert sender_id != hashlib.sha256(b"+237123456789").hexdigest()
+
+
+@pytest.mark.parametrize(
+    ("address", "dialing_code", "country"),
+    [
+        ("+237123456789", None, "CM"),
+        (SENDER_HASH, "237", "CM"),
+        (SENDER_HASH, "44", "GB"),
+        (SENDER_HASH, "999", None),
+        (SENDER_HASH, None, None),
+    ],
+)
+def test_country_comes_from_dialing_code_or_number(address, dialing_code, country):
+    assert publications.sender_country(address, dialing_code) == country
 
 
 def test_https_offline_rejects_wrong_tag(set_config, offline):
@@ -225,7 +250,7 @@ def _publish(text, protocol="sms"):
         return publications.publish(
             s,
             payload_raw=payload_raw,
-            sender_address=SENDER,
+            sender_id=SENDER,
             raw_segment=raw_segment,
             payload_type=payload_type,
             protocol=protocol,

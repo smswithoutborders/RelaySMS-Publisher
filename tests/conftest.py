@@ -13,6 +13,11 @@ os.environ.update(
     DATA_ENCRYPTION_KEY="11" * 32,
 )
 
+# Git hooks export GIT_DIR and others, which would point repos the tests create
+# at this checkout.
+for name in [name for name in os.environ if name.startswith("GIT_")]:
+    del os.environ[name]
+
 pytest_plugins = ["tests.fixtures"]
 
 

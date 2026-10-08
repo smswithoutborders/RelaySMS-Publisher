@@ -29,7 +29,7 @@ from publisher.publications import (
     PublishContentRequest,
 )
 from publisher.smtp import auth as smtp_auth
-from publisher.tasks.publication_task import publish_message
+from publisher.tasks.publication_task import queue_publication
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +106,9 @@ def process_incoming_email(msg: MailMessage) -> bool:
             )
             return True
 
-        publish_message.delay(request.text, request.address, "smtp")
+        queue_publication(
+            request.text, request.address, "smtp", dialing_code=request.dialing_code
+        )
         logger.info(
             "Successfully queued publication request from email %s via protocol %r.",
             email_uid,
