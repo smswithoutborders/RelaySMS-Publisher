@@ -61,8 +61,12 @@ class PlatformAdapter(Base):
         return str(PlatformsConfig.get().adapters_venv_dir / self.id)
 
     @property
-    def assets_path(self) -> str:
-        return str(PlatformsConfig.get().adapters_assets_dir / self.id)
+    def config_path(self) -> str:
+        return str(PlatformsConfig.get().adapters_config_dir / self.id)
+
+    @property
+    def state_path(self) -> str:
+        return str(PlatformsConfig.get().adapters_state_dir / self.id)
 
 
 def find(

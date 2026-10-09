@@ -73,7 +73,8 @@ def platforms_config(tmp_path, monkeypatch):
         PlatformsConfig.get(),
         adapters_dir=tmp_path / "adapters",
         adapters_venv_dir=tmp_path / "venvs",
-        adapters_assets_dir=tmp_path / "assets",
+        adapters_config_dir=tmp_path / "config",
+        adapters_state_dir=tmp_path / "state",
     )
 
     def change(**changes):

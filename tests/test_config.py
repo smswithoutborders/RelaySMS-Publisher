@@ -203,7 +203,8 @@ def test_template_env_paths_match_defaults():
         "CELERY_BEAT_SCHEDULE_PATH": celery.beat_schedule_path,
         "PLATFORMS_ADAPTERS_DIR": platforms.adapters_dir,
         "PLATFORMS_ADAPTERS_VENV_DIR": platforms.adapters_venv_dir,
-        "PLATFORMS_ADAPTERS_ASSETS_DIR": platforms.adapters_assets_dir,
+        "PLATFORMS_ADAPTERS_CONFIG_DIR": platforms.adapters_config_dir,
+        "PLATFORMS_ADAPTERS_STATE_DIR": platforms.adapters_state_dir,
     }
 
     for key, default in defaults.items():

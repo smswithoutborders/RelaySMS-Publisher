@@ -320,7 +320,7 @@ def _publish_online_content(
                 extras={
                     "phone_number": account_id,
                     "session": token.token_data["token"],
-                    "base_path": adapter.assets_path,
+                    "base_path": adapter.state_path,
                 },
             )
         case _:
@@ -444,7 +444,7 @@ def _publish_offline_content(
         session, OFFLINE_CONTENT_PLATFORM, PNBA
     )
     params = _get_adapter_params(
-        content=content, extras={"base_path": adapter.assets_path}
+        content=content, extras={"base_path": adapter.state_path}
     )
 
     pipe = ipc.invoke(

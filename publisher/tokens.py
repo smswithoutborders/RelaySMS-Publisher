@@ -27,7 +27,7 @@ def revoke_oauth2_token_upstream(session: Session, token: Token) -> str | None:
         method="revoke_token",
         params={
             "token": token.token_data["token"],
-            "base_path": adapter.assets_path,
+            "base_path": adapter.state_path,
         },
     )
     return pipe.get("error")
@@ -45,7 +45,7 @@ def revoke_pnba_token_upstream(session: Session, token: Token) -> str | None:
         params={
             "phone_number": token.token_data["account_id"],
             "session": token.token_data["token"],
-            "base_path": adapter.assets_path,
+            "base_path": adapter.state_path,
         },
     )
     return pipe.get("error")

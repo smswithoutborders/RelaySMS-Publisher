@@ -31,7 +31,7 @@ def exchange_oauth2_code_and_store(
             "code_verifier": request.code_verifier or None,
             "redirect_url": request.redirect_url or None,
             "request_identifier": request.request_identifier or None,
-            "base_path": adapter.assets_path,
+            "base_path": adapter.state_path,
         },
     )
     account_identifier = result["userinfo"]["account_identifier"]

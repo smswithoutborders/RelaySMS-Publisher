@@ -317,6 +317,39 @@ def test_import_registers_unregistered_clones_only(tmp_path):
 
 
 @pytest.mark.usefixtures("test_db")
+def test_moves_credentials_and_state_out_of_the_code(tmp_path):
+    add_adapter("gmail", OAUTH2)
+    add_adapter("telegram", PNBA)
+    (tmp_path / "adapters/gmail-0").mkdir(parents=True)
+    (tmp_path / "adapters/gmail-0/credentials.json").write_text("secret")
+    (tmp_path / "assets/telegram-1").mkdir(parents=True)
+    (tmp_path / "assets/telegram-1/pending.db").write_text("db")
+
+    with db.get_session() as session:
+        moved = manager.move_files_out_of_code(session)
+        assert [a.name for a in moved] == ["gmail", "telegram"]
+        assert manager.move_files_out_of_code(session) == []
+
+    assert (tmp_path / "config/gmail-0/credentials.json").read_text() == "secret"
+    assert (tmp_path / "adapters/gmail-0/credentials.json").is_file()
+    assert (tmp_path / "state/telegram-1/pending.db").read_text() == "db"
+    assert not (tmp_path / "assets/telegram-1").exists()
+
+
+@pytest.mark.usefixtures("test_db")
+def test_keeps_files_already_out_of_the_code(tmp_path):
+    add_adapter("gmail", OAUTH2)
+    for path, text in (("adapters", "old"), ("config", "new")):
+        (tmp_path / path / "gmail-0").mkdir(parents=True)
+        (tmp_path / path / "gmail-0/credentials.json").write_text(text)
+
+    with db.get_session() as session:
+        assert manager.move_files_out_of_code(session) == []
+
+    assert (tmp_path / "config/gmail-0/credentials.json").read_text() == "new"
+
+
+@pytest.mark.usefixtures("test_db")
 def test_a_concurrent_change_is_a_conflict():
     add_adapter("gmail", OAUTH2)
     with (

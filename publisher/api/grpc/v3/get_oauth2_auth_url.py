@@ -21,7 +21,7 @@ def get_oauth2_authorization_url(
             "autogenerate_code_verifier": request.autogenerate_code_verifier,
             "redirect_url": request.redirect_url or None,
             "request_identifier": request.request_identifier or None,
-            "base_path": adapter.assets_path,
+            "base_path": adapter.state_path,
         },
     )
 

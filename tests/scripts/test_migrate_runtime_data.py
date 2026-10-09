@@ -44,7 +44,7 @@ class TestMigrateRuntimeData:
 
         assert (legacy / "data/platforms/adapters/demo/main.py").is_file()
         assert (legacy / "data/platforms/venvs/demo").is_dir()
-        assert (legacy / "data/platforms/assets").is_dir()
+        assert (legacy / "data/platforms/state").is_dir()
         assert (legacy / "data/gateway_clients/registry.json").is_file()
         assert not (legacy / "platforms/adapters").exists()
 
@@ -88,6 +88,21 @@ class TestMigrateRuntimeData:
 
         pip = (legacy / "data/platforms/venvs/demo/bin/pip").read_text()
         assert pip == f"#!{legacy}/data/platforms/venvs/demo/bin/python\n"
+
+    def test_renames_assets_to_state(self, legacy, migrate):
+        (legacy / "data/platforms/assets/demo").mkdir(parents=True)
+        (legacy / "data/platforms/assets/demo/pending.db").write_text("x")
+        (legacy / ".env").write_text(
+            "PLATFORMS_ADAPTERS_ASSETS_DIR=data/platforms/assets\n"
+        )
+
+        migrate()
+
+        assert (legacy / "data/platforms/state/demo/pending.db").read_text() == "x"
+        assert not (legacy / "data/platforms/assets").exists()
+        assert (
+            env_value(legacy, "PLATFORMS_ADAPTERS_STATE_DIR") == "data/platforms/state"
+        )
 
     @pytest.mark.parametrize(
         ("overrides", "copied"), [('[{"mcc": "624"}]', True), ("[]", False)]

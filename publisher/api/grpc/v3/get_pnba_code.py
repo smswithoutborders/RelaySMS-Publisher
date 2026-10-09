@@ -36,7 +36,7 @@ def get_pnba_code(request) -> publisher_pb2.GetPNBACodeResponse:
         "send_authorization_code",
         {
             "phone_number": request.phone_number,
-            "base_path": adapter.assets_path,
+            "base_path": adapter.state_path,
             "request_identifier": request.request_identifier or None,
             "channel": request.channel or None,
         },

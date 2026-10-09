@@ -17,7 +17,8 @@ ENV_FILE="$INSTALL_DIR/.env"
 MOVES=(
   "PLATFORMS_ADAPTERS_DIR platforms/adapters data/platforms/adapters"
   "PLATFORMS_ADAPTERS_VENV_DIR platforms/adapters_venv data/platforms/venvs"
-  "PLATFORMS_ADAPTERS_ASSETS_DIR platforms/adapters_assets data/platforms/assets"
+  "PLATFORMS_ADAPTERS_STATE_DIR platforms/adapters_assets data/platforms/state"
+  "PLATFORMS_ADAPTERS_STATE_DIR data/platforms/assets data/platforms/state"
   "GATEWAY_CLIENTS_REGISTRY_FILE gateway_clients/registry.json data/gateway_clients/registry.json"
 )
 
@@ -81,8 +82,15 @@ move_overrides() {
   git -C "$INSTALL_DIR" checkout -- gateway_clients/mcc_mnc_overrides.json 2>/dev/null || true
 }
 
+rename_assets_var() {
+  [ -f "$ENV_FILE" ] && grep -q '^PLATFORMS_ADAPTERS_ASSETS_DIR=' "$ENV_FILE" || return 0
+  sed -i 's#^PLATFORMS_ADAPTERS_ASSETS_DIR=#PLATFORMS_ADAPTERS_STATE_DIR=#' "$ENV_FILE"
+  log "Renamed PLATFORMS_ADAPTERS_ASSETS_DIR to PLATFORMS_ADAPTERS_STATE_DIR in .env"
+}
+
 main() {
   local entry
+  rename_assets_var
   for entry in "${MOVES[@]}"; do
     # shellcheck disable=SC2086  # entries are space-separated fields
     move_one $entry

@@ -37,7 +37,7 @@ def exchange_pnba_code_and_store(
         {
             "code": request.authorization_code,
             "phone_number": request.phone_number,
-            "base_path": adapter.assets_path,
+            "base_path": adapter.state_path,
             "password": request.password or None,
             "request_identifier": request.request_identifier or None,
             "channel": request.channel or None,

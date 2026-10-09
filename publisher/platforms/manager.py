@@ -426,3 +426,29 @@ def import_from_disk(session: Session) -> list[PlatformAdapter]:
         imported.append(adapter)
     session.flush()
     return imported
+
+
+def move_files_out_of_code(session: Session) -> list[PlatformAdapter]:
+    """Copy credentials.json to config dirs and move assets dirs to state dirs.
+
+    Leaves an adapter alone where its new location already exists.
+    """
+    legacy_state_dir = PlatformsConfig.get().adapters_state_dir.parent / "assets"
+    changed = []
+    for adapter in platform_adapters.find(session, include_disabled=True):
+        credentials = Path(adapter.path) / "credentials.json"
+        config = Path(adapter.config_path) / "credentials.json"
+        legacy_state = legacy_state_dir / adapter.id
+        state = Path(adapter.state_path)
+        moved = False
+        if credentials.is_file() and not config.exists():
+            config.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(credentials, config)
+            moved = True
+        if legacy_state.is_dir() and not state.exists():
+            state.parent.mkdir(parents=True, exist_ok=True)
+            legacy_state.rename(state)
+            moved = True
+        if moved:
+            changed.append(adapter)
+    return changed

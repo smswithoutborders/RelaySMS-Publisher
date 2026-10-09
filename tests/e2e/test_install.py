@@ -32,16 +32,17 @@ DATA_DIRS = [
     "data",
     "data/platforms/adapters",
     "data/platforms/venvs",
-    "data/platforms/assets",
+    "data/platforms/config",
+    "data/platforms/state",
 ]
 DATA_RW_PATHS = "ReadWritePaths=" + " ".join(f"{D}/{path}" for path in DATA_DIRS)
 # Env var, then the path before and after scripts/migrate-runtime-data.sh.
 LEGACY = {
     "PLATFORMS_ADAPTERS_DIR": ("platforms/adapters", "data/platforms/adapters"),
     "PLATFORMS_ADAPTERS_VENV_DIR": ("platforms/adapters_venv", "data/platforms/venvs"),
-    "PLATFORMS_ADAPTERS_ASSETS_DIR": (
+    "PLATFORMS_ADAPTERS_STATE_DIR": (
         "platforms/adapters_assets",
-        "data/platforms/assets",
+        "data/platforms/state",
     ),
 }
 
@@ -177,6 +178,7 @@ def test_update_moves_legacy_layout_and_refreshes_units(container):
         cd {D}
         ./manage.sh stop
         {moves}
+        sed -i 's#^PLATFORMS_ADAPTERS_STATE_DIR=#PLATFORMS_ADAPTERS_ASSETS_DIR=#' .env
         mkdir platforms/adapters/demo
         touch platforms/adapters/demo/main.py
         sed -i 's#^ReadWritePaths=.*#ReadWritePaths={D}/data {legacy_paths}#' {UNITS}
