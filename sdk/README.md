@@ -114,6 +114,13 @@ venv/bin/relaysms-adapter revoke
 | `revoke` | Unlinks the account. |
 | `call <method> [json]` | Calls any method with raw params. |
 
-## Release
+## Compatibility
+
+The Publisher runs this SDK from its repository while each adapter pins a release, so the Publisher talks to adapters on older releases.
+
+- Changes to requests, results, errors and `adapter.toml` must be backward compatible: add optional fields, never rename or remove them.
+- Bump `version` in `pyproject.toml` with every change to `src/` (CI checks), and tag the release `sdk-vX.Y.Z`.
+
+## Release an adapter
 
 Push a version tag such as `v1.2.0`. The Publisher installs and updates adapters by tag.

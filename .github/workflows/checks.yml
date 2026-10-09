@@ -97,8 +97,28 @@ jobs:
       - name: Run tests
         run: make test-sdk PYTHON=venv/bin/python
 
+  sdk-version:
+    name: SDK version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Adapters pin SDK releases while the Publisher runs sdk/ as it is, so every
+      # change to it needs a version that can be tagged.
+      - name: Require a version bump for SDK changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git cat-file -e "$BASE^{commit}" 2>/dev/null || exit 0
+          git diff --quiet "$BASE...HEAD" -- sdk/src && exit 0
+          git diff "$BASE...HEAD" -- sdk/pyproject.toml | grep -q '^+version = ' && exit 0
+          echo "::error file=sdk/pyproject.toml::sdk/src changed; bump version here."
+          exit 1
+
   deploy-staging:
-    needs: [hooks, tests, coverage, sdk]
+    needs: [hooks, tests, coverage, sdk, sdk-version]
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     uses: ./.github/workflows/deploy.staging.yml
     secrets: inherit
