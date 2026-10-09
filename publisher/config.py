@@ -139,7 +139,9 @@ class _Reader:
         return self.get_str(name) if self.get_key(name, required=False) else None
 
     def get_path(self, name: str, default: Path) -> Path:
-        return Path(self.get_str(name) or default)
+        """Read a path; a relative one is relative to the install directory."""
+        path = Path(self.get_str(name) or default).expanduser()
+        return path if path.is_absolute() else ROOT / path
 
     def get_cron(self, name: str, default: str) -> str:
         value = self.get_str(name, default)
