@@ -128,7 +128,12 @@ def send(ws: Workspace, args: argparse.Namespace) -> None:
         ),
         account=None if account is None else wire.from_json(Account, account),
     )
-    result = call(ws, "send_message", request)
+    try:
+        result = call(ws, "send_message", request)
+    except AdapterError as e:
+        if account is not None and e.token:
+            _save_account(ws, {**account, "token": e.token})
+        raise
     if account is not None and result.get("token"):
         _save_account(ws, {**account, "token": result["token"]})
     console.print(Text("Sent.", style="green"))

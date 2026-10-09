@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,8 +10,7 @@ from publisher.cli.db import session
 from publisher.cli.output import print_table
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.platform_adapter import PlatformAdapter
-from publisher.platforms import manager
-from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
+from publisher.platforms import ipc, manager
 
 
 def _filter_options(command):
@@ -134,12 +132,9 @@ def exec_(name, proto_id, cat_id, cli_args):
     if "/" in command or not program.is_file():
         raise click.ClickException(f"Adapter '{name}' has no command {command!r}.")
 
-    env = {
-        **os.environ,
-        CONFIG_DIR_ENV: adapter.config_path,
-        STATE_DIR_ENV: adapter.state_path,
-    }
-    result = subprocess.run([str(program), *args], cwd=adapter.path, env=env)
+    result = subprocess.run(
+        [str(program), *args], cwd=adapter.path, env=ipc.adapter_env(adapter)
+    )
     sys.exit(result.returncode)
 
 

@@ -10,7 +10,7 @@ from git import Repo
 
 from publisher import credentials, db
 from publisher.models.credential import ALL_SCOPES, Scope
-from publisher.models.platform_adapter import PlatformAdapter
+from publisher.models.platform_adapter import PROTOCOL_NAMES, PlatformAdapter
 from publisher.models.token import create as create_token
 from publisher.models.token_hash import create as create_token_hash
 
@@ -88,7 +88,7 @@ category = "email"
 def adapter_repo(
     path: Path,
     name: str = "gmail",
-    proto_id: int | str = 0,
+    proto_id: int = 0,
     tag: str | None = "v1.0.0",
 ) -> Repo:
     """A local git repo laid out like an adapter."""
@@ -100,14 +100,11 @@ def adapter_repo(
 
 
 def commit_manifest(
-    repo: Repo, name: str, proto_id: int | str, tag: str | None = None
+    repo: Repo, name: str, proto_id: int, tag: str | None = None
 ) -> str:
-    """Write and commit adapter.toml, tagged if tag; return the commit's sha.
-
-    proto_id is OAUTH2 or PNBA, or a string to write as the protocol.
-    """
+    """Write and commit adapter.toml, tagged if tag; return the commit's sha."""
     path = repo.working_tree_dir
-    protocol = proto_id if isinstance(proto_id, str) else ("oauth2", "pnba")[proto_id]
+    protocol = PROTOCOL_NAMES[proto_id]
     with open(f"{path}/adapter.toml", "w") as f:
         f.write(MANIFEST.format(name=name, protocol=protocol))
     repo.index.add(["pyproject.toml", "adapter.toml"])

@@ -4,11 +4,10 @@
 import logging
 from datetime import datetime
 
-from grpc_interceptor.exceptions import InvalidArgument
-
 from protos.v3 import publisher_pb2
 from publisher.api.grpc.utils import call_adapter, find_adapter, require_fields
 from publisher.models.platform_adapter import PNBA
+from relaysms_adapter_sdk import CodeRequest
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +32,16 @@ def get_pnba_code(request) -> publisher_pb2.GetPNBACodeResponse:
     adapter = find_adapter(request.platform, PNBA)
     result = call_adapter(
         adapter,
-        "send_authorization_code",
-        {
-            "phone_number": request.phone_number,
-            "base_path": adapter.state_path,
-            "request_identifier": request.request_identifier or None,
-            "channel": request.channel or None,
-        },
+        "send_code",
+        CodeRequest(
+            phone_number=request.phone_number,
+            channel=request.channel or None,
+            request_identifier=request.request_identifier or None,
+        ),
     )
-    if not result.get("success"):
-        raise InvalidArgument(result.get("message"))
 
     response = publisher_pb2.GetPNBACodeResponse(
-        success=True, message=result.get("message")
+        success=True, message=result.get("message") or "Authorization code sent."
     )
     expires_at = _to_epoch_seconds(result.get("expires_at"))
     if expires_at is not None:

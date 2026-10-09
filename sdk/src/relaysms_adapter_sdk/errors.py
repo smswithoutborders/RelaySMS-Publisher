@@ -16,12 +16,29 @@ class AdapterError(Exception):
 
     code: int = -32000
 
-    def __init__(self, message: str, *, code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: int | None = None,
+        token: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.data: dict[str, Any] | None = None
         if code is not None:
             self.code = code
+        if token is not None:
+            self.token = token
+
+    @property
+    def token(self) -> dict[str, Any] | None:
+        """A token refreshed before the failure, which the Publisher still stores."""
+        return (self.data or {}).get("token")
+
+    @token.setter
+    def token(self, token: dict[str, Any]) -> None:
+        self.data = {**(self.data or {}), "token": token}
 
 
 class InvalidParamsError(AdapterError):
@@ -47,10 +64,16 @@ class RateLimitedError(AdapterError):
 
     code = -32003
 
-    def __init__(self, message: str, *, retry_after: int | None = None) -> None:
-        super().__init__(message)
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after: int | None = None,
+        token: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, token=token)
         if retry_after is not None:
-            self.data = {"retry_after": retry_after}
+            self.data = {**(self.data or {}), "retry_after": retry_after}
 
     @property
     def retry_after(self) -> int | None:

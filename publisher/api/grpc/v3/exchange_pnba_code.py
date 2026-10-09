@@ -12,6 +12,7 @@ from publisher.api.grpc.utils import (
 from publisher.db import get_session
 from publisher.models.platform_adapter import PNBA
 from publisher.models.token import create as create_token
+from relaysms_adapter_sdk import CodeVerificationRequest, PasswordVerificationRequest
 
 
 def exchange_pnba_code_and_store(
@@ -27,24 +28,30 @@ def exchange_pnba_code_and_store(
     validate_client_ephemeral_public_keys(request.client_ephemeral_public_keys)
 
     adapter = find_adapter(request.platform, PNBA)
-    result = call_adapter(
-        adapter,
-        (
-            "validate_password_and_fetch_user_info"
-            if request.password
-            else "validate_code_and_fetch_user_info"
-        ),
-        {
-            "code": request.authorization_code,
-            "phone_number": request.phone_number,
-            "base_path": adapter.state_path,
-            "password": request.password or None,
-            "request_identifier": request.request_identifier or None,
-            "channel": request.channel or None,
-        },
-    )
+    request_identifier = request.request_identifier or None
+    if request.password:
+        result = call_adapter(
+            adapter,
+            "verify_password",
+            PasswordVerificationRequest(
+                phone_number=request.phone_number,
+                password=request.password,
+                request_identifier=request_identifier,
+            ),
+        )
+    else:
+        result = call_adapter(
+            adapter,
+            "verify_code",
+            CodeVerificationRequest(
+                phone_number=request.phone_number,
+                code=request.authorization_code,
+                channel=request.channel or None,
+                request_identifier=request_identifier,
+            ),
+        )
 
-    if result.get("two_step_verification_enabled"):
+    if result.get("password_required"):
         return publisher_pb2.ExchangePNBACodeAndStoreResponse(
             success=True,
             two_step_verification_enabled=True,
@@ -53,7 +60,7 @@ def exchange_pnba_code_and_store(
             message="two-steps verification is enabled and a password is required",
         )
 
-    account_identifier = result["userinfo"]["account_identifier"]
+    account_identifier = result["identifier"]
 
     with get_session() as s:
         token = create_token(
@@ -61,7 +68,7 @@ def exchange_pnba_code_and_store(
             platform=request.platform.lower(),
             cat_id=adapter.cat_id,
             proto_id=adapter.proto_id,
-            token_data={"account_id": account_identifier, "token": result["session"]},
+            token_data={"account_id": account_identifier, "token": result["token"]},
         )
         token_ciphertext, kid_index, server_public_keys = (
             keys.create_token_pools_and_encrypt(

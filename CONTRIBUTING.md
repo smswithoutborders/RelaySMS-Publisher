@@ -206,8 +206,8 @@ Each code row may import only the rows below it, never the other way round, and 
 
 1. A payload arrives over REST (`/v1/publications`, the Twilio webhook) or SMTP.
 2. The entry point validates it and calls `queue_publication`, which replaces the sender's address with a keyed hash and queues `publish_message`.
-3. The worker runs `publisher/tasks/publication_task.py`, which calls `publications.publish`.
-4. `publications` decrypts the payload with the token's per-slot keys (`keys.py`) and sends the content through the platform adapter (`platforms/`).
+3. The worker runs `publisher/tasks/publication_task.py`, which in one transaction calls `publications.prepare` (deletes the slot's keys and decrypts), `send` (runs the adapter through `platforms/ipc.py`) and `finish` (stores a refreshed token).
+4. It commits only after a successful send, so a failure leaves the keys usable, and a duplicate payload waits on their row lock.
 5. The task records the outcome in the publication stats.
 
 The gRPC service handles the account side: storing OAuth2 and PNBA tokens, revoking them and syncing key pools.
@@ -219,6 +219,7 @@ The hooks enforce formatting, lint, types and commit messages. These rules are c
 - **Functions by default.** Modules group related behaviour. Use a class only for real state (a cache, a connection) or when a framework needs one (ORM models, structs, interceptors, servicers, config sections).
 - **Dependencies are arguments.** Domain and model functions take the database `session` first, then anything else they need, such as the acting credential.
 - **The entry point owns the transaction.** A route, gRPC handler, task or CLI command opens the session; code below it never opens a session or commits.
+- **No transaction stays open while an adapter runs,** since a call can take a minute. Publishing is the one exception (see above).
 - **Domain errors subclass `PublisherError`** (`publisher/errors.py`). Each interface maps them to its own responses: HTTP status codes, gRPC status codes, SMTP replies.
 - **Loggers are `logging.getLogger(__name__)`.** Each entry point calls `publisher.log.setup_logging()` once. Never log tokens, keys, passwords or decrypted content.
 - **Comments explain why, not what.** Docstrings are one line unless callers need a `Raises:` section. REST route docstrings become the API reference, so describe what a client needs there.
@@ -275,6 +276,8 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 | `USERNAME`, `create_credential`, `basic_auth`, `login`, `can_log_in` | `tests/helpers.py` | Credential and auth helpers |
 | `get_etag` | `tests/helpers.py` | GETs a URL and returns its `ETag`, for `If-Match` |
 | `add_adapter`, `link_account` | `tests/helpers.py` | An adapter row, and a token linked through it |
+| `adapter_calls` | `tests/fixtures.py` | Fakes adapter processes: set `results[method]` to a result or an error, read `calls` back |
+| `fake_adapter_build` | `tests/fixtures.py` | Installs adapters without running pip |
 
 Modules that touch the database opt in at the top:
 
@@ -334,7 +337,7 @@ Add it under `publisher/tasks/`. Keep the explicit `tasks.*` name so queued mess
 
 ### Platform adapters
 
-Adapters live in their own repositories. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [docs/platforms.md](docs/platforms.md).
+Adapters live in their own repositories and are built with the SDK in `sdk/` ([sdk/README.md](sdk/README.md)). Their CI runs `.github/workflows/adapter.yml` at the SDK tag they pin, so a change to it reaches an adapter only when it moves its pin. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [docs/platforms.md](docs/platforms.md).
 
 ## Documentation
 
@@ -344,7 +347,7 @@ Adapters live in their own repositories. Install one locally with `python -m pub
 
 ## When CI fails
 
-`.github/workflows/checks.yml` runs each check as its own job: **Hooks**, **Tests** on Python 3.12 and 3.13, and **Coverage** on 3.14. The staging deploy waits only for these. **Database dialects** and **E2E** have their own workflows, which run on PRs that touch their files, or from the Actions tab with **Run workflow**. Every pytest job adds a results table to the run's summary page, through `tests/summary.py`, with the failing tests listed under it. A test module can set `SUMMARY_BY` to group its rows by test or by a parametrized fixture instead of by directory.
+`.github/workflows/checks.yml` runs each check as its own job: **Hooks**, **Tests** on Python 3.12 and 3.13, **Coverage** on 3.14, **SDK** on 3.12 to 3.14, and **SDK version**, which fails when `sdk/src` changed without a new `version` in `sdk/pyproject.toml`. The staging deploy waits only for these. **Database dialects** and **E2E** have their own workflows, which run on PRs that touch their files, or from the Actions tab with **Run workflow**. Every pytest job adds a results table to the run's summary page, through `tests/summary.py`, with the failing tests listed under it. A test module can set `SUMMARY_BY` to group its rows by test or by a parametrized fixture instead of by directory.
 
 - **Hook failures:** run `make check` locally. Ruff and the whitespace hooks fix files in place, so re-add and commit the changes.
 - **Pyright:** fix the type, or narrow it with an `assert`. Use `# pyright: ignore[rule]` only with a reason.

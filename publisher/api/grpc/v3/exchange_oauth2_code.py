@@ -12,6 +12,7 @@ from publisher.api.grpc.utils import (
 from publisher.db import get_session
 from publisher.models.platform_adapter import OAUTH2
 from publisher.models.token import create as create_token
+from relaysms_adapter_sdk import CodeExchangeRequest
 
 
 def exchange_oauth2_code_and_store(
@@ -23,18 +24,17 @@ def exchange_oauth2_code_and_store(
     validate_client_ephemeral_public_keys(request.client_ephemeral_public_keys)
 
     adapter = find_adapter(request.platform, OAUTH2)
-    result = call_adapter(
+    account = call_adapter(
         adapter,
-        "exchange_code_and_fetch_user_info",
-        {
-            "code": request.authorization_code,
-            "code_verifier": request.code_verifier or None,
-            "redirect_url": request.redirect_url or None,
-            "request_identifier": request.request_identifier or None,
-            "base_path": adapter.state_path,
-        },
+        "exchange_code",
+        CodeExchangeRequest(
+            code=request.authorization_code,
+            code_verifier=request.code_verifier or None,
+            redirect_url=request.redirect_url or None,
+            request_identifier=request.request_identifier or None,
+        ),
     )
-    account_identifier = result["userinfo"]["account_identifier"]
+    account_identifier = account["identifier"]
 
     with get_session() as s:
         token = create_token(
@@ -42,7 +42,7 @@ def exchange_oauth2_code_and_store(
             platform=request.platform.lower(),
             cat_id=adapter.cat_id,
             proto_id=adapter.proto_id,
-            token_data={"account_id": account_identifier, "token": result["token"]},
+            token_data={"account_id": account_identifier, "token": account["token"]},
         )
         token_ciphertext, kid_index, server_public_keys = (
             keys.create_token_pools_and_encrypt(

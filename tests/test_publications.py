@@ -16,7 +16,6 @@ from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.server_identity_key import get_private_key
 from publisher.models.token import Token
 from publisher.models.token import create as create_token
-from publisher.platforms import ipc
 from publisher.publications import (
     AdapterIntegrationError,
     OfflineTagInvalidError,
@@ -24,6 +23,7 @@ from publisher.publications import (
     PayloadMalformedError,
     ProtocolNotAllowedError,
 )
+from relaysms_adapter_sdk import Account, Message, UpstreamError
 from tests.helpers import add_adapter
 
 SENDER_HASH = "5447c1f50558292bd9df723f9fdc0b06b892199c7dcfaad5164f2d94dfd3470a"
@@ -162,18 +162,10 @@ PNG = base64.b64decode(
 
 
 @pytest.fixture
-def adapter(monkeypatch, test_db):
-    """Records adapter calls and answers each with `response`."""
+def adapter(adapter_calls, test_db):
     add_adapter("gmail", proto_id=0)
     add_adapter("rmail", proto_id=1)
-    fake = SimpleNamespace(calls=[], response={"result": {"success": True}})
-
-    def invoke(adapter_path, venv_path, method, params=None):
-        fake.calls.append((adapter_path, method, params))
-        return fake.response
-
-    monkeypatch.setattr(ipc, "invoke", invoke)
-    return fake
+    return adapter_calls
 
 
 @pytest.fixture
@@ -244,10 +236,10 @@ def _sms(contents, *, slot, token_id=None, attachment=None, sess_id=None):
     return [base64.b64encode(payload.serialize_without_attachment()).decode()]
 
 
-def _publish(text, protocol="sms"):
+def _prepare(text, protocol="sms"):
     payload_raw, raw_segment, payload_type = publications.validate(text)
     with get_session() as s:
-        return publications.publish(
+        return publications.prepare(
             s,
             payload_raw=payload_raw,
             sender_id=SENDER,
@@ -257,7 +249,25 @@ def _publish(text, protocol="sms"):
         )
 
 
-def _slot_is_unused(account, slot):
+def _publish(text, protocol="sms"):
+    """Publish in one transaction, as the task does; return the platform."""
+    payload_raw, raw_segment, payload_type = publications.validate(text)
+    with get_session() as s:
+        delivery = publications.prepare(
+            s,
+            payload_raw=payload_raw,
+            sender_id=SENDER,
+            raw_segment=raw_segment,
+            payload_type=payload_type,
+            protocol=protocol,
+        )
+        if delivery is None:
+            return None
+        publications.finish(s, delivery, publications.send(delivery))
+        return delivery.platform
+
+
+def _slot_has_keys(account, slot):
     with get_session() as s:
         token = s.scalar(select(Token).where(Token.token_id == account.token_id))
         return (
@@ -289,14 +299,15 @@ def test_publish_sends_the_decrypted_email_to_the_adapter(account, adapter):
 
     assert _publish(text) == "gmail"
 
-    path, method, params = adapter.calls[-1]
-    assert (path.split("/")[-1], method) == ("gmail-0", "send_message")
-    assert params["to_email"] == "friend@example.org"
-    assert params["subject"] == "Hi"
-    assert params["message"] == "Hello"
-    assert params["from_email"] == "user@example.org"
-    assert params["token"] == {"access_token": "a1", "refresh_token": "r1"}
-    assert not _slot_is_unused(account, account.slot)
+    adapter_id, method, request = adapter.calls[-1]
+    assert (adapter_id, method) == ("gmail-0", "send_message")
+    assert request.message == Message(
+        body="Hello", recipient="friend@example.org", subject="Hi"
+    )
+    assert request.account == Account(
+        "user@example.org", token={"access_token": "a1", "refresh_token": "r1"}
+    )
+    assert not _slot_has_keys(account, account.slot)
     assert _stored_token(account)[1] is not None
 
 
@@ -310,9 +321,9 @@ def test_publish_rejects_a_tampered_payload(account, adapter):
     assert adapter.calls == []
 
 
-def test_publish_saves_a_refreshed_oauth_token(account, adapter):
-    refreshed = {"access_token": "a2", "refresh_token": "r2"}
-    adapter.response = {"result": {"success": True, "refreshed_token": refreshed}}
+def test_publish_saves_a_refreshed_token(account, adapter):
+    refreshed = {"access_token": "a2", "refresh_token": "r1"}
+    adapter.results["send_message"] = {"token": refreshed}
     contents = _encrypt(account, account.slot, _email())
     [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
 
@@ -321,8 +332,38 @@ def test_publish_saves_a_refreshed_oauth_token(account, adapter):
     assert _stored_token(account)[0]["token"] == refreshed
 
 
+def test_a_failed_send_keeps_the_keys_for_a_retry(account, adapter):
+    adapter.results["send_message"] = UpstreamError("platform down")
+    contents = _encrypt(account, account.slot, _email())
+    [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
+
+    with pytest.raises(AdapterIntegrationError):
+        _publish(text)
+    assert _slot_has_keys(account, account.slot)
+
+    adapter.results["send_message"] = {}
+    assert _publish(text) == "gmail"
+    assert not _slot_has_keys(account, account.slot)
+
+
+def test_a_failed_send_still_saves_the_refreshed_token(account, adapter):
+    refreshed = {"access_token": "a2", "refresh_token": "r2"}
+    adapter.results["send_message"] = UpstreamError("post failed", token=refreshed)
+    contents = _encrypt(account, account.slot, _email())
+    [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
+    delivery = _prepare(text)
+    assert delivery
+
+    with pytest.raises(AdapterIntegrationError) as error:
+        publications.send(delivery)
+    with get_session() as s:
+        publications.store_token(s, delivery, error.value.token)
+
+    assert _stored_token(account)[0]["token"] == refreshed
+
+
 def test_adapter_failure_names_the_platform(account, adapter):
-    adapter.response = {"result": {"success": False, "message": "quota exceeded"}}
+    adapter.results["send_message"] = UpstreamError("quota exceeded")
     contents = _encrypt(account, account.slot, _email())
     [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
 
@@ -340,10 +381,10 @@ def test_attachment_is_published_once_all_segments_arrive(account, adapter):
     results = [_publish(text) for text in reversed(texts)]
 
     assert results == [None] * (len(texts) - 1) + ["gmail"]
-    [(_, _, params)] = adapter.calls
-    [attached] = params["attachments"]
-    assert attached["mimetype"] == "image/png"
-    assert base64.b64decode(attached["data"]) == PNG
+    [(_, _, request)] = adapter.calls
+    [attached] = request.message.attachments
+    assert attached.mimetype == "image/png"
+    assert attached.data == PNG
 
 
 def test_offline_payload_goes_to_the_offline_adapter(test_db, adapter):
@@ -360,7 +401,8 @@ def test_offline_payload_goes_to_the_offline_adapter(test_db, adapter):
 
     assert _publish(text, protocol="smtp") == "rmail"
 
-    path, method, params = adapter.calls[-1]
-    assert (path.split("/")[-1], method) == ("rmail-1", "send_message")
-    assert params["to_email"] == "friend@example.org"
-    assert params["message"] == "Hello"
+    adapter_id, method, request = adapter.calls[-1]
+    assert (adapter_id, method) == ("rmail-1", "send_message")
+    assert request.account is None
+    assert request.message.recipient == "friend@example.org"
+    assert request.message.body == "Hello"

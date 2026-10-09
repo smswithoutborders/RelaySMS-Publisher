@@ -9,6 +9,7 @@ Build platform adapters for the [RelaySMS Publisher](https://github.com/smswitho
 Name the repository, the distribution and the package after the platform and protocol, such as `gmail-oauth2-adapter` and `gmail_oauth2_adapter`.
 
 ```
+.github/workflows/ci.yml        tests and releases, see below
 adapter.toml                    describes the adapter to the Publisher
 pyproject.toml
 README.md
@@ -51,7 +52,7 @@ Subclass `OAuth2Adapter` or `PNBAAdapter` and implement its methods. Any of them
 
 `Account.token` is stored by the Publisher and passed back on every `send_message` and `revoke`, so keep its shape stable across releases.
 
-If `send_message` refreshed the token and then fails, put the new token in the error's `data["token"]` so the Publisher still stores it. This matters for platforms whose refresh tokens are single use.
+If `send_message` refreshed the token before failing, pass it on the error, as in `UpstreamError("…", token=new_token)`, or a single-use refresh token is lost.
 
 ### Errors
 
@@ -114,13 +115,35 @@ venv/bin/relaysms-adapter revoke
 | `revoke` | Unlinks the account. |
 | `call <method> [json]` | Calls any method with raw params. |
 
-## Compatibility
+## Change the SDK
 
-The Publisher runs this SDK from its repository while each adapter pins a release, so the Publisher talks to adapters on older releases.
+Adapters pin SDK releases, so the Publisher talks to older ones.
 
-- Changes to requests, results, errors and `adapter.toml` must be backward compatible: add optional fields, never rename or remove them.
-- Bump `version` in `pyproject.toml` with every change to `src/` (CI checks), and tag the release `sdk-vX.Y.Z`.
+- Keep requests, results, errors and `adapter.toml` backward compatible: add optional fields, never rename or remove them.
+- Bump `version` in `pyproject.toml` with every change to `src/`; CI checks.
+- Release by pushing `sdk-v` plus the version, such as `sdk-v1.1.0`.
 
 ## Release an adapter
 
-Push a version tag such as `v1.2.0`. The Publisher installs and updates adapters by tag.
+`.github/workflows/ci.yml` runs the shared workflow, pinned to the SDK tag the adapter depends on. It tests every push and releases version tags:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  adapter:
+    uses: smswithoutborders/RelaySMS-Publisher/.github/workflows/adapter.yml@sdk-v1.0.0
+```
+
+Set `version` in `pyproject.toml` and push the matching tag, such as `v1.2.0`; the release fails if they differ. The Publisher installs and updates adapters by tag.

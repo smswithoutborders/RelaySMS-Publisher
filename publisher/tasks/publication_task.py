@@ -40,10 +40,13 @@ def publish_message(
     country_code: str | None = None,
 ) -> None:
     """Validate and publish a payload, then record the outcome."""
-    with get_session() as db:
-        try:
+    delivery = refreshed_token = None
+    try:
+        # Commits only after a successful send, so a failure leaves the payload's
+        # keys usable, and a copy of it arriving meanwhile waits on their row lock.
+        with get_session() as db:
             payload_raw, raw_segment, payload_type = publications.validate(text_payload)
-            platform_name = publications.publish(
+            delivery = publications.prepare(
                 db,
                 payload_raw=payload_raw,
                 sender_id=sender_id,
@@ -52,56 +55,48 @@ def publish_message(
                 protocol=protocol,
                 tag=tag,
             )
-
-            if platform_name is None:
+            if delivery is None:
                 # Incomplete multi-segment session, awaiting more parts.
                 return
-
+            new_token = publications.send(delivery)
+            publications.finish(db, delivery, new_token)
             record_publication(
                 db,
                 protocol=protocol,
                 status="published",
-                platform_name=platform_name,
+                platform_name=delivery.platform,
                 country_code=country_code,
             )
+            return
+    except (
+        PayloadMalformedError,
+        PayloadNotSupportedError,
+        ProtocolNotAllowedError,
+        OfflineTagError,
+        KeyManagementError,
+    ) as exc:
+        logger.error("Failed to process payload: %s", exc)
+        platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
+    except AdapterIntegrationError as exc:
+        logger.error("Failed to publish message: %s", exc)
+        platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
+        refreshed_token = exc.token
+    except Exception:
+        logger.exception("An unexpected error occurred during task processing.")
+        platform_name = delivery.platform if delivery else None
+        failure_reason = "unexpected_error"
 
-        except (
-            PayloadMalformedError,
-            PayloadNotSupportedError,
-            ProtocolNotAllowedError,
-            OfflineTagError,
-            KeyManagementError,
-        ) as exc:
-            record_publication(
-                db,
-                protocol=protocol,
-                status="failed",
-                platform_name=exc.platform_name,
-                country_code=country_code,
-                failure_reason=_failure_reason(exc),
-            )
-            logger.error("Failed to process payload: %s", exc)
-
-        except AdapterIntegrationError as exc:
-            record_publication(
-                db,
-                protocol=protocol,
-                status="failed",
-                platform_name=exc.platform_name,
-                country_code=country_code,
-                failure_reason=_failure_reason(exc),
-            )
-            logger.error("Failed to publish message: %s", exc)
-
-        except Exception:
-            record_publication(
-                db,
-                protocol=protocol,
-                status="failed",
-                country_code=country_code,
-                failure_reason="unexpected_error",
-            )
-            logger.exception("An unexpected error occurred during task processing.")
+    with get_session() as db:
+        if delivery and refreshed_token:
+            publications.store_token(db, delivery, refreshed_token)
+        record_publication(
+            db,
+            protocol=protocol,
+            status="failed",
+            platform_name=platform_name,
+            country_code=country_code,
+            failure_reason=failure_reason,
+        )
 
 
 def queue_publication(

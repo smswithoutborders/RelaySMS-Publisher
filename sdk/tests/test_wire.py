@@ -65,6 +65,14 @@ class TestResponses:
         with pytest.raises(TokenInvalidError, match="expired"):
             wire.parse_response(line)
 
+    def test_errors_carry_a_refreshed_token(self):
+        line = wire.encode_error(
+            1, RateLimitedError("slow down", retry_after=30, token={"t": 2})
+        )
+        with pytest.raises(RateLimitedError) as e:
+            wire.parse_response(line)
+        assert (e.value.token, e.value.retry_after) == ({"t": 2}, 30)
+
     def test_rate_limit_keeps_retry_after(self):
         line = wire.encode_error(1, RateLimitedError("slow down", retry_after=30))
         with pytest.raises(RateLimitedError) as e:

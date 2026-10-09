@@ -6,10 +6,9 @@ import logging
 from grpc_interceptor.exceptions import InvalidArgument, Unauthenticated
 
 from protos.v3 import publisher_pb2
-from publisher import keys
+from publisher import keys, tokens
 from publisher.db import get_session
 from publisher.models.server_identity_key import mark_key_used
-from publisher.tokens import revoke_oauth2_token_upstream
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +25,11 @@ def revoke_oauth2_token(
         except keys.KeyManagementError:
             raise Unauthenticated("revocation failed") from None
 
-        error = revoke_oauth2_token_upstream(s, token)
-        if error:
-            logger.error(
-                "Adapter revocation failed for platform %r: %s", token.platform, error
-            )
-
+        revocation = tokens.revocation(s, token)
         s.delete(token)
         mark_key_used(s, request.key_id)
         logger.info("Token revoked: platform=%r", token.platform)
+    tokens.revoke_upstream(revocation)
 
     return publisher_pb2.RevokeOAuth2TokenResponse(
         success=True, message="Successfully revoked and deleted token"

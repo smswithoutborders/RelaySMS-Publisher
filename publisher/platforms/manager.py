@@ -24,22 +24,15 @@ from publisher.models import platform_adapter as platform_adapters
 from publisher.models import token as tokens
 from publisher.models.audit_event import AuditAction
 from publisher.models.credential import Credential
-from publisher.models.platform_adapter import OAUTH2, PNBA, PlatformAdapter
-from relaysms_adapter_sdk.manifest import (
-    Category,
-    Manifest,
-    ManifestError,
-    Protocol,
-)
-from relaysms_adapter_sdk.manifest import (
-    load as load_manifest,
-)
+from publisher.models.platform_adapter import PROTOCOL_NAMES, PlatformAdapter
+from relaysms_adapter_sdk.manifest import Category, Manifest, ManifestError, Protocol
+from relaysms_adapter_sdk.manifest import load as load_manifest
 
 logger = logging.getLogger(__name__)
 
 _GITHUB_REPO_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 _VERSION_TAG = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
-_PROTOCOL_IDS = {Protocol.OAUTH2: OAUTH2, Protocol.PNBA: PNBA}
+_PROTOCOL_IDS = {Protocol(name): proto_id for proto_id, name in PROTOCOL_NAMES.items()}
 _CATEGORY_IDS = {
     Category.EMAIL: 0,
     Category.MESSAGE: 1,

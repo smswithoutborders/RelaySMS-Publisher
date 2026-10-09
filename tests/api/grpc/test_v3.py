@@ -25,20 +25,24 @@ from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.server_identity_key import get_public_key
 from publisher.models.token import Token
 from publisher.platforms import ipc
+from relaysms_adapter_sdk import (
+    AuthenticationError,
+    InvalidParamsError,
+    RateLimitedError,
+    UpstreamError,
+)
 from tests.helpers import add_adapter
 from tools import client_helpers
 
 OAUTH2_EXCHANGE = {
-    "result": {
-        "userinfo": {"account_identifier": "user@example.org"},
-        "token": {"access_token": "access-token"},
-    }
+    "identifier": "user@example.org",
+    "token": {"access_token": "access-token"},
+    "name": None,
 }
 PNBA_EXCHANGE = {
-    "result": {
-        "userinfo": {"account_identifier": "+237600000000"},
-        "session": "session-data",
-    }
+    "identifier": "+237600000000",
+    "token": {"session_string": "session-data"},
+    "name": None,
 }
 
 
@@ -66,16 +70,8 @@ def server_keys(monkeypatch):
 
 
 @pytest.fixture
-def adapter(monkeypatch):
-    """Stands in for adapter processes. Set results per method, read calls back."""
-    fake = SimpleNamespace(results={}, calls=[])
-
-    def invoke(adapter_path, venv_path, method, params=None):
-        fake.calls.append((method, params))
-        return fake.results[method]
-
-    monkeypatch.setattr(ipc, "invoke", invoke)
-    return fake
+def adapter(adapter_calls):
+    return adapter_calls
 
 
 @pytest.fixture
@@ -187,7 +183,7 @@ def server_key_exists(token_id, key_id):
 
 
 def exchange_oauth2(stub, adapter):
-    adapter.results["exchange_code_and_fetch_user_info"] = OAUTH2_EXCHANGE
+    adapter.results["exchange_code"] = OAUTH2_EXCHANGE
     keypairs, public_keys = client_keys()
     response = call(
         stub,
@@ -202,7 +198,7 @@ def exchange_oauth2(stub, adapter):
 
 
 def exchange_pnba(stub, adapter):
-    adapter.results["validate_code_and_fetch_user_info"] = PNBA_EXCHANGE
+    adapter.results["verify_code"] = PNBA_EXCHANGE
     keypairs, public_keys = client_keys()
     response = call(
         stub,
@@ -228,9 +224,7 @@ def test_missing_auth_headers_are_rejected(stub):
 
 
 def test_replayed_request_is_rejected(stub, adapter):
-    adapter.results["get_authorization_url"] = {
-        "result": {"authorization_url": "https://auth.example.org"}
-    }
+    adapter.results["create_authorization_url"] = {"url": "https://auth.example.org"}
     metadata = signed_metadata("GetOAuth2AuthorizationUrl")
     stub.GetOAuth2AuthorizationUrl(AUTH_URL_REQUEST, metadata=metadata)
 
@@ -271,7 +265,7 @@ def test_unsupported_platform_is_unimplemented(stub):
 
 
 def test_adapter_error_is_reported_as_internal(stub, adapter):
-    adapter.results["get_authorization_url"] = {"error": "adapter crashed"}
+    adapter.results["create_authorization_url"] = UpstreamError("adapter crashed")
 
     error = rpc_error(stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST)
 
@@ -280,10 +274,10 @@ def test_adapter_error_is_reported_as_internal(stub, adapter):
 
 
 def test_unexpected_error_hides_details(stub, monkeypatch):
-    def invoke(**_kwargs):
+    def call(*_args):
         raise RuntimeError("internal detail")
 
-    monkeypatch.setattr(ipc, "invoke", invoke)
+    monkeypatch.setattr(ipc, "call", call)
 
     error = rpc_error(stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST)
 
@@ -305,15 +299,13 @@ def test_other_services_skip_request_auth():
 
 
 def test_get_oauth2_authorization_url(stub, adapter):
-    adapter.results["get_authorization_url"] = {
-        "result": {
-            "authorization_url": "https://auth.example.org/authorize",
-            "state": "state-1",
-            "code_verifier": "verifier-1",
-            "client_id": "client-1",
-            "scope": "email",
-            "redirect_url": "https://app.example.org/callback",
-        }
+    adapter.results["create_authorization_url"] = {
+        "url": "https://auth.example.org/authorize",
+        "state": "state-1",
+        "code_verifier": "verifier-1",
+        "client_id": "client-1",
+        "scope": "email",
+        "redirect_url": "https://app.example.org/callback",
     }
     request = publisher_pb2.GetOAuth2AuthorizationUrlRequest(
         platform="gmail",
@@ -327,12 +319,12 @@ def test_get_oauth2_authorization_url(stub, adapter):
     assert response.authorization_url == "https://auth.example.org/authorize"
     assert response.state == "state-1"
     assert response.code_verifier == "verifier-1"
-    method, params = adapter.calls[-1]
-    assert method == "get_authorization_url"
-    assert params["state"] == "state-1"
-    assert params["redirect_url"] == "https://app.example.org/callback"
-    assert params["autogenerate_code_verifier"] is True
-    assert params["base_path"].endswith("/gmail-0")
+    _, method, sent = adapter.calls[-1]
+    assert method == "create_authorization_url"
+    assert sent.state == "state-1"
+    assert sent.redirect_url == "https://app.example.org/callback"
+    # Asked to generate one, the Publisher makes the PKCE verifier itself.
+    assert len(sent.code_verifier) >= 43
 
 
 def test_exchange_oauth2_code_stores_token(stub, adapter):
@@ -363,7 +355,7 @@ def test_exchange_oauth2_code_needs_256_client_keys(stub, adapter):
 
 
 def test_exchange_oauth2_code_accepts_client_keys_in_any_order(stub, adapter):
-    adapter.results["exchange_code_and_fetch_user_info"] = OAUTH2_EXCHANGE
+    adapter.results["exchange_code"] = OAUTH2_EXCHANGE
     keypairs, public_keys = client_keys()
     request = publisher_pb2.ExchangeOAuth2CodeAndStoreRequest(
         platform="gmail",
@@ -400,7 +392,6 @@ def test_exchange_oauth2_code_needs_client_key_ids_0_to_255(stub, adapter, key_i
 
 def test_revoke_oauth2_token(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
-    adapter.results["revoke_token"] = {"result": {}}
     payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
     request = publisher_pb2.RevokeOAuth2TokenRequest(
         token_id=exchanged.token_id, key_id=1
@@ -410,12 +401,13 @@ def test_revoke_oauth2_token(stub, adapter):
 
     assert response.success
     assert stored_token(exchanged.token_id) is None
-    assert adapter.calls[-1][0] == "revoke_token"
+    _, method, sent = adapter.calls[-1]
+    assert method == "revoke"
+    assert sent.account.identifier == "user@example.org"
 
 
 def test_revoke_oauth2_token_accepts_zero_ids(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
-    adapter.results["revoke_token"] = {"result": {}}
     set_token_id(exchanged.token_id, 0)
     payload = encrypt_token(
         exchanged, keypairs, decrypt_token(exchanged, keypairs), key_id=0
@@ -451,24 +443,36 @@ def test_revoke_keeps_slot_when_a_later_step_fails(stub, adapter, monkeypatch):
     )
 
     def crash(*_args):
-        raise RuntimeError("upstream down")
+        raise RuntimeError("database down")
 
-    monkeypatch.setattr(revoke_oauth2_token, "revoke_oauth2_token_upstream", crash)
+    monkeypatch.setattr(revoke_oauth2_token, "mark_key_used", crash)
 
     error = rpc_error(stub, "RevokeOAuth2Token", request, payload=payload)
 
     assert error.code() == grpc.StatusCode.INTERNAL
     assert stored_token(exchanged.token_id) is not None
     assert server_key_exists(exchanged.token_id, 1)
+    assert all(method != "revoke" for _, method, _ in adapter.calls)
+
+
+def test_revoke_deletes_the_token_even_if_the_platform_fails(stub, adapter):
+    exchanged, keypairs = exchange_oauth2(stub, adapter)
+    adapter.results["revoke"] = UpstreamError("platform down")
+    payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
+    request = publisher_pb2.RevokeOAuth2TokenRequest(
+        token_id=exchanged.token_id, key_id=1
+    )
+
+    response = call(stub, "RevokeOAuth2Token", request, payload=payload)
+
+    assert response.success
+    assert stored_token(exchanged.token_id) is None
 
 
 def test_get_pnba_code(stub, adapter):
-    adapter.results["send_authorization_code"] = {
-        "result": {
-            "success": True,
-            "message": "Code sent",
-            "expires_at": "2026-10-01T12:00:00Z",
-        }
+    adapter.results["send_code"] = {
+        "message": "Code sent",
+        "expires_at": "2026-10-01T12:00:00+00:00",
     }
     request = publisher_pb2.GetPNBACodeRequest(
         platform="telegram", phone_number="+237600000000"
@@ -483,9 +487,7 @@ def test_get_pnba_code(stub, adapter):
 
 
 def test_get_pnba_code_reports_adapter_rejection(stub, adapter):
-    adapter.results["send_authorization_code"] = {
-        "result": {"success": False, "message": "Invalid phone number"}
-    }
+    adapter.results["send_code"] = InvalidParamsError("Invalid phone number")
     request = publisher_pb2.GetPNBACodeRequest(
         platform="telegram", phone_number="+237600000000"
     )
@@ -497,9 +499,7 @@ def test_get_pnba_code_reports_adapter_rejection(stub, adapter):
 
 
 def test_exchange_pnba_code_asks_for_password_with_two_step_verification(stub, adapter):
-    adapter.results["validate_code_and_fetch_user_info"] = {
-        "result": {"two_step_verification_enabled": True}
-    }
+    adapter.results["verify_code"] = {"password_required": True}
     _, public_keys = client_keys()
     request = publisher_pb2.ExchangePNBACodeAndStoreRequest(
         platform="telegram",
@@ -517,20 +517,64 @@ def test_exchange_pnba_code_asks_for_password_with_two_step_verification(stub, a
         assert s.scalar(select(func.count(Token.id))) == 0
 
 
+def test_a_rejected_code_reaches_the_client(stub, adapter):
+    adapter.results["verify_code"] = AuthenticationError("Wrong code.")
+    _, public_keys = client_keys()
+    request = publisher_pb2.ExchangePNBACodeAndStoreRequest(
+        platform="telegram",
+        phone_number="+237600000000",
+        authorization_code="0",
+        client_ephemeral_public_keys=public_keys,
+    )
+
+    error = rpc_error(stub, "ExchangePNBACodeAndStore", request)
+
+    assert error.code() == grpc.StatusCode.INVALID_ARGUMENT
+    assert error.details() == "Wrong code."
+
+
+def test_a_rate_limited_adapter_is_resource_exhausted(stub, adapter):
+    adapter.results["send_code"] = RateLimitedError("Slow down.", retry_after=30)
+    request = publisher_pb2.GetPNBACodeRequest(
+        platform="telegram", phone_number="+237600000000"
+    )
+
+    error = rpc_error(stub, "GetPNBACode", request)
+
+    assert error.code() == grpc.StatusCode.RESOURCE_EXHAUSTED
+
+
+def test_exchange_pnba_code_checks_the_password(stub, adapter):
+    adapter.results["verify_password"] = PNBA_EXCHANGE
+    _, public_keys = client_keys()
+    request = publisher_pb2.ExchangePNBACodeAndStoreRequest(
+        platform="telegram",
+        phone_number="+237600000000",
+        authorization_code="12345",
+        password="pw",
+        client_ephemeral_public_keys=public_keys,
+    )
+
+    response = call(stub, "ExchangePNBACodeAndStore", request)
+
+    assert response.token_ciphertext
+    _, method, sent = adapter.calls[-1]
+    assert (method, sent.password) == ("verify_password", "pw")
+
+
 def test_exchange_pnba_code_stores_session(stub, adapter):
     response, keypairs = exchange_pnba(stub, adapter)
 
     assert response.success
     assert response.account_identifier == "+237600000000"
     token = stored_token(response.token_id)
-    assert token.data["token"] == "session-data"
+    assert token.data["token"] == {"session_string": "session-data"}
     raw_token = decrypt_token(response, keypairs)
     assert hashlib.sha256(raw_token).digest() == token.hash
 
 
 def test_revoke_pnba_token(stub, adapter):
     exchanged, keypairs = exchange_pnba(stub, adapter)
-    adapter.results["invalidate_session"] = {"result": {}}
     payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
     request = publisher_pb2.RevokePNBATokenRequest(
         token_id=exchanged.token_id, key_id=1
@@ -540,9 +584,9 @@ def test_revoke_pnba_token(stub, adapter):
 
     assert response.success
     assert stored_token(exchanged.token_id) is None
-    method, params = adapter.calls[-1]
-    assert method == "invalidate_session"
-    assert params["session"] == "session-data"
+    _, method, sent = adapter.calls[-1]
+    assert method == "revoke"
+    assert sent.account.token == {"session_string": "session-data"}
 
 
 def test_sync_keys_replaces_the_key_pool(stub, adapter):
