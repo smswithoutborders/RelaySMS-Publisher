@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "relaysms-adapter-sdk"
+version = "1.0.0"
+description = "Build RelaySMS Publisher platform adapters"
+readme = "README.md"
+license = "GPL-3.0-only"
+requires-python = ">=3.12"
+authors = [{ name = "Afkanerd Developers", email = "developers@smswithoutborders.com" }]
+
+[project.optional-dependencies]
+console = ["rich>=13"]
+
+[project.scripts]
+relaysms-adapter = "relaysms_adapter_sdk.console:main"
+
+[project.urls]
+Source = "https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "examples/echo-adapter/tests"]
+pythonpath = ["src", "examples/echo-adapter/src"]

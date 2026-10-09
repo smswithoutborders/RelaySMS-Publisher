@@ -75,8 +75,30 @@ jobs:
           make coverage PYTHON=venv/bin/python
           PYTEST_ARGS="--cov-report=term --cov-report=markdown-append:$GITHUB_STEP_SUMMARY"
 
+  sdk:
+    name: SDK (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the SDK
+        run: |
+          python -m venv venv
+          venv/bin/pip install --disable-pip-version-check "./sdk[console]" "$(grep '^pytest==' requirements-dev.txt)"
+
+      - name: Run tests
+        run: make test-sdk PYTHON=venv/bin/python
+
   deploy-staging:
-    needs: [hooks, tests, coverage]
+    needs: [hooks, tests, coverage, sdk]
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     uses: ./.github/workflows/deploy.staging.yml
     secrets: inherit
