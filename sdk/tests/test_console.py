@@ -51,7 +51,7 @@ def run(repo, *args):
 
 def answer(monkeypatch, *answers):
     replies = iter(answers)
-    monkeypatch.setattr(console.Prompt, "ask", lambda *a, **k: next(replies))
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: next(replies))
 
 
 def account(repo):
@@ -104,7 +104,7 @@ class TestOAuth2:
 
             threading.Thread(target=visit, daemon=True).start()
 
-        monkeypatch.setattr(console.webbrowser, "open", browser)
+        monkeypatch.setattr("webbrowser.open", browser)
         redirect = f"http://127.0.0.1:{port}/cb"
         assert run(repo, "link", "--redirect-url", redirect) == 0
         assert account(repo) == {

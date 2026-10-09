@@ -77,37 +77,40 @@ def can_log_in(username: str, password: str) -> bool:
         return credentials.authenticate(session, username, password) is not None
 
 
-MANIFEST = """[platform]
-name = {name}
-display_name = {name}
-proto_id = {proto_id}
-cat_id = 0
+MANIFEST = """entry = "adapter:Adapter"
+name = "{name}"
+display_name = "{name}"
+protocol = "{protocol}"
+category = "email"
 """
 
 
 def adapter_repo(
     path: Path,
     name: str = "gmail",
-    proto_id: object = 0,
+    proto_id: int | str = 0,
     tag: str | None = "v1.0.0",
 ) -> Repo:
-    """A local git repo laid out like an adapter, with no requirements.txt."""
+    """A local git repo laid out like an adapter."""
     path.mkdir(parents=True)
     repo = Repo.init(path)
-    for file in ("main.py", "config.ini"):
-        (path / file).write_text("")
+    (path / "pyproject.toml").write_text(f'[project]\nname = "{name}-adapter"\n')
     commit_manifest(repo, name, proto_id, tag)
     return repo
 
 
 def commit_manifest(
-    repo: Repo, name: str, proto_id: object, tag: str | None = None
+    repo: Repo, name: str, proto_id: int | str, tag: str | None = None
 ) -> str:
-    """Write and commit manifest.ini, tagged if tag; return the commit's sha."""
+    """Write and commit adapter.toml, tagged if tag; return the commit's sha.
+
+    proto_id is OAUTH2 or PNBA, or a string to write as the protocol.
+    """
     path = repo.working_tree_dir
-    with open(f"{path}/manifest.ini", "w") as f:
-        f.write(MANIFEST.format(name=name, proto_id=proto_id))
-    repo.index.add(["main.py", "config.ini", "manifest.ini"])
+    protocol = proto_id if isinstance(proto_id, str) else ("oauth2", "pnba")[proto_id]
+    with open(f"{path}/adapter.toml", "w") as f:
+        f.write(MANIFEST.format(name=name, protocol=protocol))
+    repo.index.add(["pyproject.toml", "adapter.toml"])
     commit = repo.index.commit(f"{name} {proto_id}")
     if tag:
         repo.create_tag(tag, ref=commit.hexsha, force=True)

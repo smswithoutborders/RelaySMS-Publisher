@@ -14,6 +14,7 @@ from publisher.api.rest import app as app_module
 from publisher.api.rest.v1 import routes
 from publisher.config import PlatformsConfig
 from publisher.db import Base
+from publisher.platforms import manager
 from tests.helpers import USERNAME, basic_auth, create_credential
 
 
@@ -83,3 +84,13 @@ def platforms_config(tmp_path, monkeypatch):
 
     change()
     return change
+
+
+@pytest.fixture
+def fake_adapter_build(monkeypatch):
+    """Builds adapter venvs as empty directories instead of running pip."""
+    monkeypatch.setattr(
+        manager,
+        "_install_dependencies",
+        lambda path, venv, log: venv.mkdir(parents=True),
+    )

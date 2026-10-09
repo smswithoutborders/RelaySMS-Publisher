@@ -1,3 +1,4 @@
+-e ./sdk
 alembic==1.20.0
 argon2-cffi==25.1.0
 authres==1.2.0

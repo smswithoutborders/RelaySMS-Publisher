@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import subprocess
-from pathlib import Path
 
 import pytest
 from git import Repo
@@ -13,6 +12,10 @@ from publisher.models.audit_event import AuditEvent
 from publisher.models.platform_adapter import OAUTH2, PNBA, PlatformAdapter
 from publisher.platforms import manager
 from tests.helpers import MANIFEST, adapter_repo, add_adapter, commit_manifest
+
+install_dependencies = manager._install_dependencies
+
+pytestmark = pytest.mark.usefixtures("fake_adapter_build")
 
 
 @pytest.fixture(autouse=True)
@@ -119,7 +122,7 @@ def test_install_takes_the_newest_version_tag(tmp_path):
 
     assert tag == "v1.10.0"
     assert _adapter(adapter_id).commit == newest
-    assert (tmp_path / "adapters" / adapter_id / "manifest.ini").is_file()
+    assert (tmp_path / "adapters" / adapter_id / "adapter.toml").is_file()
     assert _siblings(tmp_path) == []
 
 
@@ -153,8 +156,8 @@ def test_update_swaps_in_the_new_version(tmp_path):
 
     adapter = _adapter(adapter_id)
     assert (adapter.tag, adapter.proto_id) == ("v2.0.0", PNBA)
-    manifest = (tmp_path / "adapters" / adapter_id / "manifest.ini").read_text()
-    assert "proto_id = 1" in manifest
+    manifest = (tmp_path / "adapters" / adapter_id / "adapter.toml").read_text()
+    assert 'protocol = "pnba"' in manifest
     assert _siblings(tmp_path) == []
     assert _actions() == ["platforms.add", "platforms.update"]
 
@@ -177,16 +180,16 @@ def test_a_moved_tag_is_refused(tmp_path):
 def test_a_failed_build_keeps_the_running_version(tmp_path):
     repo = adapter_repo(tmp_path / "src")
     adapter_id, _ = _install(repo.working_tree_dir)
-    (tmp_path / "src" / "main.py").unlink()
-    repo.index.remove(["main.py"])
-    repo.index.commit("drop main.py")
+    (tmp_path / "src" / "pyproject.toml").unlink()
+    repo.index.remove(["pyproject.toml"])
+    repo.index.commit("drop pyproject.toml")
     repo.create_tag("v2.0.0")
 
-    with pytest.raises(manager.AdapterError, match="missing main"):
+    with pytest.raises(manager.AdapterError, match=r"no pyproject\.toml"):
         _update(adapter_id)
 
     assert _adapter(adapter_id).tag == "v1.0.0"
-    assert (tmp_path / "adapters" / adapter_id / "main.py").is_file()
+    assert (tmp_path / "adapters" / adapter_id / "pyproject.toml").is_file()
     assert _siblings(tmp_path) == []
 
 
@@ -235,16 +238,16 @@ def test_a_failed_clone_names_the_reason_and_leaves_nothing(tmp_path):
 @pytest.mark.parametrize(
     "manifest, error",
     [
-        ("[other]\nname = x\n", "Invalid manifest.ini"),
-        ("[platform]\nname = gmail\n", "needs name, display_name"),
-        (MANIFEST.format(name="gmail", proto_id="oauth2"), "Invalid manifest value"),
+        ("name = ", "Invalid TOML"),
+        ('name = "gmail"\n', "entry must be"),
+        (MANIFEST.format(name="gmail", protocol="smtp"), "protocol must be one of"),
     ],
 )
 @pytest.mark.usefixtures("test_db")
 def test_a_bad_manifest_is_rejected_and_rolled_back(tmp_path, manifest, error):
     repo = adapter_repo(tmp_path / "src", tag=None)
-    (tmp_path / "src" / "manifest.ini").write_text(manifest)
-    repo.index.add(["manifest.ini"])
+    (tmp_path / "src" / "adapter.toml").write_text(manifest)
+    repo.index.add(["adapter.toml"])
     repo.create_tag("v1.0.0", ref=repo.index.commit("break the manifest").hexsha)
 
     with pytest.raises(manager.AdapterError, match=error):
@@ -253,44 +256,33 @@ def test_a_bad_manifest_is_rejected_and_rolled_back(tmp_path, manifest, error):
     assert list((tmp_path / "adapters").iterdir()) == []
 
 
-def _repo_with_requirements(tmp_path):
-    repo = adapter_repo(tmp_path / "src", tag=None)
-    (tmp_path / "src" / "requirements.txt").write_text("requests\n")
-    repo.index.add(["requirements.txt"])
-    repo.create_tag("v1.0.0", ref=repo.index.commit("add requirements").hexsha)
-    return repo.working_tree_dir
-
-
-@pytest.mark.usefixtures("test_db")
-def test_dependencies_install_into_the_adapter_venv(tmp_path, monkeypatch):
+def test_dependencies_install_the_adapter_into_its_venv(tmp_path, monkeypatch):
     commands = []
 
     def run(command, **kwargs):
         commands.append(command)
-        if command[1:3] == ["-m", "venv"]:
-            Path(command[3]).mkdir(parents=True)
         return subprocess.CompletedProcess(command, 0, "installed", "")
 
     monkeypatch.setattr(manager.subprocess, "run", run)
+    log = []
 
-    adapter_id, _ = _install(_repo_with_requirements(tmp_path))
+    install_dependencies(tmp_path / "src", tmp_path / "venv", log)
 
-    # Built beside the running version, then renamed into place.
-    venv = tmp_path / "venvs" / f"{adapter_id}.new"
-    assert commands[0][1:] == ["-m", "venv", str(venv)]
-    assert commands[1][0] == str(venv / "bin/pip3")
-    assert (tmp_path / "venvs" / adapter_id).is_dir()
+    assert commands[0][1:] == ["-m", "venv", str(tmp_path / "venv")]
+    assert commands[1][0] == str(tmp_path / "venv/bin/pip")
+    assert commands[1][-1] == str(tmp_path / "src")
+    assert log == ["installed", "installed"]
 
 
 @pytest.mark.usefixtures("test_db")
 def test_a_failed_dependency_install_rolls_back(tmp_path, monkeypatch):
-    def fail(command, **kwargs):
-        raise subprocess.CalledProcessError(1, command, "", "No matching version")
+    def fail(path, venv, log):
+        raise manager.AdapterError("Dependency installation failed: no match")
 
-    monkeypatch.setattr(manager.subprocess, "run", fail)
+    monkeypatch.setattr(manager, "_install_dependencies", fail)
 
-    with pytest.raises(manager.AdapterError, match="No matching version"):
-        _install(_repo_with_requirements(tmp_path))
+    with pytest.raises(manager.AdapterError, match="no match"):
+        _install(adapter_repo(tmp_path / "src").working_tree_dir)
     assert list((tmp_path / "adapters").iterdir()) == []
     assert _rows() == []
 
@@ -392,5 +384,5 @@ def test_an_uncommitted_update_leaves_the_running_version(tmp_path):
         raise RuntimeError("commit fails")
 
     assert _adapter(adapter_id).tag == "v1.0.0"
-    manifest = (tmp_path / "adapters" / adapter_id / "manifest.ini").read_text()
-    assert "proto_id = 0" in manifest
+    manifest = (tmp_path / "adapters" / adapter_id / "adapter.toml").read_text()
+    assert 'protocol = "oauth2"' in manifest

@@ -14,8 +14,8 @@ Each platform (Gmail, X, Telegram, ...) is served by an adapter installed from i
 ./publisher.sh platforms disable <NAME>                     # hide it from users; it still revokes tokens
 ./publisher.sh platforms enable <NAME>                      # offer it again
 ./publisher.sh platforms remove <NAME> [--force]            # uninstall
-./publisher.sh platforms import                             # register adapter directories not yet in the database
-./publisher.sh platforms exec <NAME> -- <ARGS...>           # run the adapter's own cli.py
+./publisher.sh platforms import                             # register adapter directories, move their files out of the code
+./publisher.sh platforms exec <NAME> -- <COMMAND> [ARGS]    # run a command the adapter installs
 ```
 
 Commands taking a name also take `--proto-id` and `--cat-id`, for when a name matches more than one adapter. Administrators can do the same over the [REST API](rest.md#managing-platform-adapters), installing only from orgs in `PLATFORMS_GITHUB_ORGS`.
@@ -34,14 +34,25 @@ An update builds the new version and its virtualenv beside the running one, then
 > [!WARNING]
 > `remove` is refused while accounts are linked through the adapter, since their tokens can only be revoked through it. Disable it instead. `--force` removes it anyway and leaves those tokens unrevocable.
 
-## An Adapter's Own CLI
+## Files
 
-Some adapters ship a `cli.py` for admin tasks, such as registering an OAuth client. `exec` runs it in the adapter's virtualenv; put `--` before its arguments:
+| Directory | Holds |
+|---|---|
+| `PLATFORMS_ADAPTERS_DIR/<id>` | The adapter's code at its tag, replaced on every update |
+| `PLATFORMS_ADAPTERS_VENV_DIR/<id>` | Its virtualenv |
+| `PLATFORMS_ADAPTERS_CONFIG_DIR/<id>` | Its `credentials.json` |
+| `PLATFORMS_ADAPTERS_STATE_DIR/<id>` | What it writes, such as databases |
+
+`<id>` is the ID column of `platforms list`.
+
+## An Adapter's Own Commands
+
+Some adapters install admin commands, such as one that registers an OAuth client. `exec` runs one from the adapter's virtualenv with its config and state directories; put `--` before it:
 
 ```bash
-./publisher.sh platforms exec mastodon -- register -i
+./publisher.sh platforms exec mastodon -- mastodon-register --name RelaySMS --redirect-uri https://example.com/callback
 ```
 
 ## Writing an Adapter
 
-Start from the [adapter template](https://github.com/smswithoutborders/platform-adapter-template) and follow its README, then tag a release and `add` it.
+Build it with the [adapter SDK](../sdk/README.md), then tag a release and `add` it.

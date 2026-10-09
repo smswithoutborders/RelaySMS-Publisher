@@ -18,7 +18,9 @@ from tests.helpers import (
 
 URL = "/v1/platforms/adapters"
 
-pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher", "platforms_config")
+pytestmark = pytest.mark.usefixtures(
+    "test_db", "fast_hasher", "platforms_config", "fake_adapter_build"
+)
 
 
 @pytest.fixture(autouse=True)

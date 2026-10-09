@@ -21,6 +21,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN python3 -m venv /venv
 COPY requirements.txt requirements-observability.txt ./
+COPY sdk ./sdk
 RUN --mount=type=cache,sharing=locked,target=/root/.cache/pip \
   /venv/bin/pip install --disable-pip-version-check \
   -r requirements.txt -r requirements-observability.txt

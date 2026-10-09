@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import sys
 
 import pytest
 from click.testing import CliRunner
@@ -12,7 +11,7 @@ from publisher.models import platform_adapter as platform_adapters
 from publisher.models.platform_adapter import OAUTH2, PNBA
 from tests.helpers import adapter_repo, add_adapter, commit_manifest, link_account
 
-pytestmark = pytest.mark.usefixtures("platforms_config")
+pytestmark = pytest.mark.usefixtures("platforms_config", "fake_adapter_build")
 
 
 @pytest.fixture(autouse=True)
@@ -102,14 +101,30 @@ def test_commands_need_exactly_one_match(args, error):
     assert error in result.output
 
 
-def test_exec_runs_the_adapter_cli_in_its_venv(tmp_path):
-    adapter_dir = tmp_path / "adapters" / "gmail-0"
-    adapter_dir.mkdir(parents=True)
-    (adapter_dir / "cli.py").write_text("import sys; sys.exit(int(sys.argv[1]))")
-    (tmp_path / "venvs" / "gmail-0" / "bin").mkdir(parents=True)
-    (tmp_path / "venvs" / "gmail-0" / "bin" / "python3").symlink_to(sys.executable)
+def test_exec_runs_a_venv_command_with_the_adapter_dirs(tmp_path):
+    (tmp_path / "adapters" / "gmail-0").mkdir(parents=True)
+    bin_dir = tmp_path / "venvs" / "gmail-0" / "bin"
+    bin_dir.mkdir(parents=True)
+    script = bin_dir / "gmail-admin"
+    script.write_text(
+        "#!/bin/sh\n"
+        f'[ "$RELAYSMS_ADAPTER_CONFIG_DIR" = "{tmp_path}/config/gmail-0" ] || exit 9\n'
+        f'[ "$RELAYSMS_ADAPTER_STATE_DIR" = "{tmp_path}/state/gmail-0" ] || exit 9\n'
+        'exit "$1"\n'
+    )
+    script.chmod(0o755)
 
-    assert _run("exec", "gmail", "--", "3").exit_code == 3
+    assert _run("exec", "gmail", "--", "gmail-admin", "3").exit_code == 3
+
+
+@pytest.mark.parametrize("command", ["missing", "../../bin/sh"])
+def test_exec_runs_only_venv_commands(tmp_path, command):
+    (tmp_path / "venvs" / "gmail-0" / "bin").mkdir(parents=True)
+
+    result = _run("exec", "gmail", "--", command)
+
+    assert result.exit_code == 1
+    assert "has no command" in result.output
 
 
 def test_add_and_update_take_a_version(tmp_path):

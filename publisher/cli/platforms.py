@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ from publisher.cli.output import print_table
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.platform_adapter import PlatformAdapter
 from publisher.platforms import manager
+from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 
 
 def _filter_options(command):
@@ -112,33 +114,32 @@ def disable(name, proto_id, cat_id):
 @cli.command(
     name="exec",
     help=(
-        "Run an adapter's own admin CLI (its cli.py) inside its own "
-        "virtualenv.\n\n"
-        "Put a '--' before the adapter's own arguments so they aren't "
-        "confused with --proto-id/--cat-id.\n\n"
-        "Example: publisher.sh platforms exec mastodon -- register -i"
+        "Run a command an adapter installs, such as an admin script, from its "
+        "virtualenv with its config and state directories.\n\n"
+        "Put a '--' before the command so its arguments aren't confused with "
+        "--proto-id/--cat-id.\n\n"
+        "Example: publisher.sh platforms exec mastodon -- mastodon-register --help"
     ),
 )
 @click.argument("name")
 @_filter_options
 @click.argument("cli_args", nargs=-1, type=click.UNPROCESSED)
 def exec_(name, proto_id, cat_id, cli_args):
+    if not cli_args:
+        raise click.UsageError("Name the command to run after '--'.")
+    command, *args = cli_args
     with session() as db:
         adapter = _find_one(db, name, proto_id, cat_id)
-    adapter_path = Path(adapter.path).resolve()
-    adapter_cli = adapter_path / "cli.py"
-    python_exec = Path(adapter.venv_path).resolve() / "bin" / "python3"
+    program = Path(adapter.venv_path).resolve() / "bin" / command
+    if "/" in command or not program.is_file():
+        raise click.ClickException(f"Adapter '{name}' has no command {command!r}.")
 
-    if not adapter_cli.is_file():
-        raise click.ClickException(f"Adapter '{name}' has no cli.py: nothing to run.")
-    if not python_exec.is_file():
-        raise click.ClickException(
-            f"Adapter '{name}' virtualenv not found at {python_exec.parent.parent}."
-        )
-
-    result = subprocess.run(
-        [str(python_exec), str(adapter_cli), *cli_args], cwd=adapter_path
-    )
+    env = {
+        **os.environ,
+        CONFIG_DIR_ENV: adapter.config_path,
+        STATE_DIR_ENV: adapter.state_path,
+    }
+    result = subprocess.run([str(program), *args], cwd=adapter.path, env=env)
     sys.exit(result.returncode)
 
 
