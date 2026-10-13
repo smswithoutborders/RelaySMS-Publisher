@@ -56,12 +56,25 @@ def test_oauth_callback_is_404_for_unknown_platforms(client):
 def test_client_metadata_comes_from_the_config_dir(client, platforms_config):
     config = PlatformsConfig.get().adapters_config_dir / "bluesky-0"
     config.mkdir(parents=True)
-    (config / "credentials.json").write_text(json.dumps(CLIENT_METADATA))
+    # The adapter accepts uppercase keys, so this route must too.
+    uppercase = {key.upper(): value for key, value in CLIENT_METADATA.items()}
+    (config / "credentials.json").write_text(json.dumps(uppercase))
 
     response = client.get("/v1/platforms/bluesky/oauth/client-metadata.json")
 
     assert response.status_code == 200
     assert response.json() == CLIENT_METADATA
+
+
+def test_invalid_client_metadata_hides_the_file_path(client, platforms_config):
+    config = PlatformsConfig.get().adapters_config_dir / "bluesky-0"
+    config.mkdir(parents=True)
+    (config / "credentials.json").write_text("{")
+
+    response = client.get("/v1/platforms/bluesky/oauth/client-metadata.json")
+
+    assert response.status_code == 500
+    assert str(config) not in response.text
 
 
 def test_client_metadata_is_404_without_credentials(client, platforms_config):

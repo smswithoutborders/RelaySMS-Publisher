@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from relaysms_adapter_sdk import config_dir, log, state_dir
+from relaysms_adapter_sdk import config_dir, log, read_config, state_dir
 from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 
 
@@ -80,6 +80,27 @@ class TestPaths:
         assert config_dir() == tmp_path / "config"
         assert state_dir() == tmp_path / "state"
         assert (tmp_path / "state").is_dir()
+
+    def test_config_keys_are_read_in_lowercase(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(CONFIG_DIR_ENV, str(tmp_path))
+        (tmp_path / "credentials.json").write_text(
+            '{"SMTP_HOST": "h", "web": {"Client_ID": "c"}}'
+        )
+        assert read_config() == {"smtp_host": "h", "web": {"client_id": "c"}}
+
+    @pytest.mark.parametrize(
+        ("content", "error"),
+        [
+            ('{"SMTP_HOST": "a", "smtp_host": "b"}', "set twice"),
+            ("[]", "JSON object"),
+            ("{", "invalid"),
+        ],
+    )
+    def test_invalid_config(self, tmp_path, monkeypatch, content, error):
+        monkeypatch.setenv(CONFIG_DIR_ENV, str(tmp_path))
+        (tmp_path / "credentials.json").write_text(content)
+        with pytest.raises(ValueError, match=error):
+            read_config()
 
     def test_unset(self, monkeypatch):
         monkeypatch.delenv(CONFIG_DIR_ENV, raising=False)

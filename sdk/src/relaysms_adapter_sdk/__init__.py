@@ -10,7 +10,7 @@ from relaysms_adapter_sdk.errors import (
     TokenInvalidError,
     UpstreamError,
 )
-from relaysms_adapter_sdk.paths import config_dir, state_dir
+from relaysms_adapter_sdk.paths import config_dir, read_config, state_dir
 from relaysms_adapter_sdk.types import (
     Account,
     Attachment,
@@ -53,5 +53,6 @@ __all__ = [
     "TokenInvalidError",
     "UpstreamError",
     "config_dir",
+    "read_config",
     "state_dir",
 ]
