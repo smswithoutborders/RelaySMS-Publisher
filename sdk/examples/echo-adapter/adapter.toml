@@ -12,3 +12,8 @@ svg = "https://example.com/echo.svg"
 required = true
 secret = true
 description = "The code every phone number links with."
+
+[setup.code]
+required = true
+secret = true
+description = "The code every phone number links with."

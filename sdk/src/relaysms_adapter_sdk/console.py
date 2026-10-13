@@ -31,8 +31,15 @@ except ImportError:
 
 from relaysms_adapter_sdk import log, manifest, wire
 from relaysms_adapter_sdk.errors import AdapterError
-from relaysms_adapter_sdk.manifest import Category, Manifest, ManifestError, Protocol
-from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
+from relaysms_adapter_sdk.manifest import (
+    Category,
+    ConfigError,
+    FieldType,
+    Manifest,
+    ManifestError,
+    Protocol,
+)
+from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, CREDENTIALS_FILE, STATE_DIR_ENV
 from relaysms_adapter_sdk.types import (
     Account,
     Attachment,
@@ -44,6 +51,7 @@ from relaysms_adapter_sdk.types import (
     PasswordVerificationRequest,
     RevokeRequest,
     SendRequest,
+    SetupRequest,
 )
 
 WORKDIR = ".relaysms"
@@ -146,6 +154,28 @@ def revoke(ws: Workspace, _args: argparse.Namespace) -> None:
     console.print(Text(f"Unlinked {account['identifier']}.", style="green"))
 
 
+def setup(ws: Workspace, args: argparse.Namespace) -> None:
+    if not ws.manifest.setup:
+        raise ConsoleError(f"This adapter has no setup; write its {CREDENTIALS_FILE}.")
+    inputs = manifest.parse_inputs(ws.manifest.setup, args.input)
+    for field in ws.manifest.setup:
+        if field.required and field.name not in inputs:
+            answer = Prompt.ask(field.description or field.name, password=field.secret)
+            # The question asks for a file's path, which from_text takes as @path.
+            text = f"@{answer}" if field.type is FieldType.FILE else answer
+            inputs[field.name] = manifest.from_text(field, text)
+    inputs = manifest.check_values(ws.manifest.setup, inputs, require_all=True)
+
+    result = call(ws, "setup", SetupRequest(inputs))
+    # The settings replace the file, so every required one must be there.
+    settings = manifest.check_values(
+        ws.manifest.config, result["settings"], require_all=True
+    )
+    path = ws.config_dir / CREDENTIALS_FILE
+    _write_secret_json(path, settings)
+    console.print(Text(f"Saved {path}.", style="green"))
+
+
 def call_method(ws: Workspace, args: argparse.Namespace) -> None:
     try:
         params = json.loads(args.params)
@@ -188,6 +218,16 @@ def main(argv: list[str] | None = None) -> int:
     revoke_parser = commands.add_parser("revoke", help="unlink the account")
     revoke_parser.set_defaults(handler=revoke)
 
+    setup_parser = commands.add_parser("setup", help="set up credentials.json")
+    setup_parser.add_argument(
+        "--input",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="repeatable; KEY=@PATH for a file. Asks for required inputs not given.",
+    )
+    setup_parser.set_defaults(handler=setup)
+
     call_parser = commands.add_parser("call", help="call any method")
     call_parser.add_argument("method")
     call_parser.add_argument("params", nargs="?", default="{}", help="JSON object")
@@ -197,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         root = args.dir.resolve()
         args.handler(Workspace(root, manifest.load(root)), args)
-    except (ConsoleError, AdapterError, ManifestError) as e:
+    except (ConsoleError, AdapterError, ManifestError, ConfigError) as e:
         console.print(Text(f"Error: {e}", style="bold red"))
         return 1
     except KeyboardInterrupt:
@@ -336,9 +376,13 @@ def _load_account(ws: Workspace) -> dict[str, Any]:
 
 
 def _save_account(ws: Workspace, account: dict[str, Any]) -> None:
-    ws.account_file.parent.mkdir(parents=True, exist_ok=True)
-    ws.account_file.write_text(json.dumps(account, indent=2), encoding="utf-8")
-    ws.account_file.chmod(0o600)
+    _write_secret_json(ws.account_file, account)
+
+
+def _write_secret_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    path.chmod(0o600)
 
 
 def _show_log(line: str) -> None:

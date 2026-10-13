@@ -23,13 +23,13 @@ In `pyproject.toml`:
 
 ```toml
 dependencies = [
-  "relaysms-adapter-sdk @ git+https://github.com/smswithoutborders/RelaySMS-Publisher@sdk-v1.0.0#subdirectory=sdk",
+  "relaysms-adapter-sdk @ git+https://github.com/smswithoutborders/RelaySMS-Publisher@sdk-v1.1.0#subdirectory=sdk",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest",
-  "relaysms-adapter-sdk[console] @ git+https://github.com/smswithoutborders/RelaySMS-Publisher@sdk-v1.0.0#subdirectory=sdk",
+  "relaysms-adapter-sdk[console] @ git+https://github.com/smswithoutborders/RelaySMS-Publisher@sdk-v1.1.0#subdirectory=sdk",
 ]
 
 [tool.hatch.metadata]
@@ -44,6 +44,7 @@ Subclass `OAuth2Adapter` or `PNBAAdapter` and implement its methods. Any of them
 |---|---|---|---|
 | both | `send_message` | `SendRequest` | `SendResult` (with `token` when it was refreshed) |
 | both | `revoke` | `RevokeRequest` | `None` |
+| both | `setup` (optional) | `SetupRequest` | `SetupResult` |
 | `OAuth2Adapter` | `create_authorization_url` | `AuthorizationRequest` | `AuthorizationUrl` |
 | `OAuth2Adapter` | `exchange_code` | `CodeExchangeRequest` | `Account` |
 | `PNBAAdapter` | `send_code` | `CodeRequest` | `CodeSent` |
@@ -105,6 +106,15 @@ description = "From Google Cloud Console."
 
 The Publisher refuses settings that aren't in a `[config]` table, or have the wrong type, so list every key the adapter reads. Keys are lowercase.
 
+If the settings come from the platform, such as an app it registers or a file its console downloads, implement `setup` and declare its inputs in `[setup]` tables, which also accept `type = "file"`. The Publisher checks the `settings` it returns against `[config]` and saves them as `credentials.json`, replacing the old file.
+
+```toml
+[setup.client_file]
+type = "file"              # the file's text, at most 64 KB
+required = true
+description = "The client JSON downloaded from Google Cloud Console."
+```
+
 ## Try it
 
 `relaysms-adapter` runs the adapter in the current directory the way the Publisher does, keeping its config, state and the linked account in `.relaysms/`. Add `.relaysms/` to `.gitignore`.
@@ -123,6 +133,7 @@ venv/bin/relaysms-adapter revoke
 | `link` | OAuth2: opens the authorization URL and catches the redirect on a local `http://localhost` redirect URL, or asks you to paste it. PNBA: asks for the phone number, code and two-step password. |
 | `send` | Sends from the linked account, asking for what the category needs. `--to`, `--subject`, `--body` and `--attach` skip the questions; `--offline` sends without an account. |
 | `revoke` | Unlinks the account. |
+| `setup` | Runs `setup` and saves `credentials.json`. `--input key=value`, or `key=@path` for a file, skips the questions. |
 | `call <method> [json]` | Calls any method with raw params. |
 
 ## Change the SDK

@@ -111,6 +111,11 @@ class TestHandle:
         response = call(adapter, "exchange_code", {})
         assert response["error"]["code"] == INVALID_PARAMS
 
+    def test_setup_is_optional(self, adapter):
+        response = call(adapter, "setup", {"inputs": {}})
+        assert response["error"]["code"] == METHOD_NOT_FOUND
+        assert "no setup" in response["error"]["message"]
+
     @pytest.mark.parametrize("method", ["helper", "__init__", "send_code"])
     def test_only_protocol_methods(self, adapter, method):
         response = call(adapter, method)

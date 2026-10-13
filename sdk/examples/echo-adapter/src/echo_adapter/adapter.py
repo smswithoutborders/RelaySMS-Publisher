@@ -15,6 +15,8 @@ from relaysms_adapter_sdk import (
     RevokeRequest,
     SendRequest,
     SendResult,
+    SetupRequest,
+    SetupResult,
     read_config,
     state_dir,
 )
@@ -51,3 +53,7 @@ class EchoAdapter(PNBAAdapter):
     @override
     def revoke(self, request: RevokeRequest) -> None:
         logger.info("Unlinked %s", request.account.identifier)
+
+    @override
+    def setup(self, request: SetupRequest) -> SetupResult:
+        return SetupResult(settings={"code": request.inputs["code"]})

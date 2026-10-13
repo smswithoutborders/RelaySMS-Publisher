@@ -26,6 +26,8 @@ from relaysms_adapter_sdk.types import (
     RevokeRequest,
     SendRequest,
     SendResult,
+    SetupRequest,
+    SetupResult,
 )
 
 __all__ = [
@@ -50,6 +52,8 @@ __all__ = [
     "RevokeRequest",
     "SendRequest",
     "SendResult",
+    "SetupRequest",
+    "SetupResult",
     "TokenInvalidError",
     "UpstreamError",
     "config_dir",

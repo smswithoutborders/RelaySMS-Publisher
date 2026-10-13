@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+CREDENTIALS_FILE = "credentials.json"
 CONFIG_DIR_ENV = "RELAYSMS_ADAPTER_CONFIG_DIR"
 STATE_DIR_ENV = "RELAYSMS_ADAPTER_STATE_DIR"
 
@@ -28,7 +29,7 @@ def state_dir() -> Path:
 
 
 def read_config(
-    filename: str = "credentials.json", directory: Path | None = None
+    filename: str = CREDENTIALS_FILE, directory: Path | None = None
 ) -> dict[str, Any]:
     """Read a JSON object from the config directory, with every key in lowercase.
 

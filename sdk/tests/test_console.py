@@ -20,6 +20,13 @@ name = "echo"
 display_name = "Echo"
 protocol = "pnba"
 category = "message"
+
+[config.code]
+secret = true
+
+[setup.code]
+required = true
+secret = true
 """
 
 FAKE_OAUTH2 = """
@@ -73,6 +80,51 @@ class TestPNBA:
 
         assert run(repo, "revoke") == 0
         assert not (repo / ".relaysms" / "account.json").exists()
+
+    @pytest.mark.parametrize("given", [["--input", "CODE=654321"], []])
+    def test_setup_replaces_credentials(self, tmp_path, monkeypatch, given):
+        repo = make_repo(tmp_path, ECHO)
+        credentials = repo / ".relaysms" / "config" / "credentials.json"
+        credentials.write_text('{"code": "1", "web": {}}')
+        answer(monkeypatch, "654321")
+
+        assert run(repo, "setup", *given) == 0
+
+        assert json.loads(credentials.read_text()) == {"code": "654321"}
+        assert credentials.stat().st_mode & 0o777 == 0o600
+
+    def test_setup_asks_for_a_file_by_its_path(self, tmp_path, monkeypatch):
+        manifest = ECHO.replace("[setup.code]", '[setup.code]\ntype = "file"')
+        repo = make_repo(tmp_path, manifest)
+        (tmp_path / "code.txt").write_text("654321")
+        answer(monkeypatch, str(tmp_path / "code.txt"))
+
+        assert run(repo, "setup") == 0
+
+        credentials = repo / ".relaysms" / "config" / "credentials.json"
+        assert json.loads(credentials.read_text()) == {"code": "654321"}
+
+    def test_setup_refuses_unknown_inputs(self, tmp_path, capsys):
+        repo = make_repo(tmp_path, ECHO)
+        assert run(repo, "setup", "--input", "code=1", "--input", "colour=red") == 1
+        assert "colour isn't a setting" in capsys.readouterr().out
+
+    def test_setup_refuses_settings_not_in_config(self, tmp_path, capsys):
+        repo = make_repo(tmp_path, ECHO.replace("[config.code]", "[config.other]"))
+        credentials = repo / ".relaysms" / "config" / "credentials.json"
+
+        assert run(repo, "setup", "--input", "code=654321") == 1
+
+        assert "code isn't a setting" in capsys.readouterr().out
+        assert json.loads(credentials.read_text()) == {"code": "123456"}
+
+    def test_setup_refuses_incomplete_settings(self, tmp_path, capsys):
+        manifest = ECHO + "\n[config.other]\nrequired = true\n"
+        repo = make_repo(tmp_path, manifest)
+
+        assert run(repo, "setup", "--input", "code=654321") == 1
+
+        assert "other is required" in capsys.readouterr().out
 
     def test_wrong_code(self, tmp_path, monkeypatch, capsys):
         repo = make_repo(tmp_path, ECHO)

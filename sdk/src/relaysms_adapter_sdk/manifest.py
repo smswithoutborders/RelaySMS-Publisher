@@ -12,6 +12,7 @@ from typing import Any
 from relaysms_adapter_sdk.paths import lowercase_keys
 
 FILENAME = "adapter.toml"
+MAX_FILE_SIZE = 64 * 1024
 
 _ENTRY_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -35,6 +36,8 @@ class FieldType(StrEnum):
     INTEGER = "integer"
     BOOLEAN = "boolean"
     LIST = "list"
+    # A file's text contents. Only setup inputs can be files.
+    FILE = "file"
 
 
 class ManifestError(ValueError):
@@ -47,7 +50,7 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True)
 class Field:
-    """A key in credentials.json, declared in a [config] table."""
+    """A setting in a [config] table, or a setup input in a [setup] table."""
 
     name: str
     type: FieldType = FieldType.STRING
@@ -69,6 +72,7 @@ class Manifest:
     icon_svg: str | None = None
     icon_png: str | None = None
     config: tuple[Field, ...] = ()
+    setup: tuple[Field, ...] = ()
 
 
 def load(directory: Path) -> Manifest:
@@ -116,20 +120,25 @@ def parse(text: str) -> Manifest:
         auth_provider=_str(data, "auth_provider", required=False),
         icon_svg=_str(icons, "svg", required=False),
         icon_png=_str(icons, "png", required=False),
-        config=_fields(data, "config"),
+        config=_fields(data, "config", files=False),
+        setup=_fields(data, "setup", files=True),
     )
 
 
-def check_config(fields: Iterable[Field], values: dict[str, Any]) -> dict[str, Any]:
-    """Check settings against an adapter's fields and return them with lowercase keys.
+def check_values(
+    fields: Iterable[Field], values: dict[str, Any], *, require_all: bool = False
+) -> dict[str, Any]:
+    """Check values against an adapter's fields and return them with lowercase keys.
 
     Keys may be in any case, as read_config reads them. A None value means not set.
+    With require_all, every required field must also have a value.
 
     Raises:
-        ConfigError: A key isn't a field, is given twice in different case, or has
-            a value of the wrong type. The message names the key, never the value,
-            which may be a secret.
+        ConfigError: A key isn't a field, is given twice in different case, has a
+            value of the wrong type, or is required and missing. The message names
+            the key, never the value, which may be a secret.
     """
+    fields = tuple(fields)
     try:
         values = lowercase_keys(values.items())
     except ValueError as e:
@@ -141,12 +150,14 @@ def check_config(fields: Iterable[Field], values: dict[str, Any]) -> dict[str, A
             problems.append(f"{key} isn't a setting of this adapter")
         elif value is not None and (expected := _type_problem(value, types[key])):
             problems.append(f"{key} must be {expected}")
+    if require_all:
+        problems += [f"{key} is required" for key in missing_values(fields, values)]
     if problems:
         raise ConfigError("; ".join(problems) + ".")
     return values
 
 
-def missing_config(fields: Iterable[Field], values: dict[str, Any]) -> list[str]:
+def missing_values(fields: Iterable[Field], values: dict[str, Any]) -> list[str]:
     """Return the required fields that have no value, or an empty one."""
     return [
         field.name
@@ -155,7 +166,73 @@ def missing_config(fields: Iterable[Field], values: dict[str, Any]) -> list[str]
     ]
 
 
-def _fields(data: dict[str, Any], section: str) -> tuple[Field, ...]:
+def parse_inputs(fields: Iterable[Field], texts: Iterable[str]) -> dict[str, Any]:
+    """Turn KEY=VALUE command-line inputs into values, with lowercase keys.
+
+    An unknown key keeps its text, so check_values reports it with the others.
+
+    Raises:
+        ConfigError: An input has no =, a key is given twice, or a value can't
+            be converted (see from_text).
+    """
+    by_name = {field.name: field for field in fields}
+    pairs = []
+    for text in texts:
+        key, equals, value = text.partition("=")
+        if not equals:
+            raise ConfigError(f"{key} needs a value, as {key}=VALUE.")
+        field = by_name.get(key.lower())
+        pairs.append((key, from_text(field, value) if field else value))
+    try:
+        return lowercase_keys(pairs)
+    except ValueError as e:
+        raise ConfigError(str(e)) from None
+
+
+def from_text(field: Field, text: str) -> Any:
+    """Turn a command-line value into the field's type.
+
+    Lists are comma-separated, and a file is given as @path and read as text.
+
+    Raises:
+        ConfigError: The text isn't a value of the field's type, or the file
+            can't be read or is over MAX_FILE_SIZE.
+    """
+    match field.type:
+        case FieldType.INTEGER:
+            try:
+                return int(text)
+            except ValueError:
+                raise ConfigError(f"{field.name} must be a whole number.") from None
+        case FieldType.BOOLEAN:
+            if text.lower() not in ("true", "false"):
+                raise ConfigError(f"{field.name} must be true or false.")
+            return text.lower() == "true"
+        case FieldType.LIST:
+            return [item.strip() for item in text.split(",") if item.strip()]
+        case FieldType.FILE:
+            if not text.startswith("@"):
+                raise ConfigError(f"{field.name} is a file; give it as @path.")
+            return _read_file(field.name, Path(text[1:]).expanduser())
+    return text
+
+
+def _read_file(name: str, path: Path) -> str:
+    try:
+        with path.open("rb") as file:
+            # One byte over the limit is enough to know it's too big.
+            data = file.read(MAX_FILE_SIZE + 1)
+        text = data.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise ConfigError(f"Can't read {path} for {name}: {e}") from e
+    if len(data) > MAX_FILE_SIZE:
+        raise ConfigError(
+            f"{name} must be a file of at most {MAX_FILE_SIZE // 1024} KB."
+        )
+    return text
+
+
+def _fields(data: dict[str, Any], section: str, *, files: bool) -> tuple[Field, ...]:
     tables = data.get(section, {})
     if not isinstance(tables, dict):
         raise ManifestError(f"{section} must be a table.")
@@ -166,10 +243,13 @@ def _fields(data: dict[str, Any], section: str) -> tuple[Field, ...]:
             raise ManifestError(f"{label} must be lowercase letters, digits or _.")
         if not isinstance(table, dict):
             raise ManifestError(f"{label} must be a table.")
+        kind = _enum(FieldType, table, "type", FieldType.STRING, label)
+        if kind is FieldType.FILE and not files:
+            raise ManifestError(f"{label}.type can't be file; only setup inputs can.")
         fields.append(
             Field(
                 name=name,
-                type=_enum(FieldType, table, "type", FieldType.STRING, label),
+                type=kind,
                 required=_bool(table, "required", label),
                 secret=_bool(table, "secret", label),
                 description=_str(table, "description", label, required=False),
@@ -191,6 +271,9 @@ def _type_problem(value: Any, kind: FieldType) -> str | None:
         case FieldType.LIST:
             ok = isinstance(value, list) and all(isinstance(v, str) for v in value)
             return None if ok else "a list of strings"
+        case FieldType.FILE:
+            ok = isinstance(value, str) and len(value.encode()) <= MAX_FILE_SIZE
+            return None if ok else f"a file of at most {MAX_FILE_SIZE // 1024} KB"
 
 
 def _name(key: str, label: str | None) -> str:

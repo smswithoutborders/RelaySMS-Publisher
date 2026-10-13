@@ -25,6 +25,14 @@ category = "email"
 """
 
 
+CODE = Field(
+    name="code",
+    required=True,
+    secret=True,
+    description="The code every phone number links with.",
+)
+
+
 def test_load_example():
     assert manifest.load(EXAMPLE) == manifest.Manifest(
         entry="echo_adapter:EchoAdapter",
@@ -33,14 +41,8 @@ def test_load_example():
         protocol=Protocol.PNBA,
         category=Category.TEXT,
         icon_svg="https://example.com/echo.svg",
-        config=(
-            Field(
-                name="code",
-                required=True,
-                secret=True,
-                description="The code every phone number links with.",
-            ),
-        ),
+        config=(CODE,),
+        setup=(CODE,),
     )
 
 
@@ -71,6 +73,8 @@ def test_missing_file(tmp_path):
         ("config.host = {type = 'url'}", "config.host.type must be one of"),
         ("config.host = {secret = 'yes'}", "config.host.secret must be true or false"),
         ("config.host = {description = ''}", "config.host.description must be"),
+        ("config.key = {type = 'file'}", "config.key.type can't be file"),
+        ("setup.key = {type = 'url'}", "setup.key.type must be one of"),
     ],
 )
 def test_invalid(change, error):
@@ -88,21 +92,21 @@ FIELDS = (
 )
 
 
-def test_check_config_accepts_each_type_and_none():
+def test_check_values_accepts_each_type_and_none():
     values = {"host": "h", "port": 465, "tls": False, "scopes": ["a"]}
-    assert manifest.check_config(FIELDS, values) == values
-    assert manifest.check_config(FIELDS, {"host": None}) == {"host": None}
+    assert manifest.check_values(FIELDS, values) == values
+    assert manifest.check_values(FIELDS, {"host": None}) == {"host": None}
 
 
-def test_check_config_lowercases_keys():
-    assert manifest.check_config(FIELDS, {"HOST": "h"}) == {"host": "h"}
+def test_check_values_lowercases_keys():
+    assert manifest.check_values(FIELDS, {"HOST": "h"}) == {"host": "h"}
     with pytest.raises(ConfigError, match="set twice"):
-        manifest.check_config(FIELDS, {"HOST": "a", "host": "b"})
+        manifest.check_values(FIELDS, {"HOST": "a", "host": "b"})
 
 
-def test_check_config_names_keys_but_not_values():
+def test_check_values_names_keys_but_not_values():
     with pytest.raises(ConfigError) as error:
-        manifest.check_config(
+        manifest.check_values(
             FIELDS,
             {"port": True, "tls": "yes", "scopes": [1], "sl_api_key": "sk_live_1"},
         )
@@ -115,13 +119,96 @@ def test_check_config_names_keys_but_not_values():
     assert "sk_live_1" not in message
 
 
+def test_check_values_can_require_every_required_field():
+    assert manifest.check_values(FIELDS, {}) == {}
+    with pytest.raises(ConfigError, match="host is required"):
+        manifest.check_values(FIELDS, {"port": 1}, require_all=True)
+
+
+def test_files_have_a_size_limit():
+    key_file = (Field("key_file", FieldType.FILE),)
+    small = "x" * manifest.MAX_FILE_SIZE
+    assert manifest.check_values(key_file, {"key_file": small})
+    with pytest.raises(ConfigError, match="key_file must be a file of at most 64 KB"):
+        manifest.check_values(key_file, {"key_file": small + "x"})
+
+
+@pytest.mark.parametrize(
+    ("field", "text", "value"),
+    [
+        (Field("name"), "RelaySMS", "RelaySMS"),
+        (Field("port", FieldType.INTEGER), "465", 465),
+        (Field("tls", FieldType.BOOLEAN), "False", False),
+        (
+            Field("uris", FieldType.LIST),
+            "https://a, https://b,",
+            ["https://a", "https://b"],
+        ),
+    ],
+)
+def test_from_text(field, text, value):
+    assert manifest.from_text(field, text) == value
+
+
+CLIENT_FILE = Field("client_file", FieldType.FILE)
+
+
+def test_from_text_reads_files(tmp_path):
+    (tmp_path / "client.json").write_text('{"web": {}}')
+    assert manifest.from_text(CLIENT_FILE, f"@{tmp_path}/client.json") == '{"web": {}}'
+
+
+@pytest.mark.parametrize(
+    ("text", "error"),
+    [
+        ("{tmp}/client.json", "give it as @path"),
+        ("@{tmp}/missing.json", "Can't read"),
+        ("@{tmp}/big.json", "at most 64 KB"),
+    ],
+)
+def test_from_text_refuses_bad_files(tmp_path, text, error):
+    (tmp_path / "client.json").write_text("{}")
+    (tmp_path / "big.json").write_text("x" * (manifest.MAX_FILE_SIZE + 1))
+    with pytest.raises(ConfigError, match=error):
+        manifest.from_text(CLIENT_FILE, text.format(tmp=tmp_path))
+
+
+def test_parse_inputs():
+    fields = (Field("port", FieldType.INTEGER),)
+    assert manifest.parse_inputs(fields, ["PORT=465", "colour=red"]) == {
+        "port": 465,
+        "colour": "red",
+    }
+
+
+@pytest.mark.parametrize(
+    ("texts", "error"),
+    [(["port"], "port needs a value"), (["PORT=1", "port=2"], "set twice")],
+)
+def test_parse_inputs_refuses(texts, error):
+    with pytest.raises(ConfigError, match=error):
+        manifest.parse_inputs((Field("port", FieldType.INTEGER),), texts)
+
+
+@pytest.mark.parametrize(
+    ("field", "text"),
+    [
+        (Field("port", FieldType.INTEGER), "465a"),
+        (Field("tls", FieldType.BOOLEAN), "yes"),
+    ],
+)
+def test_from_text_rejects_other_types(field, text):
+    with pytest.raises(ConfigError, match=field.name):
+        manifest.from_text(field, text)
+
+
 @pytest.mark.parametrize("host", [None, "", []])
 def test_unset_required_fields_are_missing(host):
-    assert manifest.missing_config(FIELDS, {"host": host}) == ["host"]
+    assert manifest.missing_values(FIELDS, {"host": host}) == ["host"]
 
 
 def test_set_required_fields_are_not_missing():
-    assert manifest.missing_config(FIELDS, {"host": "h"}) == []
+    assert manifest.missing_values(FIELDS, {"host": "h"}) == []
 
 
 def test_invalid_toml():
