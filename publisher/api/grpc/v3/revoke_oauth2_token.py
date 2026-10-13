@@ -28,7 +28,7 @@ def revoke_oauth2_token(
         revocation = tokens.revocation(s, token)
         s.delete(token)
         mark_key_used(s, request.key_id)
-        logger.info("Token revoked: platform=%r", token.platform)
+    logger.info("Token deleted: platform=%r", token.platform)
     tokens.revoke_upstream(revocation)
 
     return publisher_pb2.RevokeOAuth2TokenResponse(

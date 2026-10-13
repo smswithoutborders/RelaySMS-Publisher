@@ -20,7 +20,7 @@ def main(argv: list[str]) -> int:
         )
         return 2
 
-    log.configure()
+    log.configure(package=argv[0].partition(":")[0].partition(".")[0])
     try:
         cls = pkgutil.resolve_name(argv[0])
         if not (isinstance(cls, type) and issubclass(cls, Adapter)):

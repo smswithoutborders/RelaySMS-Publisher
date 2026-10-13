@@ -15,6 +15,8 @@ def stream():
     stream = io.StringIO()
     yield stream
     logging.basicConfig(force=True)
+    for name in ("relaysms_adapter_sdk", "adapter"):
+        logging.getLogger(name).setLevel(logging.NOTSET)
 
 
 def lines(stream):
@@ -42,6 +44,20 @@ class TestLog:
         (entry,) = lines(stream)
         assert entry["level"] == "ERROR"
         assert "ValueError: bad" in entry["traceback"]
+
+    @pytest.mark.parametrize(
+        ("level", "shown"),
+        [("info", ["own", "warning"]), ("debug", ["own", "routine", "warning"])],
+    )
+    def test_other_libraries_send_only_warnings_unless_debugging(
+        self, stream, monkeypatch, level, shown
+    ):
+        monkeypatch.setenv("LOG_LEVEL", level)
+        log.configure(stream, package="adapter")
+        logging.getLogger("adapter.client").info("own")
+        logging.getLogger("library").info("routine")
+        logging.getLogger("library").warning("warning")
+        assert [entry["message"] for entry in lines(stream)] == shown
 
     def test_unknown_level(self, stream, monkeypatch):
         monkeypatch.setenv("LOG_LEVEL", "loud")

@@ -31,13 +31,23 @@ def parse(line: str) -> dict[str, str] | None:
     return None
 
 
-def configure(stream: TextIO = sys.stderr) -> None:
-    """Send every log record to stream at LOG_LEVEL, INFO by default."""
+def configure(stream: TextIO = sys.stderr, package: str | None = None) -> None:
+    """Send log records to stream as JSON lines.
+
+    The adapter's package and the SDK log at LOG_LEVEL, INFO by default. Other
+    libraries the adapter uses send only warnings and errors, unless LOG_LEVEL
+    is DEBUG.
+    """
     name = os.environ.get("LOG_LEVEL", "INFO").upper()
-    level = logging.getLevelNamesMapping().get(name)
+    known = logging.getLevelNamesMapping().get(name)
+    level = known or logging.INFO
 
     handler = logging.StreamHandler(stream)
     handler.setFormatter(JSONFormatter())
-    logging.basicConfig(level=level or logging.INFO, handlers=[handler], force=True)
-    if level is None:
+    libraries = level if level <= logging.DEBUG else max(level, logging.WARNING)
+    logging.basicConfig(level=libraries, handlers=[handler], force=True)
+    for own in (__package__, package):
+        if own:
+            logging.getLogger(own).setLevel(level)
+    if known is None:
         logging.getLogger(__name__).warning("Unknown LOG_LEVEL %r, using INFO.", name)

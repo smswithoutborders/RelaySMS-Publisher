@@ -75,7 +75,7 @@ The Publisher replaces the adapter's code on every update, so never write next t
 | `config_dir()` | Credentials and settings, such as `credentials.json` |
 | `state_dir()` | Anything the adapter writes, such as databases |
 
-Log with `logging.getLogger(__name__)`. Records go to standard error at `LOG_LEVEL` (`INFO` by default), and the Publisher logs them at the same level.
+Log with `logging.getLogger(__name__)`. Records from the adapter's package and the SDK go to standard error at `LOG_LEVEL` (`INFO` by default), and the Publisher logs them at the same level. Other libraries, such as an API client, only send warnings and errors unless `LOG_LEVEL` is `DEBUG`.
 
 ## Describe it
 

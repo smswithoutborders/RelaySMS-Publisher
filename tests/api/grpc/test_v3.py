@@ -3,6 +3,7 @@
 import base64
 import datetime
 import hashlib
+import logging
 from concurrent import futures
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -105,6 +106,11 @@ def rpc_error(stub, method, request, payload=None, metadata=None):
             metadata = signed_metadata(method, payload)
         getattr(stub, method)(request, metadata=metadata)
     return error.value
+
+
+def access_log(caplog, code):
+    [record] = [r for r in caplog.records if f" - {code} - " in r.getMessage()]
+    return record
 
 
 def client_keys():
@@ -247,13 +253,16 @@ def test_request_signed_for_another_method_is_rejected(stub):
     assert "method name" in error.details()
 
 
-def test_missing_required_field_is_rejected(stub):
+def test_missing_required_field_is_rejected(stub, caplog):
     request = publisher_pb2.GetOAuth2AuthorizationUrlRequest()
 
     error = rpc_error(stub, "GetOAuth2AuthorizationUrl", request)
 
     assert error.code() == grpc.StatusCode.INVALID_ARGUMENT
     assert "Missing required field: platform" in error.details()
+    record = access_log(caplog, "INVALID_ARGUMENT")
+    assert record.levelno == logging.WARNING
+    assert record.getMessage().endswith("Missing required field: platform")
 
 
 def test_unsupported_platform_is_unimplemented(stub):
@@ -264,13 +273,14 @@ def test_unsupported_platform_is_unimplemented(stub):
     assert error.code() == grpc.StatusCode.UNIMPLEMENTED
 
 
-def test_adapter_error_is_reported_as_internal(stub, adapter):
+def test_adapter_error_is_reported_as_internal(stub, adapter, caplog):
     adapter.results["create_authorization_url"] = UpstreamError("adapter crashed")
 
     error = rpc_error(stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST)
 
     assert error.code() == grpc.StatusCode.INTERNAL
     assert error.details().startswith("Oops! Something went wrong")
+    assert access_log(caplog, "INTERNAL").levelno == logging.ERROR
 
 
 def test_unexpected_error_hides_details(stub, monkeypatch):

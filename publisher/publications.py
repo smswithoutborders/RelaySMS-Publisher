@@ -341,7 +341,6 @@ def send(delivery: Delivery) -> dict | None:
     try:
         result = ipc.call(delivery.adapter, "send_message", delivery.request)
     except AdapterError as e:
-        logger.error("Adapter %r failed: %s", delivery.platform, e.message)
         raise AdapterIntegrationError(
             f"Adapter error: {e.message}",
             platform_name=delivery.platform,
@@ -418,13 +417,17 @@ def _store_segment_and_try_join(
 
     try:
         joined = rrs.V1Payloads.join(segment_data)
+    except (rrs.V1PayloadsError.NoLastSegments, rrs.V1PayloadsError.MissingSegments):
+        logger.debug(
+            "Session %s waiting for segments, %d stored.", sess_id, len(segment_data)
+        )
+        return None
     except Exception as exc:
         logger.warning(
-            "Session %s not ready yet (%d segment(s) stored so far): %s: %s",
+            "Session %s can't be assembled from %d segment(s): %r",
             sess_id,
             len(segment_data),
-            type(exc).__name__,
-            exc or "-",
+            exc,
         )
         return None
 

@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import logging
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
 
@@ -372,7 +373,7 @@ def test_adapter_failure_names_the_platform(account, adapter):
     assert error.value.platform_name == "gmail"
 
 
-def test_attachment_is_published_once_all_segments_arrive(account, adapter):
+def test_attachment_is_published_once_all_segments_arrive(account, adapter, caplog):
     # Payloads with attachments use the reserved slots 0-15.
     contents = _encrypt(account, 5, _email(attachment=PNG))
     texts = _sms(contents, slot=5, token_id=account.token_id, attachment=PNG, sess_id=3)
@@ -381,6 +382,7 @@ def test_attachment_is_published_once_all_segments_arrive(account, adapter):
     results = [_publish(text) for text in reversed(texts)]
 
     assert results == [None] * (len(texts) - 1) + ["gmail"]
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
     [(_, _, request)] = adapter.calls
     [attached] = request.message.attachments
     assert attached.mimetype == "image/png"
