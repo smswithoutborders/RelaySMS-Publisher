@@ -126,6 +126,36 @@ class TestPNBA:
 
         assert "other is required" in capsys.readouterr().out
 
+    def test_config_set_asks_for_bare_keys_and_show_hides_secrets(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        repo = make_repo(tmp_path, ECHO)
+        credentials = repo / ".relaysms" / "config" / "credentials.json"
+        answer(monkeypatch, "654321")
+
+        assert run(repo, "config", "set", "CODE") == 0
+        assert json.loads(credentials.read_text()) == {"code": "654321"}
+
+        capsys.readouterr()
+        assert run(repo, "config", "show") == 0
+        shown = capsys.readouterr().out
+        assert "(secret, set)" in shown
+        assert "654321" not in shown
+
+        assert run(repo, "config", "set", "--unset", "code") == 0
+        assert json.loads(credentials.read_text()) == {}
+
+    def test_a_broken_credentials_file_is_reported(self, tmp_path, capsys):
+        repo = make_repo(tmp_path, ECHO)
+        (repo / ".relaysms" / "config" / "credentials.json").write_text("{")
+        assert run(repo, "config", "show") == 1
+        assert "is invalid" in capsys.readouterr().out
+
+    def test_config_set_refuses_unknown_settings(self, tmp_path, capsys):
+        repo = make_repo(tmp_path, ECHO)
+        assert run(repo, "config", "set", "colour=red") == 1
+        assert "colour isn't a setting" in capsys.readouterr().out
+
     def test_wrong_code(self, tmp_path, monkeypatch, capsys):
         repo = make_repo(tmp_path, ECHO)
         answer(monkeypatch, "0")

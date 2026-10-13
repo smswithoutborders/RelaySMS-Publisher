@@ -77,6 +77,19 @@ def test_invalid_client_metadata_hides_the_file_path(client, platforms_config):
     assert str(config) not in response.text
 
 
+def test_client_metadata_fills_in_the_fixed_atproto_fields(client, platforms_config):
+    config = PlatformsConfig.get().adapters_config_dir / "bluesky-0"
+    config.mkdir(parents=True)
+    settings = ("client_id", "redirect_uris", "client_name", "client_uri", "scope")
+    (config / "credentials.json").write_text(
+        json.dumps({key: CLIENT_METADATA[key] for key in settings})
+    )
+
+    response = client.get("/v1/platforms/bluesky/oauth/client-metadata.json")
+
+    assert response.json() == CLIENT_METADATA
+
+
 def test_client_metadata_is_404_without_credentials(client, platforms_config):
     response = client.get("/v1/platforms/bluesky/oauth/client-metadata.json")
 

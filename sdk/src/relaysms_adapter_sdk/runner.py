@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 type RunAsync = Callable[[Coroutine[Any, Any, Any]], Any]
 
 
-def run(adapter: Adapter, stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout):
+def run(
+    adapter: Adapter | type[Adapter],
+    stdin: TextIO = sys.stdin,
+    stdout: TextIO = sys.stdout,
+):
     """Answer each request line until standard input closes."""
     # One loop for the process, so async clients can outlive a request.
     with asyncio.Runner() as runner:
@@ -27,8 +31,14 @@ def run(adapter: Adapter, stdin: TextIO = sys.stdin, stdout: TextIO = sys.stdout
                 stdout.flush()
 
 
-def handle(adapter: Adapter, line: str, run_async: RunAsync = asyncio.run) -> str:
-    """Answer one JSON-RPC request line."""
+def handle(
+    adapter: Adapter | type[Adapter], line: str, run_async: RunAsync = asyncio.run
+) -> str:
+    """Answer one JSON-RPC request line.
+
+    Given the class, it creates the adapter for the request, except for setup,
+    which runs on the class before the settings an adapter reads exist.
+    """
     try:
         request = wire.parse_request(line)
     except AdapterError as e:
@@ -40,7 +50,10 @@ def handle(adapter: Adapter, line: str, run_async: RunAsync = asyncio.run) -> st
         return wire.encode_error(request.id, error)
 
     try:
-        result = getattr(adapter, request.method)(
+        target = adapter
+        if isinstance(adapter, type) and request.method != "setup":
+            target = adapter()
+        result = getattr(target, request.method)(
             wire.from_json(request_type, request.params)
         )
         if inspect.isawaitable(result):

@@ -14,6 +14,8 @@ from relaysms_adapter_sdk import (
     OAuth2Adapter,
     RevokeRequest,
     SendRequest,
+    SetupRequest,
+    SetupResult,
     TokenInvalidError,
     wire,
 )
@@ -141,6 +143,24 @@ def test_run_answers_each_line(adapter):
     assert adapter.revoked == ["a", "b"]
 
 
+def test_setup_runs_without_creating_the_adapter():
+    class Unconfigured(FakeAdapter):
+        def __init__(self):
+            raise FileNotFoundError("credentials.json")
+
+        @classmethod
+        def setup(cls, request: SetupRequest):
+            return SetupResult(settings=request.inputs)
+
+    setup = wire.encode_request("setup", {"inputs": {"key": "k"}}, 1)
+    revoke = wire.encode_request("revoke", {"account": {"identifier": "a"}}, 2)
+
+    answers = [json.loads(handle(Unconfigured, line)) for line in (setup, revoke)]
+
+    assert answers[0]["result"] == {"settings": {"key": "k"}}
+    assert answers[1]["error"]["code"] == INTERNAL_ERROR
+
+
 def test_run_keeps_one_event_loop():
     loops = []
 
@@ -150,6 +170,6 @@ def test_run_keeps_one_event_loop():
             return Account(identifier="me")
 
     request = wire.encode_request("exchange_code", {"code": "c"}) + "\n"
-    run(LoopAdapter(), io.StringIO(request * 2), io.StringIO())
+    run(LoopAdapter, io.StringIO(request * 2), io.StringIO())
     assert len(loops) == 2
     assert loops[0] is loops[1]

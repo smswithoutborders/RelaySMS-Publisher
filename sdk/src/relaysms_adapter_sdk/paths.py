@@ -13,6 +13,12 @@ from pathlib import Path
 from typing import Any
 
 CREDENTIALS_FILE = "credentials.json"
+
+
+class ConfigError(ValueError):
+    """Settings, or a settings file, that don't fit what the adapter declares."""
+
+
 CONFIG_DIR_ENV = "RELAYSMS_ADAPTER_CONFIG_DIR"
 STATE_DIR_ENV = "RELAYSMS_ADAPTER_STATE_DIR"
 
@@ -40,7 +46,7 @@ def read_config(
 
     Raises:
         FileNotFoundError: The file doesn't exist.
-        ValueError: The file isn't a JSON object, or sets a key twice in any case.
+        ConfigError: The file isn't a JSON object, or sets a key twice in any case.
     """
     path = (directory or config_dir()) / filename
     try:
@@ -48,9 +54,9 @@ def read_config(
             path.read_text(encoding="utf-8"), object_pairs_hook=lowercase_keys
         )
     except ValueError as e:
-        raise ValueError(f"{path} is invalid: {e}") from e
+        raise ConfigError(f"{path} is invalid: {e}") from e
     if not isinstance(data, dict):
-        raise ValueError(f"{path} must hold a JSON object.")
+        raise ConfigError(f"{path} must hold a JSON object.")
     return data
 
 

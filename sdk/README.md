@@ -106,7 +106,7 @@ description = "From Google Cloud Console."
 
 The Publisher refuses settings that aren't in a `[config]` table, or have the wrong type, so list every key the adapter reads. Keys are lowercase.
 
-If the settings come from the platform, such as an app it registers or a file its console downloads, implement `setup` and declare its inputs in `[setup]` tables, which also accept `type = "file"`. The Publisher checks the `settings` it returns against `[config]` and saves them as `credentials.json`, replacing the old file.
+If the settings come from the platform, such as an app it registers or a file its console downloads, implement `setup` and declare its inputs in `[setup]` tables, which also accept `type = "file"`. The Publisher checks the `settings` it returns against `[config]` and saves them as `credentials.json`, replacing the old file. `setup` is a classmethod, since it runs before the settings an instance reads exist.
 
 ```toml
 [setup.client_file]
@@ -122,7 +122,7 @@ description = "The client JSON downloaded from Google Cloud Console."
 ```bash
 python3 -m venv venv
 venv/bin/pip install -e '.[dev]'
-mkdir -p .relaysms/config && cp ~/Downloads/credentials.json .relaysms/config/
+venv/bin/relaysms-adapter config set client_id=... client_secret   # or setup, if it has one
 venv/bin/relaysms-adapter link
 venv/bin/relaysms-adapter send
 venv/bin/relaysms-adapter revoke
@@ -134,6 +134,7 @@ venv/bin/relaysms-adapter revoke
 | `send` | Sends from the linked account, asking for what the category needs. `--to`, `--subject`, `--body` and `--attach` skip the questions; `--offline` sends without an account. |
 | `revoke` | Unlinks the account. |
 | `setup` | Runs `setup` and saves `credentials.json`. `--input key=value`, or `key=@path` for a file, skips the questions. |
+| `config show`, `config set` | Lists the settings, or changes them; `set` asks for a bare `KEY`'s value and takes `--unset KEY`. |
 | `call <method> [json]` | Calls any method with raw params. |
 
 ## Change the SDK

@@ -38,15 +38,16 @@ class GatewayClientManifest(BaseModel):
 
 class OAuthClientMetadata(BaseModel):
     client_id: str
-    dpop_bound_access_tokens: bool
-    application_type: str
     redirect_uris: list[str]
-    grant_types: list[str]
-    response_types: list[str]
-    scope: str
-    token_endpoint_auth_method: str
     client_name: str
     client_uri: str
+    scope: str
+    # The same for every atproto web client, so settings don't include them.
+    dpop_bound_access_tokens: bool = True
+    application_type: str = "web"
+    grant_types: list[str] = ["authorization_code", "refresh_token"]
+    response_types: list[str] = ["code"]
+    token_endpoint_auth_method: str = "none"
 
 
 class ServerStaticPublicKey(BaseModel):

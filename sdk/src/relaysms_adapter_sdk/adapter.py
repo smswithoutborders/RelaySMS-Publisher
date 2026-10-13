@@ -45,10 +45,14 @@ class Adapter(ABC):
     def revoke(self, request: RevokeRequest) -> MaybeAwaitable[None]:
         """End the account's access, when the user unlinks it."""
 
-    def setup(self, request: SetupRequest) -> MaybeAwaitable[SetupResult]:
-        """Turn the [setup] inputs into settings, e.g. by registering an app."""
+    @classmethod
+    def setup(cls, request: SetupRequest) -> MaybeAwaitable[SetupResult]:
+        """Turn the [setup] inputs into settings, e.g. by registering an app.
+
+        A classmethod: it runs before the settings an instance reads exist.
+        """
         raise AdapterError(
-            f"{type(self).__name__} has no setup; set its config instead.",
+            f"{cls.__name__} has no setup; set its config instead.",
             code=METHOD_NOT_FOUND,
         )
 

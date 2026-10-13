@@ -9,6 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from relaysms_adapter_sdk.paths import ConfigError as ConfigError
 from relaysms_adapter_sdk.paths import lowercase_keys
 
 FILENAME = "adapter.toml"
@@ -41,10 +42,6 @@ class FieldType(StrEnum):
 
 
 class ManifestError(ValueError):
-    pass
-
-
-class ConfigError(ValueError):
     pass
 
 
@@ -171,45 +168,57 @@ def has_value(value: Any) -> bool:
     return value not in (None, "", [])
 
 
-def parse_inputs(fields: Iterable[Field], texts: Iterable[str]) -> dict[str, Any]:
+def parse_inputs(
+    fields: Iterable[Field],
+    texts: Iterable[str],
+    ask: Callable[[Field], str] | None = None,
+    *,
+    ask_required: bool = False,
+) -> dict[str, Any]:
     """Turn KEY=VALUE command-line inputs into values, with lowercase keys.
 
-    An unknown key keeps its text, so check_values reports it with the others.
+    A bare KEY has ask return its value as text; for a file, the file's path.
+    With ask_required, ask is also called for each required field not given.
+    An unknown KEY=VALUE keeps its text, so check_values reports it with others.
+    Every input is checked before anything is asked.
 
     Raises:
-        ConfigError: An input has no =, a key is given twice, or a value can't
-            be converted (see from_text).
+        ConfigError: A key is bare without ask or unknown, is given twice, or its
+            value can't be converted (see from_text).
     """
     by_name = {field.name: field for field in fields}
-    pairs = []
+    pairs, asked = [], []
     for text in texts:
         key, equals, value = text.partition("=")
-        if not equals:
-            raise ConfigError(f"{key} needs a value, as {key}=VALUE.")
         field = by_name.get(key.lower())
-        pairs.append((key, from_text(field, value) if field else value))
+        if equals:
+            pairs.append((key, from_text(field, value) if field else value))
+        elif ask is None:
+            raise ConfigError(f"{key} needs a value, as {key}=VALUE.")
+        elif field is None:
+            raise ConfigError(f"{key} isn't a setting of this adapter.")
+        else:
+            asked.append(field)
+    if ask_required:
+        given = {key.lower() for key, _ in pairs} | {field.name for field in asked}
+        asked += [f for f in by_name.values() if f.required and f.name not in given]
     try:
-        return lowercase_keys(pairs)
+        values = lowercase_keys([*pairs, *((field.name, None) for field in asked)])
     except ValueError as e:
         raise ConfigError(str(e)) from None
-
-
-def ask_values(fields: Iterable[Field], ask: Callable[[Field], str]) -> dict[str, Any]:
-    """Ask for each field's value as text and convert it.
-
-    ask gets the field and returns the answer; for a file field, the answer is
-    the file's path.
-
-    Raises:
-        ConfigError: An answer can't be converted (see from_text).
-    """
-    values = {}
-    for field in fields:
+    for field in asked:
+        assert ask is not None
         answer = ask(field)
         if field.type is FieldType.FILE:
             answer = f"@{answer}"
         values[field.name] = from_text(field, answer)
     return values
+
+
+def merge_values(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
+    """Apply checked changes to settings; a None value removes the setting."""
+    merged = current | changes
+    return {key: value for key, value in merged.items() if value is not None}
 
 
 def from_text(field: Field, text: str) -> Any:

@@ -202,14 +202,44 @@ def test_from_text_rejects_other_types(field, text):
         manifest.from_text(field, text)
 
 
-def test_ask_values_converts_answers_and_reads_files(tmp_path):
+def test_parse_inputs_asks_for_bare_keys(tmp_path):
     (tmp_path / "client.json").write_text("{}")
     fields = (Field("port", FieldType.INTEGER), CLIENT_FILE)
     answers = {"port": "465", "client_file": str(tmp_path / "client.json")}
 
-    values = manifest.ask_values(fields, lambda field: answers[field.name])
+    values = manifest.parse_inputs(
+        fields, ["PORT", "client_file"], lambda field: answers[field.name]
+    )
 
     assert values == {"port": 465, "client_file": "{}"}
+
+
+def test_parse_inputs_can_ask_for_required_fields_not_given():
+    fields = (Field("name", required=True), Field("port", FieldType.INTEGER))
+    asked = []
+
+    def ask(field):
+        asked.append(field.name)
+        return "RelaySMS"
+
+    values = manifest.parse_inputs(fields, ["port=465"], ask, ask_required=True)
+
+    assert values == {"port": 465, "name": "RelaySMS"}
+    assert asked == ["name"]
+
+
+def test_parse_inputs_checks_every_input_before_asking():
+    def ask(field):
+        raise AssertionError("asked before the inputs were checked")
+
+    fields = (Field("name"), Field("port", FieldType.INTEGER))
+    with pytest.raises(ConfigError, match="port must be a whole number"):
+        manifest.parse_inputs(fields, ["name", "port=x"], ask)
+
+
+def test_parse_inputs_refuses_unknown_bare_keys():
+    with pytest.raises(ConfigError, match="colour isn't a setting"):
+        manifest.parse_inputs((), ["colour"], lambda field: "")
 
 
 @pytest.mark.parametrize("host", [None, "", []])

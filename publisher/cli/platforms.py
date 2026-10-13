@@ -106,7 +106,7 @@ def disable(name, proto_id, cat_id):
         "virtualenv with its config and state directories.\n\n"
         "Put a '--' before the command so its arguments aren't confused with "
         "--proto-id/--cat-id.\n\n"
-        "Example: publisher.sh platforms exec mastodon -- mastodon-register --help"
+        "Example: publisher.sh platforms exec <NAME> -- <COMMAND> --help"
     ),
 )
 @click.argument("name")
@@ -267,9 +267,7 @@ def setup(name, inputs, proto_id, cat_id):
     """Run an adapter's setup, such as registering an app, and save its settings."""
     adapter = _adapter(name, proto_id, cat_id)
     fields = adapter_config.load_manifest(adapter).setup
-    given = {text.partition("=")[0].lower() for text in inputs}
-    unanswered = [f.name for f in fields if f.required and f.name not in given]
-    values = _values(fields, [*inputs, *unanswered])
+    values = _values(fields, inputs, ask_required=True)
     with session() as db:
         current = _current(db, adapter)
         db.commit()
@@ -289,17 +287,10 @@ def _current(db, adapter: PlatformAdapter) -> PlatformAdapter:
     return current
 
 
-def _values(fields: tuple[Field, ...], texts) -> dict:
+def _values(fields: tuple[Field, ...], texts, *, ask_required: bool = False) -> dict:
     """Read KEY=VALUE texts, asking for the value of each bare KEY."""
-    by_name = {field.name: field for field in fields}
-    asked = []
-    for key in (text for text in texts if "=" not in text):
-        if key.lower() not in by_name:
-            raise click.ClickException(f"{key} isn't a setting of this adapter.")
-        asked.append(by_name[key.lower()])
     try:
-        values = manifest.parse_inputs(fields, [t for t in texts if "=" in t])
-        return values | manifest.ask_values(asked, _ask)
+        return manifest.parse_inputs(fields, texts, _ask, ask_required=ask_required)
     except ConfigError as e:
         raise click.ClickException(str(e)) from e
 

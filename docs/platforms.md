@@ -66,10 +66,10 @@ An adapter reads its settings, such as API keys, from `credentials.json` in its 
 
 ## An Adapter's Own Commands
 
-Some adapters install admin commands, such as one that registers an OAuth client. `exec` runs one from the adapter's virtualenv with its config and state directories; put `--` before it:
+An adapter may install admin commands. `exec` runs one from the adapter's virtualenv with its config and state directories; put `--` before it:
 
 ```bash
-./publisher.sh platforms exec mastodon -- mastodon-register --name RelaySMS --redirect-uri https://example.com/callback
+./publisher.sh platforms exec <NAME> -- <COMMAND> --help
 ```
 
 ## Writing an Adapter

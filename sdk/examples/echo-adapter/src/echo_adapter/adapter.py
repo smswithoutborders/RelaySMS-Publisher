@@ -55,5 +55,6 @@ class EchoAdapter(PNBAAdapter):
         logger.info("Unlinked %s", request.account.identifier)
 
     @override
-    def setup(self, request: SetupRequest) -> SetupResult:
+    @classmethod
+    def setup(cls, request: SetupRequest) -> SetupResult:
         return SetupResult(settings={"code": request.inputs["code"]})

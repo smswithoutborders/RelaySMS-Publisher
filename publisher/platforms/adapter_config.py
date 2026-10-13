@@ -95,8 +95,7 @@ def update(
         InvalidConfigError: A key isn't a setting, or a value has the wrong type.
     """
     values = _check(load_manifest(adapter).config, values, InvalidConfigError)
-    settings = {**_read(adapter), **values}
-    settings = {key: value for key, value in settings.items() if value is not None}
+    settings = manifest.merge_values(_read(adapter), values)
     _save(session, adapter, settings, AuditAction.PLATFORMS_CONFIGURE, actor, values)
 
 

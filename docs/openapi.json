@@ -4855,42 +4855,12 @@
             "type": "string",
             "title": "Client Id"
           },
-          "dpop_bound_access_tokens": {
-            "type": "boolean",
-            "title": "Dpop Bound Access Tokens"
-          },
-          "application_type": {
-            "type": "string",
-            "title": "Application Type"
-          },
           "redirect_uris": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Redirect Uris"
-          },
-          "grant_types": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Grant Types"
-          },
-          "response_types": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Response Types"
-          },
-          "scope": {
-            "type": "string",
-            "title": "Scope"
-          },
-          "token_endpoint_auth_method": {
-            "type": "string",
-            "title": "Token Endpoint Auth Method"
           },
           "client_name": {
             "type": "string",
@@ -4899,20 +4869,55 @@
           "client_uri": {
             "type": "string",
             "title": "Client Uri"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "dpop_bound_access_tokens": {
+            "type": "boolean",
+            "title": "Dpop Bound Access Tokens",
+            "default": true
+          },
+          "application_type": {
+            "type": "string",
+            "title": "Application Type",
+            "default": "web"
+          },
+          "grant_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Grant Types",
+            "default": [
+              "authorization_code",
+              "refresh_token"
+            ]
+          },
+          "response_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Response Types",
+            "default": [
+              "code"
+            ]
+          },
+          "token_endpoint_auth_method": {
+            "type": "string",
+            "title": "Token Endpoint Auth Method",
+            "default": "none"
           }
         },
         "type": "object",
         "required": [
           "client_id",
-          "dpop_bound_access_tokens",
-          "application_type",
           "redirect_uris",
-          "grant_types",
-          "response_types",
-          "scope",
-          "token_endpoint_auth_method",
           "client_name",
-          "client_uri"
+          "client_uri",
+          "scope"
         ],
         "title": "OAuthClientMetadata"
       },

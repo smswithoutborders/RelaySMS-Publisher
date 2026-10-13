@@ -25,12 +25,11 @@ def main(argv: list[str]) -> int:
         cls = pkgutil.resolve_name(argv[0])
         if not (isinstance(cls, type) and issubclass(cls, Adapter)):
             raise TypeError(f"{argv[0]} is not an Adapter subclass.")
-        adapter = cls()
     except Exception:
         logger.exception("Could not start %s", argv[0])
         return 1
 
-    run(adapter)
+    run(cls)
     return 0
 
 
