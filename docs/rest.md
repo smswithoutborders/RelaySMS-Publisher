@@ -38,6 +38,8 @@ A credential can only grant scopes it holds, can't change itself, and can't chan
 
 Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/adapters/{id}/update`) run code from the repository on the server, so they need an administrator and a GitHub repository of an org in `PLATFORMS_GITHUB_ORGS`. Both take an optional `tag`, defaulting to the newest version tag, and return `202` with the job's URL in `Location`. Poll the job until its `state` is `succeeded` or `failed`; its `log` has the end of the git and pip output. An adapter has one job at a time; another gets `409`.
 
+An adapter's settings are at `/v1/platforms/adapters/{id}/config`, for administrators only. `GET` lists each setting, with secrets only marked `is_set`, and the inputs its setup takes. `PATCH` changes the settings sent and keeps the rest; `POST .../setup` runs the adapter's setup and replaces them all, with a file input sent as the file's text. `configured` in the adapter list says whether every required setting has a value.
+
 ## Managing Gateway Clients
 
 `/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm; see [how suggest works](gateway-clients.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.

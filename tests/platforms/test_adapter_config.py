@@ -10,8 +10,12 @@ from publisher import db
 from publisher.models.audit_event import AuditEvent
 from publisher.models.platform_adapter import PNBA, PlatformAdapter
 from publisher.platforms import adapter_config
-from publisher.platforms.adapter_config import AdapterFaultError, InvalidConfigError
-from publisher.platforms.manager import AdapterConflictError, AdapterError
+from publisher.platforms.manager import (
+    AdapterConflictError,
+    AdapterError,
+    AdapterFaultError,
+    InvalidConfigError,
+)
 from relaysms_adapter_sdk import InvalidParamsError, UpstreamError
 from tests.helpers import add_adapter_with_manifest
 

@@ -69,6 +69,14 @@ def admin(password):
 
 
 @pytest.fixture
+def writer():
+    """Basic auth headers for a credential with the platforms scopes only."""
+    return basic_auth(
+        "writer", create_credential("writer", ["platforms:read", "platforms:write"])
+    )
+
+
+@pytest.fixture
 def platforms_config(tmp_path, monkeypatch):
     """Points the adapter directories at tmp_path; call it to change other fields."""
     config = dataclasses.replace(

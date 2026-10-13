@@ -43,12 +43,7 @@ def _install(client, headers, repo, **body):
     )
 
 
-def test_installs_need_an_administrator(client, repo):
-    writer = basic_auth(
-        "writer",
-        create_credential("writer", ["platforms:read", "platforms:write"]),
-    )
-
+def test_installs_need_an_administrator(client, writer, repo):
     response = _install(client, writer, repo)
 
     assert response.status_code == 403

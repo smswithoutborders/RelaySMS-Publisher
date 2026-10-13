@@ -5,6 +5,7 @@ The adapter declares each setting in a [config] table of its adapter.toml, and
 the inputs its setup method takes in [setup] tables.
 """
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,12 @@ from publisher.models.audit_event import AuditAction
 from publisher.models.credential import Credential
 from publisher.models.platform_adapter import PlatformAdapter
 from publisher.platforms import ipc
-from publisher.platforms.manager import AdapterError, flush
+from publisher.platforms.manager import (
+    AdapterError,
+    AdapterFaultError,
+    InvalidConfigError,
+    flush,
+)
 from relaysms_adapter_sdk import AdapterError as AdapterCallError
 from relaysms_adapter_sdk import (
     AuthenticationError,
@@ -29,13 +35,7 @@ from relaysms_adapter_sdk import (
 )
 from relaysms_adapter_sdk.manifest import ConfigError, Field, Manifest, ManifestError
 
-
-class InvalidConfigError(AdapterError):
-    """Settings or setup inputs the caller gave don't fit the adapter."""
-
-
-class AdapterFaultError(AdapterError):
-    """The adapter or its files on this server are broken, not the caller's input."""
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -53,8 +53,9 @@ def load_manifest(adapter: PlatformAdapter) -> Manifest:
         raise AdapterFaultError(str(e)) from e
 
 
-def show(adapter: PlatformAdapter) -> list[Setting]:
+def show(adapter: PlatformAdapter, declared: Manifest | None = None) -> list[Setting]:
     """Return each setting the adapter declares, without the secrets' values."""
+    declared = declared or load_manifest(adapter)
     values = _read(adapter)
     return [
         Setting(
@@ -62,13 +63,22 @@ def show(adapter: PlatformAdapter) -> list[Setting]:
             value=None if field.secret else values.get(field.name),
             is_set=manifest.has_value(values.get(field.name)),
         )
-        for field in load_manifest(adapter).config
+        for field in declared.config
     ]
 
 
 def missing(adapter: PlatformAdapter) -> list[str]:
     """Return the required settings that have no value."""
     return manifest.missing_values(load_manifest(adapter).config, _read(adapter))
+
+
+def is_configured(adapter: PlatformAdapter) -> bool:
+    """Whether every required setting has a value; False if its files are broken."""
+    try:
+        return not missing(adapter)
+    except AdapterError as e:
+        logger.warning("Can't read the settings of adapter %s: %s", adapter.id, e)
+        return False
 
 
 def update(
@@ -98,7 +108,8 @@ def setup(
 ) -> None:
     """Run the adapter's setup and save the settings it returns, replacing the file.
 
-    Commit right after, as for update.
+    End the transaction that loaded adapter first, since the adapter call can be
+    slow, and commit right after, as for update.
 
     Raises:
         InvalidConfigError: The inputs don't fit the adapter's [setup] tables, or

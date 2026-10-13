@@ -55,6 +55,14 @@ class AdapterConflictError(AdapterError):
     pass
 
 
+class InvalidConfigError(AdapterError):
+    """Settings or setup inputs the caller gave don't fit the adapter."""
+
+
+class AdapterFaultError(AdapterError):
+    """The adapter or its files on this server are broken, not the caller's input."""
+
+
 class AdapterInUseError(AdapterError):
     pass
 

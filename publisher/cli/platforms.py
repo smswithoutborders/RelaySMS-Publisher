@@ -182,6 +182,7 @@ def list_command(name, proto_id, cat_id):
             "Auth Provider",
             "Offline",
             "Enabled",
+            "Configured",
             "Version",
         ],
         [
@@ -194,6 +195,7 @@ def list_command(name, proto_id, cat_id):
                 a.auth_provider or "-",
                 "✓" if a.supports_offline_first else "-",
                 "✓" if a.is_enabled else "-",
+                "✓" if adapter_config.is_configured(a) else "-",
                 _describe(a),
             ]
             for a in adapters
@@ -269,7 +271,9 @@ def setup(name, inputs, proto_id, cat_id):
     unanswered = [f.name for f in fields if f.required and f.name not in given]
     values = _values(fields, [*inputs, *unanswered])
     with session() as db:
-        adapter_config.setup(db, _current(db, adapter), values)
+        current = _current(db, adapter)
+        db.commit()
+        adapter_config.setup(db, current, values)
     click.echo(f"Saved the settings of {name!r}.")
 
 
