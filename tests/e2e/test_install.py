@@ -132,7 +132,11 @@ def container(request, source):
         image,
     )  # fmt: skip
     try:
-        sh(name, "systemctl is-system-running --wait", timeout=120)
+        # Just after the container starts, systemctl fails until systemd is ready,
+        # and boot later empties /tmp, where the install clones. So wait for boot to
+        # finish before any test runs.
+        booted = "systemctl is-system-running --wait | grep -qxE 'running|degraded'"
+        wait_until(name, booted)
         yield name
     finally:
         run("podman", "rm", "-f", name)
