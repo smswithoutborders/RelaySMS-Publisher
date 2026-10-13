@@ -95,7 +95,15 @@ auth_provider = "self"     # optional
 [icons]
 svg = "https://raw.githubusercontent.com/.../icon.svg"
 png = "https://raw.githubusercontent.com/.../icon.png"
+
+[config.client_secret]     # one table per key in credentials.json
+type = "string"            # string, integer, boolean or list (of strings)
+required = true
+secret = true              # the Publisher accepts it but never shows it
+description = "From Google Cloud Console."
 ```
+
+The Publisher refuses settings that aren't in a `[config]` table, or have the wrong type, so list every key the adapter reads. Keys are lowercase.
 
 ## Try it
 

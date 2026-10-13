@@ -7,6 +7,7 @@ the adapter writes goes in the state directory.
 
 import json
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +42,9 @@ def read_config(
     """
     path = (directory or config_dir()) / filename
     try:
-        data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_lower)
+        data = json.loads(
+            path.read_text(encoding="utf-8"), object_pairs_hook=lowercase_keys
+        )
     except ValueError as e:
         raise ValueError(f"{path} is invalid: {e}") from e
     if not isinstance(data, dict):
@@ -49,7 +52,12 @@ def read_config(
     return data
 
 
-def _lower(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+def lowercase_keys(pairs: Iterable[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a dict with lowercase keys.
+
+    Raises:
+        ValueError: Two keys differ only in case.
+    """
     lowered = {}
     for key, value in pairs:
         key = key.lower()
