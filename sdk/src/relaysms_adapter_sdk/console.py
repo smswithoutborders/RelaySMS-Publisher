@@ -34,12 +34,18 @@ from relaysms_adapter_sdk.errors import AdapterError
 from relaysms_adapter_sdk.manifest import (
     Category,
     ConfigError,
+    Field,
     FieldType,
     Manifest,
     ManifestError,
     Protocol,
 )
-from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, CREDENTIALS_FILE, STATE_DIR_ENV
+from relaysms_adapter_sdk.paths import (
+    CONFIG_DIR_ENV,
+    CREDENTIALS_FILE,
+    STATE_DIR_ENV,
+    write_config,
+)
 from relaysms_adapter_sdk.types import (
     Account,
     Attachment,
@@ -158,12 +164,8 @@ def setup(ws: Workspace, args: argparse.Namespace) -> None:
     if not ws.manifest.setup:
         raise ConsoleError(f"This adapter has no setup; write its {CREDENTIALS_FILE}.")
     inputs = manifest.parse_inputs(ws.manifest.setup, args.input)
-    for field in ws.manifest.setup:
-        if field.required and field.name not in inputs:
-            answer = Prompt.ask(field.description or field.name, password=field.secret)
-            # The question asks for a file's path, which from_text takes as @path.
-            text = f"@{answer}" if field.type is FieldType.FILE else answer
-            inputs[field.name] = manifest.from_text(field, text)
+    unanswered = [f for f in ws.manifest.setup if f.required and f.name not in inputs]
+    inputs |= manifest.ask_values(unanswered, _ask)
     inputs = manifest.check_values(ws.manifest.setup, inputs, require_all=True)
 
     result = call(ws, "setup", SetupRequest(inputs))
@@ -171,8 +173,7 @@ def setup(ws: Workspace, args: argparse.Namespace) -> None:
     settings = manifest.check_values(
         ws.manifest.config, result["settings"], require_all=True
     )
-    path = ws.config_dir / CREDENTIALS_FILE
-    _write_secret_json(path, settings)
+    path = write_config(settings, directory=ws.config_dir)
     console.print(Text(f"Saved {path}.", style="green"))
 
 
@@ -376,13 +377,13 @@ def _load_account(ws: Workspace) -> dict[str, Any]:
 
 
 def _save_account(ws: Workspace, account: dict[str, Any]) -> None:
-    _write_secret_json(ws.account_file, account)
+    write_config(account, ws.account_file.name, ws.account_file.parent)
 
 
-def _write_secret_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    path.chmod(0o600)
+def _ask(field: Field) -> str:
+    if field.type is FieldType.FILE:
+        return Prompt.ask(f"{field.description or field.name} (path)")
+    return Prompt.ask(field.description or field.name, password=field.secret)
 
 
 def _show_log(line: str) -> None:

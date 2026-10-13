@@ -59,6 +59,7 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 | `auth.logout` | A web session ends |
 | `platforms.add`, `platforms.update`, `platforms.remove` | An adapter is installed, updated or removed. `details` has the source URL and commits. |
 | `platforms.enable`, `platforms.disable` | An adapter is offered to users again, or hidden from them |
+| `platforms.configure`, `platforms.setup` | An adapter's settings are changed, or set up from inputs. `details` has the keys saved. |
 | `gateway_clients.create`, `gateway_clients.update`, `gateway_clients.delete` | A gateway client changes. `details` has its fields, or what changed. |
 | `gateway_clients.enable`, `gateway_clients.disable` | A gateway client is listed publicly again, or hidden |
 

@@ -3,7 +3,7 @@
 
 import re
 import tomllib
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -162,8 +162,13 @@ def missing_values(fields: Iterable[Field], values: dict[str, Any]) -> list[str]
     return [
         field.name
         for field in fields
-        if field.required and values.get(field.name) in (None, "", [])
+        if field.required and not has_value(values.get(field.name))
     ]
+
+
+def has_value(value: Any) -> bool:
+    """Whether a setting counts as set: None, "" and [] don't."""
+    return value not in (None, "", [])
 
 
 def parse_inputs(fields: Iterable[Field], texts: Iterable[str]) -> dict[str, Any]:
@@ -187,6 +192,24 @@ def parse_inputs(fields: Iterable[Field], texts: Iterable[str]) -> dict[str, Any
         return lowercase_keys(pairs)
     except ValueError as e:
         raise ConfigError(str(e)) from None
+
+
+def ask_values(fields: Iterable[Field], ask: Callable[[Field], str]) -> dict[str, Any]:
+    """Ask for each field's value as text and convert it.
+
+    ask gets the field and returns the answer; for a file field, the answer is
+    the file's path.
+
+    Raises:
+        ConfigError: An answer can't be converted (see from_text).
+    """
+    values = {}
+    for field in fields:
+        answer = ask(field)
+        if field.type is FieldType.FILE:
+            answer = f"@{answer}"
+        values[field.name] = from_text(field, answer)
+    return values
 
 
 def from_text(field: Field, text: str) -> Any:

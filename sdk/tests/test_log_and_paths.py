@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from relaysms_adapter_sdk import config_dir, log, read_config, state_dir
+from relaysms_adapter_sdk import config_dir, log, read_config, state_dir, write_config
 from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 
 
@@ -101,6 +101,18 @@ class TestPaths:
         (tmp_path / "credentials.json").write_text(content)
         with pytest.raises(ValueError, match=error):
             read_config()
+
+    def test_write_config_replaces_the_file_for_its_owner_only(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv(CONFIG_DIR_ENV, str(tmp_path / "config"))
+        write_config({"a": 1})
+        path = write_config({"b": 2})
+
+        assert read_config() == {"b": 2}
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert (tmp_path / "config").stat().st_mode & 0o777 == 0o700
+        assert [p.name for p in (tmp_path / "config").iterdir()] == ["credentials.json"]
 
     def test_unset(self, monkeypatch):
         monkeypatch.delenv(CONFIG_DIR_ENV, raising=False)

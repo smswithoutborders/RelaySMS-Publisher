@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import json
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -9,7 +11,13 @@ from publisher import db
 from publisher.cli import platforms as platforms_cli
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.platform_adapter import OAUTH2, PNBA
-from tests.helpers import adapter_repo, add_adapter, commit_manifest, link_account
+from tests.helpers import (
+    adapter_repo,
+    add_adapter,
+    add_adapter_with_manifest,
+    commit_manifest,
+    link_account,
+)
 
 pytestmark = pytest.mark.usefixtures("platforms_config", "fake_adapter_build")
 
@@ -146,3 +154,100 @@ def test_update_with_a_tag_needs_an_adapter_name():
 
     assert result.exit_code == 2
     assert "--tag needs an adapter name" in result.output
+
+
+RMAIL_MANIFEST = """
+entry = "rmail:Adapter"
+name = "rmail"
+display_name = "RelaySMS Mail"
+protocol = "pnba"
+category = "email"
+
+[config.smtp_host]
+required = true
+
+[config.smtp_port]
+type = "integer"
+
+[config.smtp_password]
+secret = true
+
+[setup.client_file]
+type = "file"
+required = true
+"""
+
+
+@pytest.fixture
+def rmail():
+    adapter = add_adapter_with_manifest("rmail", PNBA, RMAIL_MANIFEST)
+    return Path(adapter.config_path) / "credentials.json"
+
+
+def test_config_set_asks_for_bare_keys_without_echoing(rmail):
+    result = CliRunner().invoke(
+        platforms_cli.cli,
+        [
+            "config",
+            "set",
+            "rmail",
+            "SMTP_HOST=smtp.example",
+            "smtp_port=465",
+            "smtp_password",
+        ],
+        input="hunter2\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "hunter2" not in result.output
+    assert json.loads(rmail.read_text()) == {
+        "smtp_host": "smtp.example",
+        "smtp_port": 465,
+        "smtp_password": "hunter2",
+    }
+
+
+def test_config_show_hides_secrets_and_unset_removes(rmail):
+    rmail.parent.mkdir(parents=True)
+    rmail.write_text('{"smtp_host": "smtp.example", "smtp_password": "hunter2"}')
+    runner = CliRunner()
+
+    shown = runner.invoke(platforms_cli.cli, ["config", "show", "rmail"]).output
+    assert "smtp.example" in shown
+    assert "(secret, set)" in shown
+    assert "hunter2" not in shown
+
+    result = runner.invoke(
+        platforms_cli.cli, ["config", "set", "rmail", "--unset", "smtp_password"]
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(rmail.read_text()) == {"smtp_host": "smtp.example"}
+
+
+def test_config_set_refuses_values_of_the_wrong_type(rmail):
+    result = CliRunner().invoke(
+        platforms_cli.cli, ["config", "set", "rmail", "smtp_port=25a"]
+    )
+
+    assert result.exit_code == 1
+    assert "smtp_port must be a whole number" in result.output
+    assert not rmail.exists()
+
+
+@pytest.mark.parametrize("given", ["--input", None])
+def test_setup_reads_file_inputs(rmail, adapter_calls, tmp_path, given):
+    (tmp_path / "client.json").write_text('{"web": {}}')
+    adapter_calls.results["setup"] = {"settings": {"smtp_host": "h"}}
+    if given:
+        args, answers = ["--input", f"client_file=@{tmp_path}/client.json"], None
+    else:
+        args, answers = [], f"{tmp_path}/client.json\n"
+
+    result = CliRunner().invoke(
+        platforms_cli.cli, ["setup", "rmail", *args], input=answers
+    )
+
+    assert result.exit_code == 0, result.output
+    [(_, _, request)] = adapter_calls.calls
+    assert request.inputs == {"client_file": '{"web": {}}'}
+    assert json.loads(rmail.read_text()) == {"smtp_host": "h"}

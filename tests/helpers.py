@@ -41,6 +41,16 @@ def add_adapter(name: str, proto_id: int, cat_id: int = 0) -> PlatformAdapter:
     return adapter
 
 
+def add_adapter_with_manifest(
+    name: str, proto_id: int, manifest: str
+) -> PlatformAdapter:
+    """Register an adapter row and write its adapter.toml where the code goes."""
+    adapter = add_adapter(name, proto_id)
+    Path(adapter.path).mkdir(parents=True)
+    (Path(adapter.path) / "adapter.toml").write_text(manifest)
+    return adapter
+
+
 def link_account(platform: str, proto_id: int) -> int:
     """Store a token as linking an account would; return its row id."""
     with db.get_session() as session:

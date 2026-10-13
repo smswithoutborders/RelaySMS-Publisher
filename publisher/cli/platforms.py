@@ -10,7 +10,9 @@ from publisher.cli.db import session
 from publisher.cli.output import print_table
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.platform_adapter import PlatformAdapter
-from publisher.platforms import ipc, manager
+from publisher.platforms import adapter_config, ipc, manager
+from relaysms_adapter_sdk import manifest
+from relaysms_adapter_sdk.manifest import ConfigError, Field, FieldType
 
 
 def _filter_options(command):
@@ -198,6 +200,120 @@ def list_command(name, proto_id, cat_id):
         ],
         "No matching adapters found.",
     )
+
+
+@cli.group(name="config")
+def config_group():
+    """Show and change an adapter's settings, the credentials.json it reads."""
+
+
+@config_group.command(name="show")
+@click.argument("name")
+@_filter_options
+def config_show(name, proto_id, cat_id):
+    """Show an adapter's settings; secrets only show whether they're set."""
+    with session() as db:
+        adapter = _find_one(db, name, proto_id, cat_id)
+        settings = adapter_config.show(adapter)
+
+    print_table(
+        ["Setting", "Value", "Required", "Description"],
+        [
+            [
+                s.field.name,
+                _shown_value(s),
+                "✓" if s.field.required else "-",
+                s.field.description or "",
+            ]
+            for s in settings
+        ],
+        f"Adapter {name!r} declares no settings.",
+    )
+
+
+@config_group.command(name="set")
+@click.argument("name")
+@click.argument("values", nargs=-1, metavar="[KEY=VALUE|KEY]...")
+@click.option("--unset", multiple=True, metavar="KEY", help="Remove a setting.")
+@_filter_options
+def config_set(name, values, unset, proto_id, cat_id):
+    """Change some settings and keep the rest.
+
+    Give a bare KEY to be asked for its value. Lists are comma-separated.
+    """
+    if not values and not unset:
+        raise click.UsageError("Give a setting to change, or --unset one.")
+    adapter = _adapter(name, proto_id, cat_id)
+    changes = _values(adapter_config.load_manifest(adapter).config, values)
+    changes |= dict.fromkeys(unset)
+    with session() as db:
+        adapter_config.update(db, _current(db, adapter), changes)
+    click.echo(f"Saved the settings of {name!r}.")
+
+
+@cli.command()
+@click.argument("name")
+@click.option(
+    "--input",
+    "inputs",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Repeatable; KEY=@PATH for a file. Asks for required inputs not given.",
+)
+@_filter_options
+def setup(name, inputs, proto_id, cat_id):
+    """Run an adapter's setup, such as registering an app, and save its settings."""
+    adapter = _adapter(name, proto_id, cat_id)
+    fields = adapter_config.load_manifest(adapter).setup
+    given = {text.partition("=")[0].lower() for text in inputs}
+    unanswered = [f.name for f in fields if f.required and f.name not in given]
+    values = _values(fields, [*inputs, *unanswered])
+    with session() as db:
+        adapter_config.setup(db, _current(db, adapter), values)
+    click.echo(f"Saved the settings of {name!r}.")
+
+
+def _adapter(name, proto_id, cat_id) -> PlatformAdapter:
+    with session() as db:
+        return _find_one(db, name, proto_id, cat_id)
+
+
+def _current(db, adapter: PlatformAdapter) -> PlatformAdapter:
+    current = db.get(PlatformAdapter, adapter.id)
+    if current is None:
+        raise click.ClickException(f"Adapter {adapter.name!r} was removed.")
+    return current
+
+
+def _values(fields: tuple[Field, ...], texts) -> dict:
+    """Read KEY=VALUE texts, asking for the value of each bare KEY."""
+    by_name = {field.name: field for field in fields}
+    asked = []
+    for key in (text for text in texts if "=" not in text):
+        if key.lower() not in by_name:
+            raise click.ClickException(f"{key} isn't a setting of this adapter.")
+        asked.append(by_name[key.lower()])
+    try:
+        values = manifest.parse_inputs(fields, [t for t in texts if "=" in t])
+        return values | manifest.ask_values(asked, _ask)
+    except ConfigError as e:
+        raise click.ClickException(str(e)) from e
+
+
+def _ask(field: Field) -> str:
+    question = field.description or field.name
+    if field.type is FieldType.FILE:
+        return click.prompt(f"{question} (path)")
+    return click.prompt(question, hide_input=field.secret)
+
+
+def _shown_value(setting: adapter_config.Setting) -> str:
+    if setting.field.secret:
+        return "(secret, set)" if setting.is_set else "(secret, not set)"
+    if not setting.is_set:
+        return "-"
+    value = setting.value
+    return ", ".join(value) if isinstance(value, list) else str(value)
 
 
 @cli.command(name="import")

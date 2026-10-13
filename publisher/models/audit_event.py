@@ -33,6 +33,8 @@ class AuditAction(StrEnum):
     PLATFORMS_REMOVE = "platforms.remove"
     PLATFORMS_ENABLE = "platforms.enable"
     PLATFORMS_DISABLE = "platforms.disable"
+    PLATFORMS_CONFIGURE = "platforms.configure"
+    PLATFORMS_SETUP = "platforms.setup"
     GATEWAY_CLIENTS_CREATE = "gateway_clients.create"
     GATEWAY_CLIENTS_UPDATE = "gateway_clients.update"
     GATEWAY_CLIENTS_ENABLE = "gateway_clients.enable"

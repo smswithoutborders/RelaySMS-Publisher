@@ -140,7 +140,7 @@ venv/bin/relaysms-adapter revoke
 
 Adapters pin SDK releases, so the Publisher talks to older ones.
 
-- Keep requests, results, errors and `adapter.toml` backward compatible: add optional fields, never rename or remove them.
+- Keep requests, results, errors and `adapter.toml` backward compatible.
 - Bump `version` in `pyproject.toml` with every change to `src/`; CI checks.
 - Release by pushing `sdk-v` plus the version, such as `sdk-v1.1.0`.
 

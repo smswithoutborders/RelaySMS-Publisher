@@ -202,6 +202,16 @@ def test_from_text_rejects_other_types(field, text):
         manifest.from_text(field, text)
 
 
+def test_ask_values_converts_answers_and_reads_files(tmp_path):
+    (tmp_path / "client.json").write_text("{}")
+    fields = (Field("port", FieldType.INTEGER), CLIENT_FILE)
+    answers = {"port": "465", "client_file": str(tmp_path / "client.json")}
+
+    values = manifest.ask_values(fields, lambda field: answers[field.name])
+
+    assert values == {"port": 465, "client_file": "{}"}
+
+
 @pytest.mark.parametrize("host", [None, "", []])
 def test_unset_required_fields_are_missing(host):
     assert manifest.missing_values(FIELDS, {"host": host}) == ["host"]

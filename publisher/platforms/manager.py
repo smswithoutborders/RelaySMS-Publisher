@@ -27,6 +27,7 @@ from publisher.models.credential import Credential
 from publisher.models.platform_adapter import PROTOCOL_NAMES, PlatformAdapter
 from relaysms_adapter_sdk.manifest import Category, Manifest, ManifestError, Protocol
 from relaysms_adapter_sdk.manifest import load as load_manifest
+from relaysms_adapter_sdk.paths import CREDENTIALS_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ def _apply_manifest(adapter: PlatformAdapter, manifest: Manifest) -> None:
     adapter.icon_png = manifest.icon_png
 
 
-def _flush(session: Session, adapter: PlatformAdapter) -> None:
+def flush(session: Session, adapter: PlatformAdapter) -> None:
     # Read before flushing: a failed flush expires the adapter's attributes.
     name, proto_id = adapter.name, adapter.proto_id
     try:
@@ -226,7 +227,7 @@ def _register(session: Session, adapter: PlatformAdapter, manifest: Manifest) ->
     try:
         _apply_manifest(adapter, manifest)
         session.add(adapter)
-        _flush(session, adapter)
+        flush(session, adapter)
     except AdapterError:
         _discard_build(adapter)
         raise
@@ -333,7 +334,7 @@ def set_enabled(
         return
     adapter.is_enabled = enabled
     adapter.updated_by = actor.id if actor else None
-    _flush(session, adapter)
+    flush(session, adapter)
     action = AuditAction.PLATFORMS_ENABLE if enabled else AuditAction.PLATFORMS_DISABLE
     audit_event.record(session, action, actor=actor, target=adapter)
 
@@ -372,7 +373,7 @@ def remove(
         },
     )
     session.delete(adapter)
-    _flush(session, adapter)
+    flush(session, adapter)
 
 
 def import_from_disk(session: Session) -> list[PlatformAdapter]:
@@ -420,8 +421,8 @@ def move_files_out_of_code(session: Session) -> list[PlatformAdapter]:
     legacy_state_dir = PlatformsConfig.get().adapters_state_dir.parent / "assets"
     changed = []
     for adapter in platform_adapters.find(session, include_disabled=True):
-        credentials = Path(adapter.path) / "credentials.json"
-        config = Path(adapter.config_path) / "credentials.json"
+        credentials = Path(adapter.path) / CREDENTIALS_FILE
+        config = Path(adapter.config_path) / CREDENTIALS_FILE
         legacy_state = legacy_state_dir / adapter.id
         state = Path(adapter.state_path)
         moved = False

@@ -14,6 +14,9 @@ Each platform (Gmail, X, Telegram, ...) is served by an adapter installed from i
 ./publisher.sh platforms disable <NAME>                     # hide it from users; it still revokes tokens
 ./publisher.sh platforms enable <NAME>                      # offer it again
 ./publisher.sh platforms remove <NAME> [--force]            # uninstall
+./publisher.sh platforms config show <NAME>                 # its settings, without secret values
+./publisher.sh platforms config set <NAME> KEY=VALUE|KEY    # change settings; a bare KEY asks for the value
+./publisher.sh platforms setup <NAME> [--input KEY=VALUE]   # run the adapter's setup and save its settings
 ./publisher.sh platforms import                             # register adapter directories, move their files out of the code
 ./publisher.sh platforms exec <NAME> -- <COMMAND> [ARGS]    # run a command the adapter installs
 ```
@@ -44,6 +47,22 @@ An update builds the new version and its virtualenv beside the running one, then
 | `PLATFORMS_ADAPTERS_STATE_DIR/<id>` | What it writes, such as databases |
 
 `<id>` is the ID column of `platforms list`.
+
+## Settings
+
+An adapter reads its settings, such as API keys, from `credentials.json` in its config directory. Its `adapter.toml` declares each one. Lists are comma-separated.
+
+```bash
+./publisher.sh platforms config set rmail smtp_host=smtp.example.com smtp_port=465
+./publisher.sh platforms config set rmail smtp_password
+./publisher.sh platforms config set rmail --unset alias_prefix
+```
+
+`config set` changes only the keys given. `setup` is for adapters whose settings come from the platform, such as an app it registers or a file its console downloads; it replaces the whole file. `--input KEY=@PATH` reads a file:
+
+```bash
+./publisher.sh platforms setup gmail --input client_file=@client_secret.json
+```
 
 ## An Adapter's Own Commands
 

@@ -7,6 +7,7 @@ the adapter writes goes in the state directory.
 
 import json
 import os
+import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,25 @@ def read_config(
     if not isinstance(data, dict):
         raise ValueError(f"{path} must hold a JSON object.")
     return data
+
+
+def write_config(
+    settings: dict[str, Any],
+    filename: str = CREDENTIALS_FILE,
+    directory: Path | None = None,
+) -> Path:
+    """Atomically replace a JSON file in the config directory, readable by its owner."""
+    path = (directory or config_dir()) / filename
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{filename}-")
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            json.dump(settings, file, indent=2)
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    return path
 
 
 def lowercase_keys(pairs: Iterable[tuple[str, Any]]) -> dict[str, Any]:

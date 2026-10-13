@@ -3534,6 +3534,8 @@
           "platforms.remove",
           "platforms.enable",
           "platforms.disable",
+          "platforms.configure",
+          "platforms.setup",
           "gateway_clients.create",
           "gateway_clients.update",
           "gateway_clients.enable",
