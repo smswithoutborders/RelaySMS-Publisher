@@ -76,17 +76,17 @@ def _actions():
         return list(session.scalars(select(AuditEvent.action).order_by(AuditEvent.id)))
 
 
-def _install(url, tag=None, **options):
+def _install(url, tag=None):
     with db.get_session() as session:
-        adapter = manager.install(session, str(url), tag, log=[], **options)
+        adapter = manager.install(session, str(url), tag, log=[])
     manager.activate(adapter)
     return adapter.id, adapter.tag
 
 
-def _update(adapter_id, tag=None, **options):
+def _update(adapter_id, tag=None):
     with db.get_session() as session:
         adapter = session.get(PlatformAdapter, adapter_id)
-        manager.update(session, adapter, tag, log=[], **options)
+        manager.update(session, adapter, tag, log=[])
     manager.activate(adapter)
 
 
@@ -135,15 +135,11 @@ def test_install_a_named_tag(tmp_path):
 
 
 @pytest.mark.usefixtures("test_db")
-def test_an_untagged_repo_installs_only_from_its_branch(tmp_path):
+def test_an_untagged_repo_is_refused(tmp_path):
     repo = adapter_repo(tmp_path / "src", tag=None)
 
     with pytest.raises(manager.AdapterError, match="no version tags"):
         _install(repo.working_tree_dir)
-    adapter_id, tag = _install(repo.working_tree_dir, branch=True)
-
-    assert tag is None
-    assert _adapter(adapter_id).commit == repo.head.commit.hexsha
 
 
 @pytest.mark.usefixtures("test_db")

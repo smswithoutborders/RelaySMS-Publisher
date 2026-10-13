@@ -1,12 +1,7 @@
 [tool.ruff]
 target-version = "py312"
 line-length = 88
-# protocol_interfaces.py is copied verbatim into adapter repositories.
-extend-exclude = [
-  "protos",
-  "lib_relaysms_payload_specs",
-  "platforms/protocol_interfaces.py",
-]
+extend-exclude = ["protos", "lib_relaysms_payload_specs"]
 
 [tool.ruff.lint]
 preview = true
@@ -64,7 +59,8 @@ venv = "venv"
 exclude = [
   "protos",
   "lib_relaysms_payload_specs",
-  "platforms/adapters",
+  "data",
+  "platforms",
   "venv",
   "**/__pycache__",
 ]

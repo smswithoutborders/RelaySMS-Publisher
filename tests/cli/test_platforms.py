@@ -141,15 +141,8 @@ def test_add_and_update_take_a_version(tmp_path):
     assert "Updated 'mastodon' to v2.0.0" in updated.output
 
 
-@pytest.mark.parametrize(
-    "args, error",
-    [
-        (["add", "url", "--tag", "v1.0.0", "--branch"], "either --tag or --branch"),
-        (["update", "--tag", "v1.0.0"], "--tag needs an adapter name"),
-    ],
-)
-def test_version_flags_are_checked(args, error):
-    result = _run(*args)
+def test_update_with_a_tag_needs_an_adapter_name():
+    result = _run("update", "--tag", "v1.0.0")
 
     assert result.exit_code == 2
-    assert error in result.output
+    assert "--tag needs an adapter name" in result.output

@@ -4450,7 +4450,7 @@
               }
             ],
             "title": "Tag",
-            "description": "Null for a default-branch clone."
+            "description": "Null for an adapter registered by `platforms import`."
           },
           "commit": {
             "type": "string",

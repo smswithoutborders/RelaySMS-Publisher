@@ -188,7 +188,9 @@ class AuditEventPage(PageLinks):
 class PlatformAdapterInfo(PlatformManifest):
     id: str
     source_url: str
-    tag: str | None = Field(None, description="Null for a default-branch clone.")
+    tag: str | None = Field(
+        None, description="Null for an adapter registered by `platforms import`."
+    )
     commit: str
     enabled: bool
     created_at: datetime.datetime

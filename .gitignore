@@ -2,8 +2,6 @@ config.ini
 */config.ini
 *.sw*
 configs/config.ini
-platforms/list.txt
-platforms/available/*
 *.sh
 !install.sh
 !manage.sh
@@ -130,6 +128,11 @@ venv/
 
 # Runtime data: adapters, their venvs and assets, gateway client imports
 /data/
+# Runtime data an install kept here before data/ existed. It can hold adapter
+# credentials and gateway client numbers, so it stays ignored until
+# scripts/migrate-runtime-data.sh moves it.
+/platforms/
+/gateway_clients/
 ENV/
 env.bak/
 venv.bak/

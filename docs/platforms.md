@@ -22,7 +22,7 @@ Commands taking a name also take `--proto-id` and `--cat-id`, for when a name ma
 
 ## Versions
 
-Adapters are installed and updated by version tag, such as `v1.2.0`. For a repository without tags yet, pass `--branch` to use its default branch.
+Adapters are installed and updated by version tag, such as `v1.2.0`, so a repository needs one before it can be added.
 
 An update builds the new version and its virtualenv beside the running one, then switches over, so a failed update leaves the running version in place.
 

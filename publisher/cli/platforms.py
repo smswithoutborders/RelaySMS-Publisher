@@ -40,34 +40,22 @@ def cli():
     """Manage platform adapters."""
 
 
-def _version_options(command):
-    command = click.option(
-        "--branch",
-        is_flag=True,
-        help="Use the default branch, for repositories without version tags yet.",
-    )(command)
-    return click.option(
-        "--tag", help="Version tag to install. Defaults to the newest."
-    )(command)
-
-
-def _check_version(tag, branch):
-    if tag and branch:
-        raise click.UsageError("Pass either --tag or --branch, not both.")
+_tag_option = click.option(
+    "--tag", help="Version tag to install. Defaults to the newest."
+)
 
 
 def _describe(adapter):
-    return f"{adapter.tag or 'default branch'} ({adapter.commit[:12]})"
+    return f"{adapter.tag or 'untagged'} ({adapter.commit[:12]})"
 
 
 @cli.command()
 @click.argument("github_url")
-@_version_options
-def add(github_url, tag, branch):
+@_tag_option
+def add(github_url, tag):
     """Add an adapter from a GitHub repository."""
-    _check_version(tag, branch)
     with session() as db:
-        adapter = manager.install(db, github_url, tag, branch=branch, log=[])
+        adapter = manager.install(db, github_url, tag, log=[])
     manager.activate(adapter)
     click.echo(f"Adapter {adapter.name!r} added at {_describe(adapter)}.")
 
@@ -141,10 +129,9 @@ def exec_(name, proto_id, cat_id, cli_args):
 @cli.command()
 @click.argument("name", required=False)
 @_filter_options
-@_version_options
-def update(name, proto_id, cat_id, tag, branch):
+@_tag_option
+def update(name, proto_id, cat_id, tag):
     """Move one adapter, or all of them, to a new version."""
-    _check_version(tag, branch)
     if tag and not name:
         raise click.UsageError("--tag needs an adapter name.")
     with session() as db:
@@ -162,7 +149,7 @@ def update(name, proto_id, cat_id, tag, branch):
                 adapter = db.get(PlatformAdapter, adapter_id)
                 if adapter is None:
                     continue
-                manager.update(db, adapter, tag, branch=branch, log=[])
+                manager.update(db, adapter, tag, log=[])
             manager.activate(adapter)
             click.echo(f"Updated {adapter.name!r} to {_describe(adapter)}.")
         except click.ClickException as e:

@@ -190,10 +190,8 @@ def _discard_build(adapter: PlatformAdapter) -> None:
     _rmtree(_beside(adapter.venv_path, "new"))
 
 
-def _build(
-    adapter: PlatformAdapter, tag: str | None, log: list[str]
-) -> tuple[str, Manifest]:
-    """Clone tag, or the default branch, and its venv next to the running version.
+def _build(adapter: PlatformAdapter, tag: str, log: list[str]) -> tuple[str, Manifest]:
+    """Clone tag and build its venv next to the running version.
 
     Returns the commit and the manifest.
     """
@@ -234,10 +232,6 @@ def _register(session: Session, adapter: PlatformAdapter, manifest: Manifest) ->
         raise
 
 
-def _resolve_tag(url: str, tag: str | None, branch: bool) -> str | None:
-    return None if branch else tag or latest_tag(url)
-
-
 def activate(adapter: PlatformAdapter) -> None:
     """Move a built version into place. Call it after the install or update commits.
 
@@ -265,22 +259,22 @@ def install(
     url: str,
     tag: str | None = None,
     *,
-    branch: bool = False,
     actor: Credential | None = None,
     log: list[str],
 ) -> PlatformAdapter:
-    """Build and register url at tag, its newest tag, or its default branch."""
+    """Build and register url at tag, or its newest version tag."""
     url = url.strip()
+    tag = tag or latest_tag(url)
     adapter = PlatformAdapter(
         id=adapter_id(url),
         source_url=url,
-        tag=_resolve_tag(url, tag, branch),
+        tag=tag,
         created_by=actor.id if actor else None,
         updated_by=actor.id if actor else None,
     )
     if session.get(PlatformAdapter, adapter.id) or Path(adapter.path).exists():
         raise AdapterError(f"Adapter from {url} is already installed")
-    adapter.commit, manifest = _build(adapter, adapter.tag, log)
+    adapter.commit, manifest = _build(adapter, tag, log)
     _register(session, adapter, manifest)
 
     audit_event.record(
@@ -302,15 +296,14 @@ def update(
     adapter: PlatformAdapter,
     tag: str | None = None,
     *,
-    branch: bool = False,
     actor: Credential | None = None,
     log: list[str],
 ) -> None:
-    """Register tag, the newest version tag, or the default branch for an adapter."""
-    tag = _resolve_tag(adapter.source_url, tag, branch)
+    """Register tag, or the newest version tag, for an adapter."""
+    tag = tag or latest_tag(adapter.source_url)
     commit, manifest = _build(adapter, tag, log)
     # A tag that now names other code was moved, which a release shouldn't do.
-    if tag and tag == adapter.tag and commit != adapter.commit:
+    if tag == adapter.tag and commit != adapter.commit:
         _discard_build(adapter)
         raise AdapterError(
             f"Tag {tag} of {adapter.name!r} now points to {commit[:12]}, "

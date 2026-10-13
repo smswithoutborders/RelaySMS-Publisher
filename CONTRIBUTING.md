@@ -229,9 +229,6 @@ The hooks enforce formatting, lint, types and commit messages. These rules are c
 
 Shell scripts follow one layout: `#!/usr/bin/env bash`, the SPDX line, `set -Eeuo pipefail`, then `source` `scripts/lib.sh` for logging, errors and shared helpers. Scripts with options parse them in `parse_args` and run from `main "$@"`. `install.sh` is the one exception: piped through curl, it clones the repo first and re-runs from the clone.
 
-> [!WARNING]
-> `platforms/protocol_interfaces.py` is excluded from every tool because adapters copy it verbatim. Keep changes to it backwards compatible.
-
 ## Testing
 
 ```bash
