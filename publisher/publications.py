@@ -449,7 +449,8 @@ def _message(content: rrs.V1ContentsContainer) -> Message:
         attachments = (Attachment(data=data, filename=filename, mimetype=mimetype),)
 
     body = content.get_body().decode()
-    match content.get_cat_id():
+    cat_id = content.get_cat_id()
+    match cat_id:
         case rrs.V1ContentCategories.TEXT:
             return Message(body=body, attachments=attachments)
         case rrs.V1ContentCategories.MESSAGE:
@@ -463,6 +464,5 @@ def _message(content: rrs.V1ContentsContainer) -> Message:
                 subject=(content.get_subject() or b"").decode(),
                 attachments=attachments,
             )
-        case cat_id:
-            logger.error("Content category not supported: %r", cat_id)
-            raise PayloadNotSupportedError(f"Unsupported content category: {cat_id!r}")
+    logger.error("Content category not supported: %r", cat_id)
+    raise PayloadNotSupportedError(f"Unsupported content category: {cat_id!r}")

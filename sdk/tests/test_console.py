@@ -64,7 +64,7 @@ class TestPNBA:
         answer(monkeypatch, "+237", "123456")
         assert run(repo, "link") == 0
         assert account(repo)["identifier"] == "+237"
-        assert "Code for +237 is 123456" in capsys.readouterr().out
+        assert "Code sent." in capsys.readouterr().out
 
         answer(monkeypatch, "+1", "hello")
         assert run(repo, "send") == 0

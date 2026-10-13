@@ -29,7 +29,7 @@ class EchoAdapter(PNBAAdapter):
 
     @override
     def send_code(self, request: CodeRequest) -> CodeSent:
-        logger.info("Code for %s is %s", request.phone_number, self.code)
+        logger.info("Code sent.")
         return CodeSent(message="Code sent.")
 
     @override

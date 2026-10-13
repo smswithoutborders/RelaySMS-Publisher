@@ -78,7 +78,7 @@ def test_link_and_send(env, tmp_path):
     assert {
         "level": "INFO",
         "logger": "echo_adapter.adapter",
-        "message": "Code for +237 is 123456",
+        "message": "Code sent.",
     } in logs
 
 
