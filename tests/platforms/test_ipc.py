@@ -1,84 +1,107 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""The JSON-over-stdio contract with adapter processes, using a real subprocess."""
+"""Calls into a real adapter process built on the SDK."""
 
 import logging
 import sys
-from types import SimpleNamespace
 
 import pytest
 
+from publisher.models.platform_adapter import PlatformAdapter
 from publisher.platforms import ipc
+from relaysms_adapter_sdk import (
+    Account,
+    AdapterError,
+    AuthorizationRequest,
+    CodeExchangeRequest,
+    InvalidParamsError,
+    Message,
+    RevokeRequest,
+    SendRequest,
+)
+from relaysms_adapter_sdk.errors import INTERNAL_ERROR
 
 ADAPTER = """
-import json, sys
+import logging, os, sys
 
-request = json.load(sys.stdin)
-method, params = request["method"], request["params"]
-if method == "echo":
-    print(json.dumps({"result": params}))
-elif method == "reject":
-    print(json.dumps({"error": "rejected"}))
-elif method == "crash":
-    print("boom", file=sys.stderr)
-    sys.exit(3)
-elif method == "garbage":
-    print('{"result": {"access_token": "s3cret"')
-elif method == "warn":
-    print("2026-01-01 00:00:00,000 - adapter - WARNING - careful", file=sys.stderr)
-    print(json.dumps({"result": True}))
+from relaysms_adapter_sdk import (
+    AuthorizationUrl, InvalidParamsError, OAuth2Adapter, SendResult,
+)
+
+
+class Fake(OAuth2Adapter):
+    def create_authorization_url(self, request):
+        logging.getLogger("fake").warning("careful")
+        return AuthorizationUrl(url="https://auth", state=request.state)
+
+    def exchange_code(self, request):
+        raise InvalidParamsError("bad code")
+
+    def send_message(self, request):
+        return SendResult(token=dict(os.environ))
+
+    def revoke(self, request):
+        sys.exit(3)
 """
 
 
 @pytest.fixture
-def adapter(tmp_path):
-    """Paths to an adapter whose venv python is this interpreter."""
-    (tmp_path / "adapter").mkdir()
-    (tmp_path / "adapter" / "main.py").write_text(ADAPTER)
-    (tmp_path / "venv" / "bin").mkdir(parents=True)
-    (tmp_path / "venv" / "bin" / "python3").symlink_to(sys.executable)
-    return SimpleNamespace(path=str(tmp_path / "adapter"), venv=str(tmp_path / "venv"))
+def adapter(platforms_config, tmp_path):
+    """An installed adapter whose venv runs this interpreter."""
+    adapter = PlatformAdapter(id="fake-0", name="fake")
+    code = tmp_path / "adapters" / "fake-0"
+    code.mkdir(parents=True)
+    (code / "adapter.toml").write_text(
+        'entry = "fake_adapter:Fake"\nname = "fake"\ndisplay_name = "Fake"\n'
+        'protocol = "oauth2"\ncategory = "text"\n'
+    )
+    (code / "fake_adapter.py").write_text(ADAPTER)
+    python = tmp_path / "venvs" / "fake-0" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    python.chmod(0o755)
+    return adapter
 
 
-def test_params_reach_the_adapter_and_its_result_comes_back(adapter):
-    assert ipc.invoke(adapter.path, adapter.venv, "echo", {"to": "a@b.c"}) == {
-        "result": {"to": "a@b.c"},
-        "error": None,
-    }
+def test_the_result_comes_back(adapter):
+    result = ipc.call(adapter, "create_authorization_url", AuthorizationRequest("s"))
+
+    assert (result["url"], result["state"]) == ("https://auth", "s")
 
 
-def test_adapter_errors_are_passed_through(adapter):
-    assert ipc.invoke(adapter.path, adapter.venv, "reject") == {
-        "result": None,
-        "error": "rejected",
-    }
+def test_adapter_errors_keep_their_type(adapter):
+    with pytest.raises(InvalidParamsError, match="bad code"):
+        ipc.call(adapter, "exchange_code", CodeExchangeRequest(code="c"))
 
 
-def test_a_crashing_adapter_raises_with_its_stderr(adapter):
-    with pytest.raises(RuntimeError, match="boom"):
-        ipc.invoke(adapter.path, adapter.venv, "crash")
+def test_a_crashing_adapter_is_an_internal_error(adapter):
+    with pytest.raises(AdapterError, match="exited with code 3") as e:
+        ipc.call(adapter, "revoke", RevokeRequest(Account("me")))
+
+    assert e.value.code == INTERNAL_ERROR
 
 
-def test_output_that_is_not_json_becomes_an_error_without_being_logged(adapter, caplog):
+def test_adapter_log_lines_keep_their_level(adapter, caplog):
     caplog.set_level(logging.DEBUG, logger=ipc.__name__)
 
-    result = ipc.invoke(adapter.path, adapter.venv, "garbage")
-
-    assert result["error"] == "Invalid JSON response payload."
-    assert "Malformed JSON response from adapter's garbage" in caplog.text
-    assert "s3cret" not in caplog.text
-
-
-def test_adapter_log_lines_keep_their_severity(adapter, caplog):
-    caplog.set_level(logging.DEBUG, logger=ipc.__name__)
-
-    ipc.invoke(adapter.path, adapter.venv, "warn")
+    ipc.call(adapter, "create_authorization_url", AuthorizationRequest())
 
     [record] = [r for r in caplog.records if "careful" in r.getMessage()]
     assert record.levelno == logging.WARNING
+    assert record.getMessage() == "[fake] fake: careful"
 
 
-def test_an_adapter_without_main_py_is_rejected(adapter, tmp_path):
-    (tmp_path / "adapter" / "main.py").unlink()
+def test_adapters_get_their_dirs_but_not_the_publisher_secrets(adapter, tmp_path):
+    env = ipc.call(adapter, "send_message", SendRequest(Message(body="hi")))["token"]
 
-    with pytest.raises(FileNotFoundError, match="entry point"):
-        ipc.invoke(adapter.path, adapter.venv, "echo")
+    assert env["RELAYSMS_ADAPTER_CONFIG_DIR"] == str(tmp_path / "config" / "fake-0")
+    assert env["RELAYSMS_ADAPTER_STATE_DIR"] == str(tmp_path / "state" / "fake-0")
+    assert "DATA_ENCRYPTION_KEY" not in env
+
+
+def test_an_adapter_without_a_manifest_is_an_internal_error(adapter, tmp_path):
+    (tmp_path / "adapters" / "fake-0" / "adapter.toml").unlink()
+
+    with pytest.raises(AdapterError, match=r"adapter\.toml") as e:
+        ipc.call(adapter, "revoke", RevokeRequest(Account("me")))
+
+    assert e.value.code == INTERNAL_ERROR

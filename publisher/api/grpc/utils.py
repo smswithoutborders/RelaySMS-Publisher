@@ -2,15 +2,22 @@
 """Shared helpers for gRPC service handlers."""
 
 import logging
+from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
-from grpc_interceptor.exceptions import Internal, InvalidArgument
+from grpc_interceptor.exceptions import Internal, InvalidArgument, ResourceExhausted
 
 from publisher.api.grpc.interceptors import INTERNAL_ERROR
 from publisher.db import get_session
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.platform_adapter import PlatformAdapter
 from publisher.platforms import ipc
+from relaysms_adapter_sdk import (
+    AdapterError,
+    AuthenticationError,
+    InvalidParamsError,
+    RateLimitedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +60,17 @@ def find_adapter(platform: str, proto_id: int) -> PlatformAdapter:
         return platform_adapters.get_for_protocol(s, platform, proto_id)
 
 
-def call_adapter(adapter: PlatformAdapter, method: str, params: dict) -> dict:
-    pipe = ipc.invoke(
-        adapter_path=adapter.path,
-        venv_path=adapter.venv_path,
-        method=method,
-        params=params,
-    )
-    if pipe.get("error"):
-        logger.error("Adapter error for platform %r: %s", adapter.name, pipe["error"])
-        raise Internal(INTERNAL_ERROR)
-    return pipe["result"]
+def call_adapter(adapter: PlatformAdapter, method: str, request: Any) -> dict:
+    """Call an adapter, turning its errors into gRPC errors.
+
+    Rejected input and codes reach the client; anything else is logged.
+    """
+    try:
+        return ipc.call(adapter, method, request)
+    except (InvalidParamsError, AuthenticationError) as e:
+        raise InvalidArgument(e.message) from None
+    except RateLimitedError as e:
+        raise ResourceExhausted(e.message) from None
+    except AdapterError as e:
+        logger.error("Adapter %r failed: %s", adapter.name, e.message)
+        raise Internal(INTERNAL_ERROR) from None

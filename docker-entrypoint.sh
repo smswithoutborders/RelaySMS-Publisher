@@ -13,7 +13,8 @@ export WORKERS="${WORKERS:-4}"
 export GRPC_HOST="${GRPC_HOST:-0.0.0.0}"
 
 python3 -m alembic upgrade head
-# Registers adapters installed before the registry moved to the database.
+# Registers adapters installed before the registry moved to the database, and
+# moves their files out of their code directories.
 python3 -m publisher platforms import
 
 exec "$SCRIPT_DIR/scripts/run.sh"

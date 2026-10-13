@@ -139,7 +139,9 @@ class _Reader:
         return self.get_str(name) if self.get_key(name, required=False) else None
 
     def get_path(self, name: str, default: Path) -> Path:
-        return Path(self.get_str(name) or default)
+        """Read a path; a relative one is relative to the install directory."""
+        path = Path(self.get_str(name) or default).expanduser()
+        return path if path.is_absolute() else ROOT / path
 
     def get_cron(self, name: str, default: str) -> str:
         value = self.get_str(name, default)
@@ -457,7 +459,8 @@ class CleanupConfig(Section):
 class PlatformsConfig(Section):
     adapters_dir: Path
     adapters_venv_dir: Path
-    adapters_assets_dir: Path
+    adapters_config_dir: Path
+    adapters_state_dir: Path
     github_orgs: list[str]
 
     @classmethod
@@ -472,8 +475,11 @@ class PlatformsConfig(Section):
             adapters_venv_dir=read.get_path(
                 "PLATFORMS_ADAPTERS_VENV_DIR", base / "venvs"
             ),
-            adapters_assets_dir=read.get_path(
-                "PLATFORMS_ADAPTERS_ASSETS_DIR", base / "assets"
+            adapters_config_dir=read.get_path(
+                "PLATFORMS_ADAPTERS_CONFIG_DIR", base / "config"
+            ),
+            adapters_state_dir=read.get_path(
+                "PLATFORMS_ADAPTERS_STATE_DIR", base / "state"
             ),
             github_orgs=github_orgs,
         )

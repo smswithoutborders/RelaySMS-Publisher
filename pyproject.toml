@@ -31,6 +31,9 @@ ignore = ["D1"]
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.isort]
+known-first-party = ["publisher", "relaysms_adapter_sdk", "echo_adapter"]
+
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [
   "fastapi.Body",
@@ -51,6 +54,7 @@ extend-immutable-calls = [
 "tools/client.py" = ["E501"]
 # pytest groups tests into classes that don't use self.
 "tests/*" = ["PLR6301"]
+"sdk/tests/*" = ["PLR6301"]
 
 [tool.pyright]
 typeCheckingMode = "basic"
@@ -64,6 +68,10 @@ exclude = [
   "venv",
   "**/__pycache__",
 ]
+
+[[tool.pyright.executionEnvironments]]
+root = "sdk"
+extraPaths = ["sdk/src", "sdk/examples/echo-adapter/src"]
 
 # A None where a test expects a value fails the test at runtime anyway.
 [[tool.pyright.executionEnvironments]]

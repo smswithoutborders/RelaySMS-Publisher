@@ -1,0 +1,39 @@
+name: SDK Release
+
+on:
+  push:
+    tags:
+      - "sdk-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Check the tag matches the version
+        run: |
+          version="$(python -c 'import tomllib; print(tomllib.load(open("sdk/pyproject.toml", "rb"))["project"]["version"])')"
+          if [ "$GITHUB_REF_NAME" != "sdk-v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in sdk/pyproject.toml."
+            exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          python -m venv venv
+          venv/bin/pip install --disable-pip-version-check "./sdk[console]" "$(grep '^pytest==' requirements-dev.txt)"
+          make test-sdk PYTHON=venv/bin/python
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "Adapter SDK ${GITHUB_REF_NAME#sdk-v}" --generate-notes

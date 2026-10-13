@@ -78,11 +78,11 @@ Its units are namespaced (`relaysms-publisher-acme.target`, `relaysms-publisher-
 
    ```bash
    SERVICE_USER=relaysms   # or your own user
-   sudo mkdir -p data/platforms/adapters data/platforms/venvs data/platforms/assets
+   sudo mkdir -p data/platforms/adapters data/platforms/venvs data/platforms/config data/platforms/state
    sudo chown -R "$SERVICE_USER": data && sudo chmod -R 750 data
    ```
 
-   If `.env` moves any of these paths elsewhere, create their parent directories instead: `SQLITE_DATABASE_PATH`, `CELERY_BROKER_DB_PATH`, `CELERY_RESULT_DB_PATH`, `CELERY_BEAT_SCHEDULE_PATH`, `PLATFORMS_ADAPTERS_DIR`, `PLATFORMS_ADAPTERS_VENV_DIR`, `PLATFORMS_ADAPTERS_ASSETS_DIR`.
+   If `.env` moves any of these paths elsewhere, create their parent directories instead: `SQLITE_DATABASE_PATH`, `CELERY_BROKER_DB_PATH`, `CELERY_RESULT_DB_PATH`, `CELERY_BEAT_SCHEDULE_PATH`, `PLATFORMS_ADAPTERS_DIR`, `PLATFORMS_ADAPTERS_VENV_DIR`, `PLATFORMS_ADAPTERS_CONFIG_DIR`, `PLATFORMS_ADAPTERS_STATE_DIR`.
 
 8. Apply the database migrations:
 
@@ -255,7 +255,8 @@ CELERY_BEAT_SCHEDULE_PATH=data/celerybeat-schedule
 ```bash
 PLATFORMS_ADAPTERS_DIR=data/platforms/adapters
 PLATFORMS_ADAPTERS_VENV_DIR=data/platforms/venvs
-PLATFORMS_ADAPTERS_ASSETS_DIR=data/platforms/assets
+PLATFORMS_ADAPTERS_CONFIG_DIR=data/platforms/config   # per-adapter credentials.json
+PLATFORMS_ADAPTERS_STATE_DIR=data/platforms/state     # per-adapter databases and other files
 PLATFORMS_GITHUB_ORGS=           # orgs administrators may install from over the API
 ```
 

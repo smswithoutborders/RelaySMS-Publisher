@@ -6,8 +6,11 @@ from unittest.mock import MagicMock
 import pytest
 from imap_tools import MailMessage
 
-from publisher.publications import PayloadMalformedError
+from publisher.publications import PayloadMalformedError, pseudonymize_sender
 from publisher.smtp import listener as smtp_listener
+from publisher.tasks import publication_task
+
+SENDER_HASH = "5447c1f50558292bd9df723f9fdc0b06b892199c7dcfaad5164f2d94dfd3470a"
 
 _next_uid = iter(range(1, 10000))
 
@@ -35,7 +38,7 @@ def _default_auth_allow(monkeypatch):
     monkeypatch.setattr(
         smtp_listener.smtp_auth, "evaluate", lambda msg, raw, addr: (True, "ok")
     )
-    monkeypatch.setattr(smtp_listener.publish_message, "delay", MagicMock())
+    monkeypatch.setattr(publication_task.publish_message, "delay", MagicMock())
     monkeypatch.setattr(smtp_listener.publications, "validate", lambda text: None)
     yield
 
@@ -43,7 +46,7 @@ def _default_auth_allow(monkeypatch):
 def test_discards_when_no_from():
     msg = build_email("{}", from_addr=None)
     assert smtp_listener.process_incoming_email(msg) is True
-    smtp_listener.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_discards_when_sender_not_allowed(monkeypatch):
@@ -52,7 +55,7 @@ def test_discards_when_sender_not_allowed(monkeypatch):
     )
     msg = build_email(json.dumps({"address": "+1", "text": "dGVzdA=="}))
     assert smtp_listener.process_incoming_email(msg) is True
-    smtp_listener.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_discards_when_authentication_fails(monkeypatch):
@@ -63,19 +66,19 @@ def test_discards_when_authentication_fails(monkeypatch):
     )
     msg = build_email(json.dumps({"address": "+1", "text": "dGVzdA=="}))
     assert smtp_listener.process_incoming_email(msg) is True
-    smtp_listener.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_discards_on_invalid_json_body():
     msg = build_email("this is not json")
     assert smtp_listener.process_incoming_email(msg) is True
-    smtp_listener.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_discards_on_schema_validation_error():
     msg = build_email(json.dumps({"address": "+1"}))  # missing "text"
     assert smtp_listener.process_incoming_email(msg) is True
-    smtp_listener.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_discards_when_payload_validation_fails(monkeypatch):
@@ -85,15 +88,23 @@ def test_discards_when_payload_validation_fails(monkeypatch):
     monkeypatch.setattr(smtp_listener.publications, "validate", _raise)
     msg = build_email(json.dumps({"address": "+1", "text": "dGVzdA=="}))
     assert smtp_listener.process_incoming_email(msg) is True
-    smtp_listener.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()
 
 
 def test_queues_on_success():
-    msg = build_email(json.dumps({"address": "+12025550123", "text": "dGVzdA=="}))
+    body = {"address": SENDER_HASH, "dialing_code": "237", "text": "dGVzdA=="}
+    msg = build_email(json.dumps(body))
     assert smtp_listener.process_incoming_email(msg) is True
-    smtp_listener.publish_message.delay.assert_called_once_with(
-        "dGVzdA==", "+12025550123", "smtp"
+    publication_task.publish_message.delay.assert_called_once_with(
+        "dGVzdA==", pseudonymize_sender(SENDER_HASH), "smtp", None, "CM"
     )
+
+
+def test_invalid_body_log_omits_the_address(caplog):
+    msg = build_email(json.dumps({"address": "+12025550123"}))
+    assert smtp_listener.process_incoming_email(msg) is True
+    assert "invalid body" in caplog.text
+    assert "12025550123" not in caplog.text
 
 
 def test_leaves_email_for_retry_on_unexpected_error(monkeypatch):
@@ -103,4 +114,4 @@ def test_leaves_email_for_retry_on_unexpected_error(monkeypatch):
     monkeypatch.setattr(smtp_listener.smtp_auth, "is_sender_allowed", _raise)
     msg = build_email(json.dumps({"address": "+1", "text": "dGVzdA=="}))
     assert smtp_listener.process_incoming_email(msg) is False
-    smtp_listener.publish_message.delay.assert_not_called()
+    publication_task.publish_message.delay.assert_not_called()

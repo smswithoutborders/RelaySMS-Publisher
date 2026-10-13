@@ -2,6 +2,7 @@
 """Shared fixtures, loaded by conftest.py once the test environment is set."""
 
 import dataclasses
+from types import SimpleNamespace
 
 import pytest
 from argon2 import PasswordHasher
@@ -14,6 +15,7 @@ from publisher.api.rest import app as app_module
 from publisher.api.rest.v1 import routes
 from publisher.config import PlatformsConfig
 from publisher.db import Base
+from publisher.platforms import ipc, manager
 from tests.helpers import USERNAME, basic_auth, create_credential
 
 
@@ -73,7 +75,8 @@ def platforms_config(tmp_path, monkeypatch):
         PlatformsConfig.get(),
         adapters_dir=tmp_path / "adapters",
         adapters_venv_dir=tmp_path / "venvs",
-        adapters_assets_dir=tmp_path / "assets",
+        adapters_config_dir=tmp_path / "config",
+        adapters_state_dir=tmp_path / "state",
     )
 
     def change(**changes):
@@ -82,3 +85,33 @@ def platforms_config(tmp_path, monkeypatch):
 
     change()
     return change
+
+
+@pytest.fixture
+def fake_adapter_build(monkeypatch):
+    """Builds adapter venvs as empty directories instead of running pip."""
+    monkeypatch.setattr(
+        manager,
+        "_install_dependencies",
+        lambda path, venv, log: venv.mkdir(parents=True),
+    )
+
+
+@pytest.fixture
+def adapter_calls(monkeypatch):
+    """Stands in for adapter processes.
+
+    Set results[method] to what the adapter returns, or to an exception it raises.
+    Calls are recorded as (adapter id, method, request).
+    """
+    fake = SimpleNamespace(results={}, calls=[])
+
+    def call(adapter, method, request):
+        fake.calls.append((adapter.id, method, request))
+        result = fake.results.get(method, {})
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(ipc, "call", call)
+    return fake

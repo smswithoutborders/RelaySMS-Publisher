@@ -4798,9 +4798,25 @@
           "address": {
             "type": "string",
             "title": "Address",
-            "description": "Sender phone number in E.164 format",
+            "description": "Sender ID from the gateway client, or an E.164 phone number",
             "examples": [
-              "+12025550123"
+              "5447c1f50558292bd9df723f9fdc0b06b892199c7dcfaad5164f2d94dfd3470a"
+            ]
+          },
+          "dialing_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[1-9]\\d{0,2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dialing Code",
+            "description": "Sender's country calling code",
+            "examples": [
+              "237"
             ]
           },
           "text": {

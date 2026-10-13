@@ -47,7 +47,8 @@ class TestAppDirectories:
             f"{install}/data",
             f"{install}/data/platforms/adapters",
             f"{install}/data/platforms/venvs",
-            f"{install}/data/platforms/assets",
+            f"{install}/data/platforms/config",
+            f"{install}/data/platforms/state",
         ]
 
     def test_env_values_are_resolved_against_install_dir(self, install, bash):
@@ -55,12 +56,12 @@ class TestAppDirectories:
             "SQLITE_DATABASE_PATH=:memory:\n"
             "CELERY_BROKER_DB_PATH=state/broker.db\n"
             "PLATFORMS_ADAPTERS_DIR=/srv/adapters/\n"
-            "PLATFORMS_ADAPTERS_ASSETS_DIR='/srv/assets'\n"
+            "PLATFORMS_ADAPTERS_STATE_DIR='/srv/state'\n"
         )
         dirs = app_directories(bash)
         assert f"{install}/state" in dirs
         assert "/srv/adapters" in dirs
-        assert "/srv/assets" in dirs
+        assert "/srv/state" in dirs
         assert f"{install}/data/platforms/adapters" not in dirs
 
     def test_database_in_install_root_lists_install_dir(self, install, bash):

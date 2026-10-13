@@ -78,7 +78,7 @@ def get_platform_oauth_client_metadata(
             detail="OAuth client metadata not available for this platform",
         )
 
-    adapter_credentials = PathLib(adapters[0].path) / "credentials.json"
+    adapter_credentials = PathLib(adapters[0].config_path) / "credentials.json"
 
     if not adapter_credentials.exists():
         raise HTTPException(

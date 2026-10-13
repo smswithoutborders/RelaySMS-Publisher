@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-import configparser
 import logging
 import re
 import shutil
@@ -25,14 +24,21 @@ from publisher.models import platform_adapter as platform_adapters
 from publisher.models import token as tokens
 from publisher.models.audit_event import AuditAction
 from publisher.models.credential import Credential
-from publisher.models.platform_adapter import PlatformAdapter
+from publisher.models.platform_adapter import PROTOCOL_NAMES, PlatformAdapter
+from relaysms_adapter_sdk.manifest import Category, Manifest, ManifestError, Protocol
+from relaysms_adapter_sdk.manifest import load as load_manifest
 
 logger = logging.getLogger(__name__)
 
 _GITHUB_REPO_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 _VERSION_TAG = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
-_REQUIRED_FILES = ("manifest.ini", "main.py", "config.ini")
-_REQUIRED_MANIFEST_FIELDS = ("name", "display_name", "cat_id", "proto_id")
+_PROTOCOL_IDS = {Protocol(name): proto_id for proto_id, name in PROTOCOL_NAMES.items()}
+_CATEGORY_IDS = {
+    Category.EMAIL: 0,
+    Category.MESSAGE: 1,
+    Category.TEXT: 2,
+    Category.BRIDGE: 3,
+}
 
 
 class AdapterError(PublisherError):
@@ -106,12 +112,10 @@ def _rmtree(path: Path) -> None:
 
 
 def _install_dependencies(path: Path, venv: Path, log: list[str]) -> None:
-    requirements = path / "requirements.txt"
-    if not requirements.is_file():
-        return
+    """Install the adapter and its dependencies, including the SDK, into venv."""
     for command in (
         [sys.executable, "-m", "venv", str(venv)],
-        [str(venv / "bin/pip3"), "install", "-r", str(requirements)],
+        [str(venv / "bin/pip"), "install", "--disable-pip-version-check", str(path)],
     ):
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
@@ -121,37 +125,24 @@ def _install_dependencies(path: Path, venv: Path, log: list[str]) -> None:
         log.append(result.stdout)
 
 
-def _read_manifest(path: Path) -> dict:
-    missing = [name for name in _REQUIRED_FILES if not (path / name).is_file()]
-    if missing:
-        raise AdapterError(f"{path} is missing {', '.join(missing)}")
-    ini = configparser.ConfigParser()
+def _read_manifest(path: Path) -> Manifest:
+    if not (path / "pyproject.toml").is_file():
+        raise AdapterError(f"{path} has no pyproject.toml")
     try:
-        ini.read(path / "manifest.ini")
-        manifest = dict(ini["platform"])
-    except (configparser.Error, KeyError) as e:
-        raise AdapterError(f"Invalid manifest.ini in {path}: {e}") from e
-    if not all(manifest.get(field) for field in _REQUIRED_MANIFEST_FIELDS):
-        raise AdapterError(
-            f"manifest.ini in {path} needs {', '.join(_REQUIRED_MANIFEST_FIELDS)}"
-        )
-    return manifest
+        return load_manifest(path)
+    except ManifestError as e:
+        raise AdapterError(str(e)) from e
 
 
-def _apply_manifest(adapter: PlatformAdapter, manifest: dict) -> None:
-    try:
-        adapter.name = manifest["name"].strip().lower()
-        adapter.display_name = manifest["display_name"]
-        adapter.cat_id = int(manifest["cat_id"])
-        adapter.proto_id = int(manifest["proto_id"])
-    except ValueError as e:
-        raise AdapterError(f"Invalid manifest value: {e}") from e
-    adapter.auth_provider = manifest.get("auth_provider") or None
-    adapter.supports_offline_first = (
-        manifest.get("supports_offline_first", "").strip().lower() == "true"
-    )
-    adapter.icon_svg = manifest.get("icon_svg") or None
-    adapter.icon_png = manifest.get("icon_png") or None
+def _apply_manifest(adapter: PlatformAdapter, manifest: Manifest) -> None:
+    adapter.name = manifest.name
+    adapter.display_name = manifest.display_name
+    adapter.proto_id = _PROTOCOL_IDS[manifest.protocol]
+    adapter.cat_id = _CATEGORY_IDS[manifest.category]
+    adapter.auth_provider = manifest.auth_provider
+    adapter.supports_offline_first = manifest.offline_first
+    adapter.icon_svg = manifest.icon_svg
+    adapter.icon_png = manifest.icon_png
 
 
 def _flush(session: Session, adapter: PlatformAdapter) -> None:
@@ -201,7 +192,7 @@ def _discard_build(adapter: PlatformAdapter) -> None:
 
 def _build(
     adapter: PlatformAdapter, tag: str | None, log: list[str]
-) -> tuple[str, dict]:
+) -> tuple[str, Manifest]:
     """Clone tag, or the default branch, and its venv next to the running version.
 
     Returns the commit and the manifest.
@@ -233,7 +224,7 @@ def _build(
     return repo.head.commit.hexsha, manifest
 
 
-def _register(session: Session, adapter: PlatformAdapter, manifest: dict) -> None:
+def _register(session: Session, adapter: PlatformAdapter, manifest: Manifest) -> None:
     try:
         _apply_manifest(adapter, manifest)
         session.add(adapter)
@@ -426,3 +417,29 @@ def import_from_disk(session: Session) -> list[PlatformAdapter]:
         imported.append(adapter)
     session.flush()
     return imported
+
+
+def move_files_out_of_code(session: Session) -> list[PlatformAdapter]:
+    """Copy credentials.json to config dirs and move assets dirs to state dirs.
+
+    Leaves an adapter alone where its new location already exists.
+    """
+    legacy_state_dir = PlatformsConfig.get().adapters_state_dir.parent / "assets"
+    changed = []
+    for adapter in platform_adapters.find(session, include_disabled=True):
+        credentials = Path(adapter.path) / "credentials.json"
+        config = Path(adapter.config_path) / "credentials.json"
+        legacy_state = legacy_state_dir / adapter.id
+        state = Path(adapter.state_path)
+        moved = False
+        if credentials.is_file() and not config.exists():
+            config.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(credentials, config)
+            moved = True
+        if legacy_state.is_dir() and not state.exists():
+            state.parent.mkdir(parents=True, exist_ok=True)
+            legacy_state.rename(state)
+            moved = True
+        if moved:
+            changed.append(adapter)
+    return changed

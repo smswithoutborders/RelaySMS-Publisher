@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+from pathlib import Path
+
 import pytest
 from dotenv import dotenv_values
 
@@ -131,6 +133,17 @@ def test_forward_urls_must_be_http():
     assert "TWILIO_FORWARD_URLS_JSON" in message
 
 
+def test_adapter_paths_resolve_against_the_install_dir():
+    platforms = load(
+        PlatformsConfig,
+        PLATFORMS_ADAPTERS_VENV_DIR="data/platforms/venvs",
+        PLATFORMS_ADAPTERS_STATE_DIR="/srv/state",
+    )
+
+    assert platforms.adapters_venv_dir == config.ROOT / "data/platforms/venvs"
+    assert platforms.adapters_state_dir == Path("/srv/state")
+
+
 def test_sqlite_url_uses_the_configured_path():
     database = load(DatabaseConfig, SQLITE_DATABASE_PATH="data/test dir/app.db")
 
@@ -203,7 +216,8 @@ def test_template_env_paths_match_defaults():
         "CELERY_BEAT_SCHEDULE_PATH": celery.beat_schedule_path,
         "PLATFORMS_ADAPTERS_DIR": platforms.adapters_dir,
         "PLATFORMS_ADAPTERS_VENV_DIR": platforms.adapters_venv_dir,
-        "PLATFORMS_ADAPTERS_ASSETS_DIR": platforms.adapters_assets_dir,
+        "PLATFORMS_ADAPTERS_CONFIG_DIR": platforms.adapters_config_dir,
+        "PLATFORMS_ADAPTERS_STATE_DIR": platforms.adapters_state_dir,
     }
 
     for key, default in defaults.items():

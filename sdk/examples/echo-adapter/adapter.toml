@@ -1,0 +1,9 @@
+entry = "echo_adapter:EchoAdapter"
+name = "echo"
+display_name = "Echo"
+protocol = "pnba"
+category = "text"
+offline_first = false
+
+[icons]
+svg = "https://example.com/echo.svg"

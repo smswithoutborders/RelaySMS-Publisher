@@ -176,3 +176,5 @@ dmypy.json
 # real Postgres credentials once generated from casting.yaml.template.
 /pours/
 /observability/signoz/casting.yaml
+# relaysms-adapter console workspace
+.relaysms/

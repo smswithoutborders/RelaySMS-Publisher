@@ -4,7 +4,7 @@ PYTHON ?= python3
 SPECS_DIR := lib_relaysms_payload_specs
 SPECS_LIB := $(SPECS_DIR)/target/release/librelaysms_spec_payload.so
 
-.PHONY: build protos specs migrate run test coverage test-dialects test-e2e docs check clean
+.PHONY: build protos specs migrate run test coverage test-sdk test-dialects test-e2e docs check clean
 
 ## Generate the gRPC code and the payload-specs bindings.
 build: protos specs
@@ -36,6 +36,10 @@ test:
 ## Run the suite and list the lines no test runs.
 coverage:
 	$(PYTHON) -m pytest --cov $(PYTEST_ARGS)
+
+## Test the adapter SDK in sdk/.
+test-sdk:
+	$(PYTHON) -m pytest -c sdk/pyproject.toml sdk/tests sdk/examples $(PYTEST_ARGS)
 
 ## Migrate and query SQLite, SQLCipher, and Postgres, MySQL and MariaDB in podman.
 test-dialects:

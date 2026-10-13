@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import logging
+from collections import Counter
 
+from publisher import tokens
 from publisher.config import CleanupConfig
 from publisher.db import get_session
 from publisher.db.types import utc_now
@@ -12,7 +14,6 @@ from publisher.models.credential_session import (
 )
 from publisher.models.payload_session import delete_stale
 from publisher.tasks.celery_app import celery_app
-from publisher.tokens import cleanup_idle_tokens as run_idle_token_cleanup
 
 logger = logging.getLogger(__name__)
 cleanup_config = CleanupConfig.get()
@@ -36,7 +37,11 @@ def cleanup_idle_tokens() -> None:
     """Delete tokens (and their keys) idle past the configured max age."""
     cutoff = utc_now() - cleanup_config.token_idle_max_age
     with get_session() as db:
-        counts = run_idle_token_cleanup(db, cutoff)
+        deleted = tokens.delete_idle(db, cutoff)
+    for _, revocation in deleted:
+        tokens.revoke_upstream(revocation)
+
+    counts = dict(Counter(platform for platform, _ in deleted))
 
     if counts:
         logger.info("Cleaned up %d idle token(s): %s", sum(counts.values()), counts)
