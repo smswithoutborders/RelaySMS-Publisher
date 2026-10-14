@@ -44,7 +44,8 @@ def check_if_match(request: Request, current: str, what: str) -> None:
     if_match = request.headers.get("If-Match")
     if if_match is None:
         raise ApiError(428, "If-Match header required.")
-    if if_match.strip() != current:
+    # nginx gzip turns our ETag weak (W/"..."), and ours are version-based anyway.
+    if if_match.strip().removeprefix("W/") != current:
         raise ApiError(
             412,
             f"This {what} has changed since you loaded it. Reload and try again.",

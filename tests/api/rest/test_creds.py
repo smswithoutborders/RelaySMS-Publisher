@@ -133,7 +133,8 @@ def test_update_requires_a_current_if_match(client, admin, analyst, caplog):
 
     missing = client.patch(url, json=body, headers=admin)
     stale = client.patch(url, json=body, headers={**admin, "If-Match": '"999"'})
-    ok = client.patch(url, json=body, headers={**admin, "If-Match": etag})
+    # Weak, as nginx gzip sends it back.
+    ok = client.patch(url, json=body, headers={**admin, "If-Match": f"W/{etag}"})
 
     assert missing.status_code == 428
     assert stale.status_code == 412
