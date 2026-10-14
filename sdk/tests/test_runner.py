@@ -146,6 +146,7 @@ def test_run_answers_each_line(adapter):
 def test_setup_runs_without_creating_the_adapter():
     class Unconfigured(FakeAdapter):
         def __init__(self):
+            super().__init__()
             raise FileNotFoundError("credentials.json")
 
         @classmethod

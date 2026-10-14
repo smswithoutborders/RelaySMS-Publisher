@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 
 from relaysms_adapter_sdk.paths import ConfigError as ConfigError
 from relaysms_adapter_sdk.paths import lowercase_keys
@@ -306,6 +306,7 @@ def _type_problem(value: Any, kind: FieldType) -> str | None:
         case FieldType.FILE:
             ok = isinstance(value, str) and len(value.encode()) <= MAX_FILE_SIZE
             return None if ok else f"a file of at most {MAX_FILE_SIZE // 1024} KB"
+    assert_never(kind)
 
 
 def _name(key: str, label: str | None) -> str:
