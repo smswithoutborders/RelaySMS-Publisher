@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import html
-import json
 import logging
 from pathlib import Path as PathLib
 
@@ -14,6 +13,7 @@ from publisher.api.rest.v1.params import NAME_PATTERN, filter_query
 from publisher.api.rest.v1.schemas import OAuthClientMetadata, PlatformManifest
 from publisher.db import get_db
 from publisher.models import platform_adapter as platform_adapters
+from relaysms_adapter_sdk import read_config
 
 logger = logging.getLogger(__name__)
 
@@ -78,21 +78,21 @@ def get_platform_oauth_client_metadata(
             detail="OAuth client metadata not available for this platform",
         )
 
-    adapter_credentials = PathLib(adapters[0].config_path) / "credentials.json"
-
-    if not adapter_credentials.exists():
+    try:
+        return OAuthClientMetadata(
+            **read_config(directory=PathLib(adapters[0].config_path))
+        )
+    except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,
             detail="OAuth client metadata file not found for this platform",
-        )
-
-    try:
-        with open(adapter_credentials, encoding="utf-8") as f:
-            return OAuthClientMetadata(**json.loads(f.read()))
-    except FileNotFoundError as exc:
-        logger.error("OAuth client metadata file not found")
+        ) from exc
+    except ValueError as exc:
+        # The error names the file's path on this server, so the client only gets
+        # a generic message.
+        logger.error("Invalid OAuth client metadata: %s", exc)
         raise HTTPException(
-            status_code=404, detail="OAuth client metadata file not found"
+            status_code=500, detail="OAuth client metadata is invalid"
         ) from exc
 
 

@@ -3,6 +3,7 @@
 
 import uuid
 from contextlib import contextmanager
+from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, Path, Request, Response, Security
 from sqlalchemy.orm import Session
@@ -16,8 +17,13 @@ from publisher.api.rest.v1.errors import (
 )
 from publisher.api.rest.v1.params import check_if_match, etag
 from publisher.api.rest.v1.schemas import (
+    AdapterConfig,
+    AdapterConfigUpdate,
+    AdapterField,
     AdapterInstall,
     AdapterJobInfo,
+    AdapterSetting,
+    AdapterSetup,
     AdapterUpgrade,
     PlatformAdapterInfo,
     PlatformAdapterUpdate,
@@ -28,10 +34,11 @@ from publisher.models import platform_adapter as platform_adapters
 from publisher.models import platform_adapter_job as jobs
 from publisher.models.credential import Scope
 from publisher.models.platform_adapter import PlatformAdapter
-from publisher.platforms import manager
+from publisher.platforms import adapter_config, manager
 from publisher.platforms.manager import (
     AdapterConflictError,
     AdapterError,
+    AdapterFaultError,
     AdapterInUseError,
 )
 from publisher.tasks.platform_task import run_adapter_job
@@ -45,6 +52,7 @@ ADAPTER_ID_PATH = Path(..., max_length=36, pattern=r"^[A-Za-z0-9._-]+$")
 NOT_FOUND = {404: "No adapter with that ID."}
 NOT_ADMINISTRATOR = {403: "Also when the credential isn't an administrator."}
 QUEUE_DOWN = {503: "The job queue is unavailable. Try again later."}
+ADAPTER_BROKEN = {502: "The adapter, or its files on this server, are broken."}
 
 
 def _etag(adapter: PlatformAdapter) -> str:
@@ -73,6 +81,7 @@ def _info(adapter: PlatformAdapter, names: dict) -> PlatformAdapterInfo:
         tag=adapter.tag,
         commit=adapter.commit,
         enabled=adapter.is_enabled,
+        configured=adapter_config.is_configured(adapter),
         created_at=adapter.created_at,
         created_by=names.get(adapter.created_by),
         updated_at=adapter.updated_at,
@@ -95,6 +104,10 @@ def _adapter_errors(context: AuthContext):
         yield
     except (AdapterInUseError, AdapterConflictError) as e:
         raise ApiError(409, str(e), log=f"{by}: {e}") from None
+    except AdapterFaultError as e:
+        # Its message can name files on this server.
+        message = "The adapter or its files are broken; see the server log."
+        raise ApiError(502, message, log=f"{by}: {e}") from None
     except AdapterError as e:
         raise ApiError(400, str(e), log=f"{by}: {e}") from None
 
@@ -183,10 +196,109 @@ def delete_adapter(
     return Response(status_code=204)
 
 
-def _require_administrator(context: AuthContext) -> None:
-    # Installing runs code from the repository on this server.
+def _require_administrator(context: AuthContext, what: str) -> None:
     if not context.credential.is_administrator:
-        raise ApiError(403, "Installing and updating adapters needs an administrator.")
+        raise ApiError(403, f"{what} needs an administrator.")
+
+
+def _config(adapter: PlatformAdapter) -> AdapterConfig:
+    declared = adapter_config.load_manifest(adapter)
+    return AdapterConfig(
+        settings=[
+            AdapterSetting(**asdict(s.field), value=s.value, is_set=s.is_set)
+            for s in adapter_config.show(adapter, declared)
+        ],
+        setup=[AdapterField(**asdict(field)) for field in declared.setup],
+    )
+
+
+@router.get(
+    "/{adapter_id}/config",
+    response_model=AdapterConfig,
+    summary="Get settings",
+    responses=error_responses(NOT_ADMINISTRATOR, NOT_FOUND, ADAPTER_BROKEN),
+)
+def get_config(
+    response: Response,
+    adapter_id: str = ADAPTER_ID_PATH,
+    context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
+    db: Session = Depends(get_db),
+) -> AdapterConfig:
+    """Returns the ETag to send as If-Match. Administrators only."""
+    _require_administrator(context, "Adapter settings")
+    adapter = _load(db, adapter_id)
+    response.headers["ETag"] = _etag(adapter)
+    with _adapter_errors(context):
+        return _config(adapter)
+
+
+@router.patch(
+    "/{adapter_id}/config",
+    response_model=AdapterConfig,
+    summary="Change settings",
+    responses=error_responses(
+        NOT_ADMINISTRATOR,
+        NOT_FOUND,
+        CONCURRENT_CHANGE,
+        IF_MATCH_ERRORS,
+        ADAPTER_BROKEN,
+        {400: "A key isn't a setting of the adapter, or a value has the wrong type."},
+    ),
+)
+def update_config(
+    body: AdapterConfigUpdate,
+    request: Request,
+    response: Response,
+    adapter_id: str = ADAPTER_ID_PATH,
+    context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
+    db: Session = Depends(get_db),
+) -> AdapterConfig:
+    """Needs If-Match. Administrators only."""
+    _require_administrator(context, "Adapter settings")
+    adapter = _load(db, adapter_id)
+    check_if_match(request, _etag(adapter), "adapter")
+    with _adapter_errors(context):
+        adapter_config.update(db, adapter, body.settings, actor=context.credential)
+        db.commit()
+        response.headers["ETag"] = _etag(adapter)
+        return _config(adapter)
+
+
+@router.post(
+    "/{adapter_id}/setup",
+    response_model=AdapterConfig,
+    summary="Set up settings",
+    responses=error_responses(
+        NOT_ADMINISTRATOR,
+        NOT_FOUND,
+        CONCURRENT_CHANGE,
+        IF_MATCH_ERRORS,
+        ADAPTER_BROKEN,
+        {400: "The adapter has no setup, or rejected the inputs."},
+    ),
+)
+def setup_config(
+    body: AdapterSetup,
+    request: Request,
+    response: Response,
+    adapter_id: str = ADAPTER_ID_PATH,
+    context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
+    db: Session = Depends(get_db),
+) -> AdapterConfig:
+    """Runs the adapter's setup and replaces its settings. Needs If-Match.
+
+    Administrators only. The inputs are listed in its config's setup.
+    """
+    _require_administrator(context, "Adapter settings")
+    adapter = _load(db, adapter_id)
+    check_if_match(request, _etag(adapter), "adapter")
+    # End the read before the adapter runs; the version still catches a change.
+    db.commit()
+    with _adapter_errors(context):
+        adapter_config.setup(db, adapter, body.inputs, actor=context.credential)
+        db.commit()
+        response.headers["ETag"] = _etag(adapter)
+        return _config(adapter)
 
 
 def _require_allowed(url: str) -> None:
@@ -241,7 +353,7 @@ def install_adapter(
     db: Session = Depends(get_db),
 ) -> AdapterJobInfo:
     """Queues an install; poll the job at Location. Administrators only."""
-    _require_administrator(context)
+    _require_administrator(context, "Installing and updating adapters")
     _require_allowed(body.source_url)
     adapter_id = manager.adapter_id(body.source_url)
     if db.get(PlatformAdapter, adapter_id) is not None:
@@ -283,7 +395,7 @@ def update_adapter_version(
     db: Session = Depends(get_db),
 ) -> AdapterJobInfo:
     """Queues a move to a version tag; poll the job at Location. Administrators only."""
-    _require_administrator(context)
+    _require_administrator(context, "Installing and updating adapters")
     adapter = _load(db, adapter_id)
     _require_allowed(adapter.source_url)
     return _queue(

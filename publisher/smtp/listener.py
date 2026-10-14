@@ -109,11 +109,7 @@ def process_incoming_email(msg: MailMessage) -> bool:
         queue_publication(
             request.text, request.address, "smtp", dialing_code=request.dialing_code
         )
-        logger.info(
-            "Successfully queued publication request from email %s via protocol %r.",
-            email_uid,
-            "smtp",
-        )
+        logger.info("Queued the publication in email %s.", email_uid)
         return True
 
     except Exception:

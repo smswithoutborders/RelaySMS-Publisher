@@ -15,7 +15,9 @@ from relaysms_adapter_sdk import (
     RevokeRequest,
     SendRequest,
     SendResult,
-    config_dir,
+    SetupRequest,
+    SetupResult,
+    read_config,
     state_dir,
 )
 
@@ -24,8 +26,7 @@ logger = logging.getLogger(__name__)
 
 class EchoAdapter(PNBAAdapter):
     def __init__(self) -> None:
-        settings = json.loads((config_dir() / "credentials.json").read_text())
-        self.code = settings["code"]
+        self.code = read_config()["code"]
 
     @override
     def send_code(self, request: CodeRequest) -> CodeSent:
@@ -52,3 +53,8 @@ class EchoAdapter(PNBAAdapter):
     @override
     def revoke(self, request: RevokeRequest) -> None:
         logger.info("Unlinked %s", request.account.identifier)
+
+    @override
+    @classmethod
+    def setup(cls, request: SetupRequest) -> SetupResult:
+        return SetupResult(settings={"code": request.inputs["code"]})

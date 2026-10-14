@@ -58,7 +58,6 @@ def create_publications(body: PublishRestContentRequest) -> PublishContentRespon
     queue_publication(
         body.text, body.address, "https", tag=body.tag, dialing_code=body.dialing_code
     )
-    logger.info("Successfully queued publication request via protocol %r.", "https")
     return PublishContentResponse(message="Publication request queued successfully.")
 
 
@@ -121,7 +120,6 @@ async def twilio_incoming_sms(request: Request) -> Response:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     queue_publication(text_payload, sender_address, "sms")
-    logger.info("Successfully queued publication request via protocol %r.", "sms")
 
     forward_twilio_webhook.delay(params, sender_address, text_payload)
 

@@ -14,6 +14,9 @@ Each platform (Gmail, X, Telegram, ...) is served by an adapter installed from i
 ./publisher.sh platforms disable <NAME>                     # hide it from users; it still revokes tokens
 ./publisher.sh platforms enable <NAME>                      # offer it again
 ./publisher.sh platforms remove <NAME> [--force]            # uninstall
+./publisher.sh platforms config show <NAME>                 # its settings, without secret values
+./publisher.sh platforms config set <NAME> KEY=VALUE|KEY    # change settings; a bare KEY asks for the value
+./publisher.sh platforms setup <NAME> [--input KEY=VALUE]   # run the adapter's setup and save its settings
 ./publisher.sh platforms import                             # register adapter directories, move their files out of the code
 ./publisher.sh platforms exec <NAME> -- <COMMAND> [ARGS]    # run a command the adapter installs
 ```
@@ -22,7 +25,7 @@ Commands taking a name also take `--proto-id` and `--cat-id`, for when a name ma
 
 ## Versions
 
-Adapters are installed and updated by version tag, such as `v1.2.0`. For a repository without tags yet, pass `--branch` to use its default branch.
+Adapters are installed and updated by version tag, such as `v1.2.0`, so a repository needs one before it can be added.
 
 An update builds the new version and its virtualenv beside the running one, then switches over, so a failed update leaves the running version in place.
 
@@ -45,12 +48,28 @@ An update builds the new version and its virtualenv beside the running one, then
 
 `<id>` is the ID column of `platforms list`.
 
-## An Adapter's Own Commands
+## Settings
 
-Some adapters install admin commands, such as one that registers an OAuth client. `exec` runs one from the adapter's virtualenv with its config and state directories; put `--` before it:
+An adapter reads its settings, such as API keys, from `credentials.json` in its config directory. Its `adapter.toml` declares each one. Lists are comma-separated.
 
 ```bash
-./publisher.sh platforms exec mastodon -- mastodon-register --name RelaySMS --redirect-uri https://example.com/callback
+./publisher.sh platforms config set rmail smtp_host=smtp.example.com smtp_port=465
+./publisher.sh platforms config set rmail smtp_password
+./publisher.sh platforms config set rmail --unset alias_prefix
+```
+
+`config set` changes only the keys given. `setup` is for adapters whose settings come from the platform, such as an app it registers or a file its console downloads; it replaces the whole file. `--input KEY=@PATH` reads a file:
+
+```bash
+./publisher.sh platforms setup gmail --input client_file=@client_secret.json
+```
+
+## An Adapter's Own Commands
+
+An adapter may install admin commands. `exec` runs one from the adapter's virtualenv with its config and state directories; put `--` before it:
+
+```bash
+./publisher.sh platforms exec <NAME> -- <COMMAND> --help
 ```
 
 ## Writing an Adapter

@@ -31,8 +31,22 @@ except ImportError:
 
 from relaysms_adapter_sdk import log, manifest, wire
 from relaysms_adapter_sdk.errors import AdapterError
-from relaysms_adapter_sdk.manifest import Category, Manifest, ManifestError, Protocol
-from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
+from relaysms_adapter_sdk.manifest import (
+    Category,
+    ConfigError,
+    Field,
+    FieldType,
+    Manifest,
+    ManifestError,
+    Protocol,
+)
+from relaysms_adapter_sdk.paths import (
+    CONFIG_DIR_ENV,
+    CREDENTIALS_FILE,
+    STATE_DIR_ENV,
+    read_config,
+    write_config,
+)
 from relaysms_adapter_sdk.types import (
     Account,
     Attachment,
@@ -44,6 +58,7 @@ from relaysms_adapter_sdk.types import (
     PasswordVerificationRequest,
     RevokeRequest,
     SendRequest,
+    SetupRequest,
 )
 
 WORKDIR = ".relaysms"
@@ -146,6 +161,47 @@ def revoke(ws: Workspace, _args: argparse.Namespace) -> None:
     console.print(Text(f"Unlinked {account['identifier']}.", style="green"))
 
 
+def setup(ws: Workspace, args: argparse.Namespace) -> None:
+    if not ws.manifest.setup:
+        raise ConsoleError(f"This adapter has no setup; write its {CREDENTIALS_FILE}.")
+    inputs = manifest.parse_inputs(
+        ws.manifest.setup, args.input, _ask, ask_required=True
+    )
+    inputs = manifest.check_values(ws.manifest.setup, inputs, require_all=True)
+
+    result = call(ws, "setup", SetupRequest(inputs))
+    # The settings replace the file, so every required one must be there.
+    settings = manifest.check_values(
+        ws.manifest.config, result["settings"], require_all=True
+    )
+    path = write_config(settings, directory=ws.config_dir)
+    console.print(Text(f"Saved {path}.", style="green"))
+
+
+def config_show(ws: Workspace, _args: argparse.Namespace) -> None:
+    values = _settings(ws)
+    for field in ws.manifest.config:
+        value = values.get(field.name)
+        if field.secret:
+            shown = (
+                "(secret, set)" if manifest.has_value(value) else "(secret, not set)"
+            )
+        else:
+            shown = "-" if not manifest.has_value(value) else json.dumps(value)
+        console.print(Text.assemble((f"{field.name} ", "bold"), shown))
+
+
+def config_set(ws: Workspace, args: argparse.Namespace) -> None:
+    if not args.values and not args.unset:
+        raise ConsoleError("Give a setting to change, or --unset one.")
+    changes = manifest.parse_inputs(ws.manifest.config, args.values, _ask)
+    changes |= dict.fromkeys(args.unset)
+    changes = manifest.check_values(ws.manifest.config, changes)
+    settings = manifest.merge_values(_settings(ws), changes)
+    path = write_config(settings, directory=ws.config_dir)
+    console.print(Text(f"Saved {path}.", style="green"))
+
+
 def call_method(ws: Workspace, args: argparse.Namespace) -> None:
     try:
         params = json.loads(args.params)
@@ -188,6 +244,28 @@ def main(argv: list[str] | None = None) -> int:
     revoke_parser = commands.add_parser("revoke", help="unlink the account")
     revoke_parser.set_defaults(handler=revoke)
 
+    setup_parser = commands.add_parser("setup", help="set up credentials.json")
+    setup_parser.add_argument(
+        "--input",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="repeatable; KEY=@PATH for a file. Asks for required inputs not given.",
+    )
+    setup_parser.set_defaults(handler=setup)
+
+    config_parser = commands.add_parser("config", help="show or change settings")
+    config_commands = config_parser.add_subparsers(required=True, metavar="action")
+    config_commands.add_parser("show", help="list the settings").set_defaults(
+        handler=config_show
+    )
+    set_parser = config_commands.add_parser(
+        "set", help="change settings; a bare KEY asks for its value"
+    )
+    set_parser.add_argument("values", nargs="*", metavar="KEY=VALUE|KEY")
+    set_parser.add_argument("--unset", action="append", default=[], metavar="KEY")
+    set_parser.set_defaults(handler=config_set)
+
     call_parser = commands.add_parser("call", help="call any method")
     call_parser.add_argument("method")
     call_parser.add_argument("params", nargs="?", default="{}", help="JSON object")
@@ -197,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         root = args.dir.resolve()
         args.handler(Workspace(root, manifest.load(root)), args)
-    except (ConsoleError, AdapterError, ManifestError) as e:
+    except (ConsoleError, AdapterError, ManifestError, ConfigError) as e:
         console.print(Text(f"Error: {e}", style="bold red"))
         return 1
     except KeyboardInterrupt:
@@ -336,9 +414,20 @@ def _load_account(ws: Workspace) -> dict[str, Any]:
 
 
 def _save_account(ws: Workspace, account: dict[str, Any]) -> None:
-    ws.account_file.parent.mkdir(parents=True, exist_ok=True)
-    ws.account_file.write_text(json.dumps(account, indent=2), encoding="utf-8")
-    ws.account_file.chmod(0o600)
+    write_config(account, ws.account_file.name, ws.account_file.parent)
+
+
+def _settings(ws: Workspace) -> dict[str, Any]:
+    try:
+        return read_config(directory=ws.config_dir)
+    except FileNotFoundError:
+        return {}
+
+
+def _ask(field: Field) -> str:
+    if field.type is FieldType.FILE:
+        return Prompt.ask(f"{field.description or field.name} (path)")
+    return Prompt.ask(field.description or field.name, password=field.secret)
 
 
 def _show_log(line: str) -> None:

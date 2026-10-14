@@ -141,14 +141,14 @@ def _create_engine() -> Engine:
 
     if database.dialect == "mysql":
         if database.encryption_enabled:
-            logger.info(
+            logger.debug(
                 "Database encryption enabled - ensure TDE is configured on "
                 "MySQL/MariaDB server"
             )
         _ensure_mysql_database(database.mysql)
     elif database.dialect == "postgres":
         if database.encryption_enabled:
-            logger.info(
+            logger.debug(
                 "Database encryption enabled - Postgres has no built-in TDE, "
                 "use disk-level encryption on the server"
             )
@@ -162,7 +162,7 @@ def _create_engine() -> Engine:
         _ensure_sqlite_parent_dir(database.sqlite_path)
         if database.encryption_enabled:
             assert database.encryption_key is not None  # config requires it here
-            logger.info("Using SQLCipher3 encryption for SQLite")
+            logger.debug("Using SQLCipher3 encryption for SQLite")
             from sqlcipher3 import dbapi2 as sqlcipher3_dbapi
 
             engine = create_engine(
@@ -198,7 +198,7 @@ def _create_engine() -> Engine:
     with engine.connect() as conn:
         conn.execute(text("SELECT 1"))
 
-    logger.info("Connected to %s database", database.dialect)
+    logger.debug("Connected to %s database", database.dialect)
     return engine
 
 

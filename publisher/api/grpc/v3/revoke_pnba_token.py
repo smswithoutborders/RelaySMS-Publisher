@@ -26,7 +26,7 @@ def revoke_pnba_token(request, payload: bytes) -> publisher_pb2.RevokePNBATokenR
         revocation = tokens.revocation(s, token)
         s.delete(token)
         mark_key_used(s, request.key_id)
-        logger.info("Token revoked: platform=%r", token.platform)
+    logger.info("Token deleted: platform=%r", token.platform)
     tokens.revoke_upstream(revocation)
 
     return publisher_pb2.RevokePNBATokenResponse(

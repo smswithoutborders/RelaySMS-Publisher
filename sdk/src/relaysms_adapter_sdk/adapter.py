@@ -22,6 +22,8 @@ from relaysms_adapter_sdk.types import (
     RevokeRequest,
     SendRequest,
     SendResult,
+    SetupRequest,
+    SetupResult,
 )
 
 type MaybeAwaitable[T] = T | Awaitable[T]
@@ -32,6 +34,7 @@ class Adapter(ABC):
     RPC_METHODS: ClassVar[Mapping[str, type]] = {
         "send_message": SendRequest,
         "revoke": RevokeRequest,
+        "setup": SetupRequest,
     }
 
     @abstractmethod
@@ -41,6 +44,17 @@ class Adapter(ABC):
     @abstractmethod
     def revoke(self, request: RevokeRequest) -> MaybeAwaitable[None]:
         """End the account's access, when the user unlinks it."""
+
+    @classmethod
+    def setup(cls, request: SetupRequest) -> MaybeAwaitable[SetupResult]:
+        """Turn the [setup] inputs into settings, e.g. by registering an app.
+
+        A classmethod: it runs before the settings an instance reads exist.
+        """
+        raise AdapterError(
+            f"{cls.__name__} has no setup; set its config instead.",
+            code=METHOD_NOT_FOUND,
+        )
 
 
 class OAuth2Adapter(Adapter):

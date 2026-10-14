@@ -23,13 +23,13 @@ In `pyproject.toml`:
 
 ```toml
 dependencies = [
-  "relaysms-adapter-sdk @ git+https://github.com/smswithoutborders/RelaySMS-Publisher@sdk-v1.0.0#subdirectory=sdk",
+  "relaysms-adapter-sdk @ git+https://github.com/smswithoutborders/RelaySMS-Publisher@sdk-v1.1.0#subdirectory=sdk",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest",
-  "relaysms-adapter-sdk[console] @ git+https://github.com/smswithoutborders/RelaySMS-Publisher@sdk-v1.0.0#subdirectory=sdk",
+  "relaysms-adapter-sdk[console] @ git+https://github.com/smswithoutborders/RelaySMS-Publisher@sdk-v1.1.0#subdirectory=sdk",
 ]
 
 [tool.hatch.metadata]
@@ -44,6 +44,7 @@ Subclass `OAuth2Adapter` or `PNBAAdapter` and implement its methods. Any of them
 |---|---|---|---|
 | both | `send_message` | `SendRequest` | `SendResult` (with `token` when it was refreshed) |
 | both | `revoke` | `RevokeRequest` | `None` |
+| both | `setup` (optional) | `SetupRequest` | `SetupResult` |
 | `OAuth2Adapter` | `create_authorization_url` | `AuthorizationRequest` | `AuthorizationUrl` |
 | `OAuth2Adapter` | `exchange_code` | `CodeExchangeRequest` | `Account` |
 | `PNBAAdapter` | `send_code` | `CodeRequest` | `CodeSent` |
@@ -75,7 +76,9 @@ The Publisher replaces the adapter's code on every update, so never write next t
 | `config_dir()` | Credentials and settings, such as `credentials.json` |
 | `state_dir()` | Anything the adapter writes, such as databases |
 
-Log with `logging.getLogger(__name__)`. Records go to standard error at `LOG_LEVEL` (`INFO` by default), and the Publisher logs them at the same level.
+`read_config()` reads `credentials.json` from the config directory, or the file you name. Keys are read in lowercase, in nested objects too, so an administrator can write `SMTP_HOST` or `smtp_host`.
+
+Log with `logging.getLogger(__name__)`. Records from the adapter's package and the SDK go to standard error at `LOG_LEVEL` (`INFO` by default), and the Publisher logs them at the same level. Other libraries, such as an API client, only send warnings and errors unless `LOG_LEVEL` is `DEBUG`.
 
 ## Describe it
 
@@ -93,6 +96,23 @@ auth_provider = "self"     # optional
 [icons]
 svg = "https://raw.githubusercontent.com/.../icon.svg"
 png = "https://raw.githubusercontent.com/.../icon.png"
+
+[config.client_secret]     # one table per key in credentials.json
+type = "string"            # string, integer, boolean or list (of strings)
+required = true
+secret = true              # the Publisher accepts it but never shows it
+description = "From Google Cloud Console."
+```
+
+The Publisher refuses settings that aren't in a `[config]` table, or have the wrong type, so list every key the adapter reads. Keys are lowercase.
+
+If the settings come from the platform, such as an app it registers or a file its console downloads, implement `setup` and declare its inputs in `[setup]` tables, which also accept `type = "file"`. The Publisher checks the `settings` it returns against `[config]` and saves them as `credentials.json`, replacing the old file. `setup` is a classmethod, since it runs before the settings an instance reads exist.
+
+```toml
+[setup.client_file]
+type = "file"              # the file's text, at most 64 KB
+required = true
+description = "The client JSON downloaded from Google Cloud Console."
 ```
 
 ## Try it
@@ -102,7 +122,7 @@ png = "https://raw.githubusercontent.com/.../icon.png"
 ```bash
 python3 -m venv venv
 venv/bin/pip install -e '.[dev]'
-mkdir -p .relaysms/config && cp ~/Downloads/credentials.json .relaysms/config/
+venv/bin/relaysms-adapter config set client_id=... client_secret   # or setup, if it has one
 venv/bin/relaysms-adapter link
 venv/bin/relaysms-adapter send
 venv/bin/relaysms-adapter revoke
@@ -113,13 +133,15 @@ venv/bin/relaysms-adapter revoke
 | `link` | OAuth2: opens the authorization URL and catches the redirect on a local `http://localhost` redirect URL, or asks you to paste it. PNBA: asks for the phone number, code and two-step password. |
 | `send` | Sends from the linked account, asking for what the category needs. `--to`, `--subject`, `--body` and `--attach` skip the questions; `--offline` sends without an account. |
 | `revoke` | Unlinks the account. |
+| `setup` | Runs `setup` and saves `credentials.json`. `--input key=value`, or `key=@path` for a file, skips the questions. |
+| `config show`, `config set` | Lists the settings, or changes them; `set` asks for a bare `KEY`'s value and takes `--unset KEY`. |
 | `call <method> [json]` | Calls any method with raw params. |
 
 ## Change the SDK
 
 Adapters pin SDK releases, so the Publisher talks to older ones.
 
-- Keep requests, results, errors and `adapter.toml` backward compatible: add optional fields, never rename or remove them.
+- Keep requests, results, errors and `adapter.toml` backward compatible.
 - Bump `version` in `pyproject.toml` with every change to `src/`; CI checks.
 - Release by pushing `sdk-v` plus the version, such as `sdk-v1.1.0`.
 

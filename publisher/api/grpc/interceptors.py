@@ -25,6 +25,15 @@ from publisher.models.server_identity_key import get_private_key
 logger = logging.getLogger(__name__)
 
 INTERNAL_ERROR = "Oops! Something went wrong. Please try again later."
+# Codes for a fault on the server, logged at ERROR. Any other code means the
+# request was rejected, which is logged at WARNING.
+SERVER_ERRORS = {
+    grpc.StatusCode.UNKNOWN,
+    grpc.StatusCode.INTERNAL,
+    grpc.StatusCode.UNAVAILABLE,
+    grpc.StatusCode.DATA_LOSS,
+    grpc.StatusCode.DEADLINE_EXCEEDED,
+}
 REQUIRED_HEADERS = (
     "x-payload-bin",
     "x-public-key-bin",
@@ -53,8 +62,15 @@ class LoggingInterceptor(ServerInterceptor):
             if code in (None, grpc.StatusCode.OK):
                 logger.info("%s %s - OK -", method_name, self.server_protocol)
             else:
-                logger.error(
-                    "%s %s - %s -", method_name, self.server_protocol, code.name
+                level = logging.ERROR if code in SERVER_ERRORS else logging.WARNING
+                details = (context.details() or b"").decode(errors="replace")  # pyright: ignore[reportAttributeAccessIssue]
+                logger.log(
+                    level,
+                    "%s %s - %s - %s",
+                    method_name,
+                    self.server_protocol,
+                    code.name,
+                    details,
                 )
 
 

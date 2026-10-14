@@ -68,8 +68,8 @@ rewrite_venv_scripts() {
   done < <(moved_paths)
 }
 
-# The overrides file used to be tracked; keep any local entries, then restore
-# the tracked copy so git pull can't conflict with it.
+# Migration 019 logs the overrides it finds in data/gateway_clients/, since they
+# are no longer used, so copy any local entries there.
 move_overrides() {
   local old="$INSTALL_DIR/gateway_clients/mcc_mnc_overrides.json"
   local new="$INSTALL_DIR/data/gateway_clients/mcc_mnc_overrides.json"
@@ -79,7 +79,6 @@ move_overrides() {
     cp -p "$old" "$new"
     log "Moved MCC/MNC overrides to data/gateway_clients/"
   fi
-  git -C "$INSTALL_DIR" checkout -- gateway_clients/mcc_mnc_overrides.json 2>/dev/null || true
 }
 
 rename_assets_var() {

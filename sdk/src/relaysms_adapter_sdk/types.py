@@ -109,3 +109,17 @@ class PasswordVerificationRequest:
     phone_number: str
     password: str
     request_identifier: str | None = None
+
+
+@dataclass(frozen=True)
+class SetupRequest:
+    """The values for the inputs in the adapter's [setup] tables."""
+
+    inputs: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class SetupResult:
+    """The settings to save as credentials.json, replacing what's there."""
+
+    settings: dict[str, Any]

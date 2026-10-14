@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from publisher.models.credential import MAX_USERNAME_LENGTH
 from publisher.publications import PublishContentRequest
+from relaysms_adapter_sdk.manifest import FieldType
 
 USERNAME_FIELD = Field(
     None, description="Username; null for the CLI or a deleted credential."
@@ -37,15 +38,16 @@ class GatewayClientManifest(BaseModel):
 
 class OAuthClientMetadata(BaseModel):
     client_id: str
-    dpop_bound_access_tokens: bool
-    application_type: str
     redirect_uris: list[str]
-    grant_types: list[str]
-    response_types: list[str]
-    scope: str
-    token_endpoint_auth_method: str
     client_name: str
     client_uri: str
+    scope: str
+    # The same for every atproto web client, so settings don't include them.
+    dpop_bound_access_tokens: bool = True
+    application_type: str = "web"
+    grant_types: list[str] = ["authorization_code", "refresh_token"]
+    response_types: list[str] = ["code"]
+    token_endpoint_auth_method: str = "none"
 
 
 class ServerStaticPublicKey(BaseModel):
@@ -188,9 +190,14 @@ class AuditEventPage(PageLinks):
 class PlatformAdapterInfo(PlatformManifest):
     id: str
     source_url: str
-    tag: str | None = Field(None, description="Null for a default-branch clone.")
+    tag: str | None = Field(
+        None, description="Null for an adapter registered by `platforms import`."
+    )
     commit: str
     enabled: bool
+    configured: bool = Field(
+        ..., description="Every required setting has a value. See its config."
+    )
     created_at: datetime.datetime
     created_by: str | None = USERNAME_FIELD
     updated_at: datetime.datetime
@@ -286,6 +293,40 @@ class AdapterInstall(BaseModel):
 class AdapterUpgrade(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tag: str | None = TAG_FIELD
+
+
+class AdapterField(BaseModel):
+    name: str
+    type: FieldType
+    required: bool
+    secret: bool = Field(..., description="Write-only: its value is never returned.")
+    description: str | None
+
+
+class AdapterSetting(AdapterField):
+    value: Any = Field(None, description="Null for a secret or an unset setting.")
+    is_set: bool
+
+
+class AdapterConfig(BaseModel):
+    settings: list[AdapterSetting]
+    setup: list[AdapterField] = Field(
+        ..., description="Inputs POST .../setup takes; empty if it has no setup."
+    )
+
+
+class AdapterConfigUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    settings: dict[str, Any] = Field(
+        ..., description="Settings to change; others are kept, and null removes one."
+    )
+
+
+class AdapterSetup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    inputs: dict[str, Any] = Field(
+        ..., description="A file input is the file's text, at most 64 KB."
+    )
 
 
 class AdapterJobInfo(BaseModel):

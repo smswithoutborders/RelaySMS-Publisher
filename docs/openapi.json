@@ -2312,6 +2312,395 @@
         }
       }
     },
+    "/v1/platforms/adapters/{adapter_id}/config": {
+      "get": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Get settings",
+        "description": "Returns the ETag to send as If-Match. Administrators only.",
+        "operationId": "get_config_v1_platforms_adapters__adapter_id__config_get",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterConfig"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write. Also when the credential isn't an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The adapter, or its files on this server, are broken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Change settings",
+        "description": "Needs If-Match. Administrators only.",
+        "operationId": "update_config_v1_platforms_adapters__adapter_id__config_patch",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdapterConfigUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A key isn't a setting of the adapter, or a value has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed. Also when the credential isn't an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The adapter, or its files on this server, are broken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/platforms/adapters/{adapter_id}/setup": {
+      "post": {
+        "tags": [
+          "Platform Adapters"
+        ],
+        "summary": "Set up settings",
+        "description": "Runs the adapter's setup and replaces its settings. Needs If-Match.\n\nAdministrators only. The inputs are listed in its config's setup.",
+        "operationId": "setup_config_v1_platforms_adapters__adapter_id__setup_post",
+        "security": [
+          {
+            "HTTPBasic": [
+              "platforms:write"
+            ]
+          },
+          {
+            "SessionCookie": [
+              "platforms:write"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "adapter_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 36,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "title": "Adapter Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdapterSetup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdapterConfig"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The adapter has no setup, or rejected the inputs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session cookie or Basic credentials, an expired session, or a wrong username or password.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks platforms:write, or a cookie request came from an origin that isn't allowed. Also when the credential isn't an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No adapter with that ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Changed by another request at the same moment. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match isn't the current ETag: it changed since you loaded it. Reload and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "No If-Match header. Send the ETag from the last GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The adapter, or its files on this server, are broken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/platforms/adapters/{adapter_id}/update": {
       "post": {
         "tags": [
@@ -3381,6 +3770,87 @@
   },
   "components": {
     "schemas": {
+      "AdapterConfig": {
+        "properties": {
+          "settings": {
+            "items": {
+              "$ref": "#/components/schemas/AdapterSetting"
+            },
+            "type": "array",
+            "title": "Settings"
+          },
+          "setup": {
+            "items": {
+              "$ref": "#/components/schemas/AdapterField"
+            },
+            "type": "array",
+            "title": "Setup",
+            "description": "Inputs POST .../setup takes; empty if it has no setup."
+          }
+        },
+        "type": "object",
+        "required": [
+          "settings",
+          "setup"
+        ],
+        "title": "AdapterConfig"
+      },
+      "AdapterConfigUpdate": {
+        "properties": {
+          "settings": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Settings",
+            "description": "Settings to change; others are kept, and null removes one."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "settings"
+        ],
+        "title": "AdapterConfigUpdate"
+      },
+      "AdapterField": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "$ref": "#/components/schemas/FieldType"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required"
+          },
+          "secret": {
+            "type": "boolean",
+            "title": "Secret",
+            "description": "Write-only: its value is never returned."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "required",
+          "secret",
+          "description"
+        ],
+        "title": "AdapterField"
+      },
       "AdapterInstall": {
         "properties": {
           "source_url": {
@@ -3499,6 +3969,71 @@
         ],
         "title": "AdapterJobInfo"
       },
+      "AdapterSetting": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "$ref": "#/components/schemas/FieldType"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required"
+          },
+          "secret": {
+            "type": "boolean",
+            "title": "Secret",
+            "description": "Write-only: its value is never returned."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "value": {
+            "title": "Value",
+            "description": "Null for a secret or an unset setting."
+          },
+          "is_set": {
+            "type": "boolean",
+            "title": "Is Set"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "required",
+          "secret",
+          "description",
+          "is_set"
+        ],
+        "title": "AdapterSetting"
+      },
+      "AdapterSetup": {
+        "properties": {
+          "inputs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Inputs",
+            "description": "A file input is the file's text, at most 64 KB."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "inputs"
+        ],
+        "title": "AdapterSetup"
+      },
       "AdapterUpgrade": {
         "properties": {
           "tag": {
@@ -3534,6 +4069,8 @@
           "platforms.remove",
           "platforms.enable",
           "platforms.disable",
+          "platforms.configure",
+          "platforms.setup",
           "gateway_clients.create",
           "gateway_clients.update",
           "gateway_clients.enable",
@@ -3888,6 +4425,17 @@
         ],
         "title": "ErrorResponse",
         "description": "The body of every error response."
+      },
+      "FieldType": {
+        "type": "string",
+        "enum": [
+          "string",
+          "integer",
+          "boolean",
+          "list",
+          "file"
+        ],
+        "title": "FieldType"
       },
       "GatewayClientCandidate": {
         "properties": {
@@ -4307,42 +4855,12 @@
             "type": "string",
             "title": "Client Id"
           },
-          "dpop_bound_access_tokens": {
-            "type": "boolean",
-            "title": "Dpop Bound Access Tokens"
-          },
-          "application_type": {
-            "type": "string",
-            "title": "Application Type"
-          },
           "redirect_uris": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Redirect Uris"
-          },
-          "grant_types": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Grant Types"
-          },
-          "response_types": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Response Types"
-          },
-          "scope": {
-            "type": "string",
-            "title": "Scope"
-          },
-          "token_endpoint_auth_method": {
-            "type": "string",
-            "title": "Token Endpoint Auth Method"
           },
           "client_name": {
             "type": "string",
@@ -4351,20 +4869,55 @@
           "client_uri": {
             "type": "string",
             "title": "Client Uri"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "dpop_bound_access_tokens": {
+            "type": "boolean",
+            "title": "Dpop Bound Access Tokens",
+            "default": true
+          },
+          "application_type": {
+            "type": "string",
+            "title": "Application Type",
+            "default": "web"
+          },
+          "grant_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Grant Types",
+            "default": [
+              "authorization_code",
+              "refresh_token"
+            ]
+          },
+          "response_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Response Types",
+            "default": [
+              "code"
+            ]
+          },
+          "token_endpoint_auth_method": {
+            "type": "string",
+            "title": "Token Endpoint Auth Method",
+            "default": "none"
           }
         },
         "type": "object",
         "required": [
           "client_id",
-          "dpop_bound_access_tokens",
-          "application_type",
           "redirect_uris",
-          "grant_types",
-          "response_types",
-          "scope",
-          "token_endpoint_auth_method",
           "client_name",
-          "client_uri"
+          "client_uri",
+          "scope"
         ],
         "title": "OAuthClientMetadata"
       },
@@ -4450,7 +5003,7 @@
               }
             ],
             "title": "Tag",
-            "description": "Null for a default-branch clone."
+            "description": "Null for an adapter registered by `platforms import`."
           },
           "commit": {
             "type": "string",
@@ -4459,6 +5012,11 @@
           "enabled": {
             "type": "boolean",
             "title": "Enabled"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured",
+            "description": "Every required setting has a value. See its config."
           },
           "created_at": {
             "type": "string",
@@ -4505,6 +5063,7 @@
           "source_url",
           "commit",
           "enabled",
+          "configured",
           "created_at",
           "updated_at"
         ],

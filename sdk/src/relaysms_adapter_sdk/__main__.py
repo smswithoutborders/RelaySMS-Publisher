@@ -20,17 +20,16 @@ def main(argv: list[str]) -> int:
         )
         return 2
 
-    log.configure()
+    log.configure(package=argv[0].partition(":")[0].partition(".")[0])
     try:
         cls = pkgutil.resolve_name(argv[0])
         if not (isinstance(cls, type) and issubclass(cls, Adapter)):
             raise TypeError(f"{argv[0]} is not an Adapter subclass.")
-        adapter = cls()
     except Exception:
         logger.exception("Could not start %s", argv[0])
         return 1
 
-    run(adapter)
+    run(cls)
     return 0
 
 

@@ -27,6 +27,7 @@ from publisher.models.credential import Credential
 from publisher.models.platform_adapter import PROTOCOL_NAMES, PlatformAdapter
 from relaysms_adapter_sdk.manifest import Category, Manifest, ManifestError, Protocol
 from relaysms_adapter_sdk.manifest import load as load_manifest
+from relaysms_adapter_sdk.paths import CREDENTIALS_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,14 @@ def _git_error(e: GitCommandError) -> str:
 
 class AdapterConflictError(AdapterError):
     pass
+
+
+class InvalidConfigError(AdapterError):
+    """Settings or setup inputs the caller gave don't fit the adapter."""
+
+
+class AdapterFaultError(AdapterError):
+    """The adapter or its files on this server are broken, not the caller's input."""
 
 
 class AdapterInUseError(AdapterError):
@@ -145,7 +154,7 @@ def _apply_manifest(adapter: PlatformAdapter, manifest: Manifest) -> None:
     adapter.icon_png = manifest.icon_png
 
 
-def _flush(session: Session, adapter: PlatformAdapter) -> None:
+def flush(session: Session, adapter: PlatformAdapter) -> None:
     # Read before flushing: a failed flush expires the adapter's attributes.
     name, proto_id = adapter.name, adapter.proto_id
     try:
@@ -190,10 +199,8 @@ def _discard_build(adapter: PlatformAdapter) -> None:
     _rmtree(_beside(adapter.venv_path, "new"))
 
 
-def _build(
-    adapter: PlatformAdapter, tag: str | None, log: list[str]
-) -> tuple[str, Manifest]:
-    """Clone tag, or the default branch, and its venv next to the running version.
+def _build(adapter: PlatformAdapter, tag: str, log: list[str]) -> tuple[str, Manifest]:
+    """Clone tag and build its venv next to the running version.
 
     Returns the commit and the manifest.
     """
@@ -228,14 +235,10 @@ def _register(session: Session, adapter: PlatformAdapter, manifest: Manifest) ->
     try:
         _apply_manifest(adapter, manifest)
         session.add(adapter)
-        _flush(session, adapter)
+        flush(session, adapter)
     except AdapterError:
         _discard_build(adapter)
         raise
-
-
-def _resolve_tag(url: str, tag: str | None, branch: bool) -> str | None:
-    return None if branch else tag or latest_tag(url)
 
 
 def activate(adapter: PlatformAdapter) -> None:
@@ -265,22 +268,22 @@ def install(
     url: str,
     tag: str | None = None,
     *,
-    branch: bool = False,
     actor: Credential | None = None,
     log: list[str],
 ) -> PlatformAdapter:
-    """Build and register url at tag, its newest tag, or its default branch."""
+    """Build and register url at tag, or its newest version tag."""
     url = url.strip()
+    tag = tag or latest_tag(url)
     adapter = PlatformAdapter(
         id=adapter_id(url),
         source_url=url,
-        tag=_resolve_tag(url, tag, branch),
+        tag=tag,
         created_by=actor.id if actor else None,
         updated_by=actor.id if actor else None,
     )
     if session.get(PlatformAdapter, adapter.id) or Path(adapter.path).exists():
         raise AdapterError(f"Adapter from {url} is already installed")
-    adapter.commit, manifest = _build(adapter, adapter.tag, log)
+    adapter.commit, manifest = _build(adapter, tag, log)
     _register(session, adapter, manifest)
 
     audit_event.record(
@@ -302,15 +305,14 @@ def update(
     adapter: PlatformAdapter,
     tag: str | None = None,
     *,
-    branch: bool = False,
     actor: Credential | None = None,
     log: list[str],
 ) -> None:
-    """Register tag, the newest version tag, or the default branch for an adapter."""
-    tag = _resolve_tag(adapter.source_url, tag, branch)
+    """Register tag, or the newest version tag, for an adapter."""
+    tag = tag or latest_tag(adapter.source_url)
     commit, manifest = _build(adapter, tag, log)
     # A tag that now names other code was moved, which a release shouldn't do.
-    if tag and tag == adapter.tag and commit != adapter.commit:
+    if tag == adapter.tag and commit != adapter.commit:
         _discard_build(adapter)
         raise AdapterError(
             f"Tag {tag} of {adapter.name!r} now points to {commit[:12]}, "
@@ -340,7 +342,7 @@ def set_enabled(
         return
     adapter.is_enabled = enabled
     adapter.updated_by = actor.id if actor else None
-    _flush(session, adapter)
+    flush(session, adapter)
     action = AuditAction.PLATFORMS_ENABLE if enabled else AuditAction.PLATFORMS_DISABLE
     audit_event.record(session, action, actor=actor, target=adapter)
 
@@ -379,7 +381,7 @@ def remove(
         },
     )
     session.delete(adapter)
-    _flush(session, adapter)
+    flush(session, adapter)
 
 
 def import_from_disk(session: Session) -> list[PlatformAdapter]:
@@ -427,8 +429,8 @@ def move_files_out_of_code(session: Session) -> list[PlatformAdapter]:
     legacy_state_dir = PlatformsConfig.get().adapters_state_dir.parent / "assets"
     changed = []
     for adapter in platform_adapters.find(session, include_disabled=True):
-        credentials = Path(adapter.path) / "credentials.json"
-        config = Path(adapter.config_path) / "credentials.json"
+        credentials = Path(adapter.path) / CREDENTIALS_FILE
+        config = Path(adapter.config_path) / CREDENTIALS_FILE
         legacy_state = legacy_state_dir / adapter.id
         state = Path(adapter.state_path)
         moved = False

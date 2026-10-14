@@ -10,7 +10,9 @@ from publisher.cli.db import session
 from publisher.cli.output import print_table
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.platform_adapter import PlatformAdapter
-from publisher.platforms import ipc, manager
+from publisher.platforms import adapter_config, ipc, manager
+from relaysms_adapter_sdk import manifest
+from relaysms_adapter_sdk.manifest import ConfigError, Field, FieldType
 
 
 def _filter_options(command):
@@ -40,34 +42,22 @@ def cli():
     """Manage platform adapters."""
 
 
-def _version_options(command):
-    command = click.option(
-        "--branch",
-        is_flag=True,
-        help="Use the default branch, for repositories without version tags yet.",
-    )(command)
-    return click.option(
-        "--tag", help="Version tag to install. Defaults to the newest."
-    )(command)
-
-
-def _check_version(tag, branch):
-    if tag and branch:
-        raise click.UsageError("Pass either --tag or --branch, not both.")
+_tag_option = click.option(
+    "--tag", help="Version tag to install. Defaults to the newest."
+)
 
 
 def _describe(adapter):
-    return f"{adapter.tag or 'default branch'} ({adapter.commit[:12]})"
+    return f"{adapter.tag or 'untagged'} ({adapter.commit[:12]})"
 
 
 @cli.command()
 @click.argument("github_url")
-@_version_options
-def add(github_url, tag, branch):
+@_tag_option
+def add(github_url, tag):
     """Add an adapter from a GitHub repository."""
-    _check_version(tag, branch)
     with session() as db:
-        adapter = manager.install(db, github_url, tag, branch=branch, log=[])
+        adapter = manager.install(db, github_url, tag, log=[])
     manager.activate(adapter)
     click.echo(f"Adapter {adapter.name!r} added at {_describe(adapter)}.")
 
@@ -116,7 +106,7 @@ def disable(name, proto_id, cat_id):
         "virtualenv with its config and state directories.\n\n"
         "Put a '--' before the command so its arguments aren't confused with "
         "--proto-id/--cat-id.\n\n"
-        "Example: publisher.sh platforms exec mastodon -- mastodon-register --help"
+        "Example: publisher.sh platforms exec <NAME> -- <COMMAND> --help"
     ),
 )
 @click.argument("name")
@@ -141,10 +131,9 @@ def exec_(name, proto_id, cat_id, cli_args):
 @cli.command()
 @click.argument("name", required=False)
 @_filter_options
-@_version_options
-def update(name, proto_id, cat_id, tag, branch):
+@_tag_option
+def update(name, proto_id, cat_id, tag):
     """Move one adapter, or all of them, to a new version."""
-    _check_version(tag, branch)
     if tag and not name:
         raise click.UsageError("--tag needs an adapter name.")
     with session() as db:
@@ -162,7 +151,7 @@ def update(name, proto_id, cat_id, tag, branch):
                 adapter = db.get(PlatformAdapter, adapter_id)
                 if adapter is None:
                     continue
-                manager.update(db, adapter, tag, branch=branch, log=[])
+                manager.update(db, adapter, tag, log=[])
             manager.activate(adapter)
             click.echo(f"Updated {adapter.name!r} to {_describe(adapter)}.")
         except click.ClickException as e:
@@ -193,6 +182,7 @@ def list_command(name, proto_id, cat_id):
             "Auth Provider",
             "Offline",
             "Enabled",
+            "Configured",
             "Version",
         ],
         [
@@ -205,12 +195,120 @@ def list_command(name, proto_id, cat_id):
                 a.auth_provider or "-",
                 "✓" if a.supports_offline_first else "-",
                 "✓" if a.is_enabled else "-",
+                "✓" if adapter_config.is_configured(a) else "-",
                 _describe(a),
             ]
             for a in adapters
         ],
         "No matching adapters found.",
     )
+
+
+@cli.group(name="config")
+def config_group():
+    """Show and change an adapter's settings, the credentials.json it reads."""
+
+
+@config_group.command(name="show")
+@click.argument("name")
+@_filter_options
+def config_show(name, proto_id, cat_id):
+    """Show an adapter's settings; secrets only show whether they're set."""
+    with session() as db:
+        adapter = _find_one(db, name, proto_id, cat_id)
+        settings = adapter_config.show(adapter)
+
+    print_table(
+        ["Setting", "Value", "Required", "Description"],
+        [
+            [
+                s.field.name,
+                _shown_value(s),
+                "✓" if s.field.required else "-",
+                s.field.description or "",
+            ]
+            for s in settings
+        ],
+        f"Adapter {name!r} declares no settings.",
+    )
+
+
+@config_group.command(name="set")
+@click.argument("name")
+@click.argument("values", nargs=-1, metavar="[KEY=VALUE|KEY]...")
+@click.option("--unset", multiple=True, metavar="KEY", help="Remove a setting.")
+@_filter_options
+def config_set(name, values, unset, proto_id, cat_id):
+    """Change some settings and keep the rest.
+
+    Give a bare KEY to be asked for its value. Lists are comma-separated.
+    """
+    if not values and not unset:
+        raise click.UsageError("Give a setting to change, or --unset one.")
+    adapter = _adapter(name, proto_id, cat_id)
+    changes = _values(adapter_config.load_manifest(adapter).config, values)
+    changes |= dict.fromkeys(unset)
+    with session() as db:
+        adapter_config.update(db, _current(db, adapter), changes)
+    click.echo(f"Saved the settings of {name!r}.")
+
+
+@cli.command()
+@click.argument("name")
+@click.option(
+    "--input",
+    "inputs",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Repeatable; KEY=@PATH for a file. Asks for required inputs not given.",
+)
+@_filter_options
+def setup(name, inputs, proto_id, cat_id):
+    """Run an adapter's setup, such as registering an app, and save its settings."""
+    adapter = _adapter(name, proto_id, cat_id)
+    fields = adapter_config.load_manifest(adapter).setup
+    values = _values(fields, inputs, ask_required=True)
+    with session() as db:
+        current = _current(db, adapter)
+        db.commit()
+        adapter_config.setup(db, current, values)
+    click.echo(f"Saved the settings of {name!r}.")
+
+
+def _adapter(name, proto_id, cat_id) -> PlatformAdapter:
+    with session() as db:
+        return _find_one(db, name, proto_id, cat_id)
+
+
+def _current(db, adapter: PlatformAdapter) -> PlatformAdapter:
+    current = db.get(PlatformAdapter, adapter.id)
+    if current is None:
+        raise click.ClickException(f"Adapter {adapter.name!r} was removed.")
+    return current
+
+
+def _values(fields: tuple[Field, ...], texts, *, ask_required: bool = False) -> dict:
+    """Read KEY=VALUE texts, asking for the value of each bare KEY."""
+    try:
+        return manifest.parse_inputs(fields, texts, _ask, ask_required=ask_required)
+    except ConfigError as e:
+        raise click.ClickException(str(e)) from e
+
+
+def _ask(field: Field) -> str:
+    question = field.description or field.name
+    if field.type is FieldType.FILE:
+        return click.prompt(f"{question} (path)")
+    return click.prompt(question, hide_input=field.secret)
+
+
+def _shown_value(setting: adapter_config.Setting) -> str:
+    if setting.field.secret:
+        return "(secret, set)" if setting.is_set else "(secret, not set)"
+    if not setting.is_set:
+        return "-"
+    value = setting.value
+    return ", ".join(value) if isinstance(value, list) else str(value)
 
 
 @cli.command(name="import")

@@ -7,3 +7,13 @@ offline_first = false
 
 [icons]
 svg = "https://example.com/echo.svg"
+
+[config.code]
+required = true
+secret = true
+description = "The code every phone number links with."
+
+[setup.code]
+required = true
+secret = true
+description = "The code every phone number links with."

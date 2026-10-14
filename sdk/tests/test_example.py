@@ -82,6 +82,14 @@ def test_link_and_send(env, tmp_path):
     } in logs
 
 
+def test_setup_runs_before_credentials_exist(env, tmp_path):
+    (tmp_path / "config" / "credentials.json").unlink()
+
+    process = invoke(env, ("setup", {"inputs": {"code": "654321"}}))
+
+    assert wire.parse_response(process.stdout) == {"settings": {"code": "654321"}}
+
+
 def test_wrong_code(env):
     process = invoke(env, ("verify_code", {"phone_number": "+237", "code": "0"}))
     with pytest.raises(AuthenticationError):

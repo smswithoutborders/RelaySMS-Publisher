@@ -26,12 +26,12 @@
 
 **Suggest a feature.** Open an issue that describes the problem before the solution. For anything that changes the payload format, the gRPC or REST contract, or the database schema, agree on the design in the issue before writing code.
 
-**Fix something.** Small fixes (typos, clear bugs with a test) can go straight to a pull request. For larger changes, comment on the issue first so work isn't duplicated.
+**Fix something.** Small fixes (typos, clear bugs with a test) can go straight to a pull request. For larger changes, comment on the issue first.
 
 ## Reporting security issues
 
 > [!CAUTION]
-> Don't open a public issue for a vulnerability. Email **<developers@smswithoutborders.com>** with a description, the affected versions and steps to reproduce. We'll confirm receipt and keep you updated until a fix is released.
+> Don't open a public issue for a vulnerability. Email **<developers@smswithoutborders.com>** with a description, the affected versions and steps to reproduce.
 
 ## Development setup
 
@@ -138,7 +138,7 @@ git push --force-with-lease
 ```
 
 > [!TIP]
-> Leave "Allow edits by maintainers" ticked so small fixes can be pushed to your branch.
+> Leave "Allow edits by maintainers" ticked.
 
 ### Commits
 
@@ -174,7 +174,7 @@ Common types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` and `c
 
 ### Pull request checklist
 
-- [ ] The PR targets `staging` and does one thing. Split unrelated changes.
+- [ ] The PR targets `staging` and does one thing.
 - [ ] `make check` and `make test` pass locally.
 - [ ] New behaviour and bug fixes come with tests. A bug fix has a test that fails without it.
 - [ ] Docs, `template.env` and the README are updated if behaviour, settings or commands changed.
@@ -229,9 +229,6 @@ The hooks enforce formatting, lint, types and commit messages. These rules are c
 
 Shell scripts follow one layout: `#!/usr/bin/env bash`, the SPDX line, `set -Eeuo pipefail`, then `source` `scripts/lib.sh` for logging, errors and shared helpers. Scripts with options parse them in `parse_args` and run from `main "$@"`. `install.sh` is the one exception: piped through curl, it clones the repo first and re-runs from the clone.
 
-> [!WARNING]
-> `platforms/protocol_interfaces.py` is excluded from every tool because adapters copy it verbatim. Keep changes to it backwards compatible.
-
 ## Testing
 
 ```bash
@@ -240,8 +237,6 @@ python -m pytest tests/api/rest -q           # one directory
 python -m pytest -k token_id -x              # by name, stop at first failure
 make coverage                                # whole suite, with untested lines
 ```
-
-Use coverage to find code no test runs, not as a target: a covered line can still have no assertion checking it.
 
 Tests run against in-memory SQLite. `tests/conftest.py` sets the environment before `publisher.config` is imported, so your local `.env` is ignored.
 
@@ -260,8 +255,7 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 
 - Put a test where its module lives: `publisher/api/rest/v1/stats.py` is tested in `tests/api/rest/test_stats.py`.
 - Name tests after the behaviour, such as `test_list_skips_disabled_items`, not the function.
-- Test through the public interface (a route, an RPC, a domain function) and assert on outcomes: responses, rows, raised errors. Patch only what crosses the process boundary, such as adapter IPC or outbound HTTP.
-- A bug fix needs a test that fails before the fix.
+- Test through the public interface (a route, an RPC, a domain function). Patch only what crosses the process boundary, such as adapter IPC or outbound HTTP.
 
 ### Fixtures and helpers
 
@@ -325,7 +319,7 @@ make build test PYTHON=.venv312/bin/python
 4. Test it in `tests/api/grpc/` and update [docs/grpc.md](docs/grpc.md).
 
 > [!WARNING]
-> Deployed clients depend on the proto. Only add fields; never renumber, reuse or change the type of an existing field.
+> Deployed clients depend on the proto: only add fields.
 
 ### Add a CLI command
 
