@@ -5209,7 +5209,8 @@
                 "type": "null"
               }
             ],
-            "title": "Failure Reason"
+            "title": "Failure Reason",
+            "description": "Why it failed, as a short code such as payload_malformed or adapter_rate_limited."
           },
           "created_at": {
             "type": "string",

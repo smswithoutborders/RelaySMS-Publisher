@@ -6,24 +6,64 @@ from celery.signals import worker_shutdown
 
 from publisher import publications
 from publisher.db import dispose_engine, get_session
-from publisher.keys import KeyManagementError
+from publisher.keys import (
+    KeyManagementError,
+    KeyNotFoundError,
+    KeyUnavailableError,
+    TokenVerificationError,
+)
 from publisher.models.publication_stats import record as record_publication
 from publisher.publications import (
     AdapterIntegrationError,
     OfflineTagError,
+    OfflineTagInvalidError,
+    OfflineTagMissingError,
     PayloadMalformedError,
     PayloadNotSupportedError,
     ProtocolNotAllowedError,
 )
 from publisher.tasks.celery_app import celery_app
+from relaysms_adapter_sdk.errors import (
+    INTERNAL_ERROR,
+    AuthenticationError,
+    InvalidParamsError,
+    RateLimitedError,
+    TokenInvalidError,
+    UpstreamError,
+)
 
 logger = logging.getLogger(__name__)
 
-_FAILURE_REASON_MAX_LEN = 255
+# Stats keep fixed codes so they group cleanly. Error messages stay in the logs:
+# adapters pass on upstream text that can name recipients or echo responses.
+_FAILURE_REASONS = {
+    PayloadMalformedError: "payload_malformed",
+    PayloadNotSupportedError: "payload_not_supported",
+    ProtocolNotAllowedError: "protocol_not_allowed",
+    OfflineTagMissingError: "offline_tag_missing",
+    OfflineTagInvalidError: "offline_tag_invalid",
+    KeyNotFoundError: "token_not_found",
+    KeyUnavailableError: "key_unavailable",
+    TokenVerificationError: "token_verification_failed",
+}
+_ADAPTER_FAILURE_REASONS = {
+    InvalidParamsError.code: "adapter_invalid_params",
+    AuthenticationError.code: "adapter_auth_failed",
+    TokenInvalidError.code: "adapter_token_invalid",
+    RateLimitedError.code: "adapter_rate_limited",
+    UpstreamError.code: "adapter_upstream",
+    INTERNAL_ERROR: "adapter_internal",
+}
 
 
 def _failure_reason(exc: Exception) -> str:
-    return str(exc)[:_FAILURE_REASON_MAX_LEN]
+    if isinstance(exc, AdapterIntegrationError):
+        return _ADAPTER_FAILURE_REASONS.get(exc.code, "adapter_error")
+    # The class hierarchy, so a subclass of a mapped error keeps its code.
+    for cls in type(exc).__mro__:
+        if cls in _FAILURE_REASONS:
+            return _FAILURE_REASONS[cls]
+    return "unexpected_error"
 
 
 @worker_shutdown.connect
@@ -81,10 +121,10 @@ def publish_message(
         logger.error("Failed to publish message: %s", exc)
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
         refreshed_token = exc.token
-    except Exception:
+    except Exception as exc:
         logger.exception("An unexpected error occurred during task processing.")
         platform_name = delivery.platform if delivery else None
-        failure_reason = "unexpected_error"
+        failure_reason = _failure_reason(exc)
 
     with get_session() as db:
         if delivery and refreshed_token:

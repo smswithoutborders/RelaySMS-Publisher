@@ -78,10 +78,12 @@ class AdapterIntegrationError(PublicationError):
         self,
         message: str,
         *,
+        code: int,
         platform_name: str | None = None,
         token: dict | None = None,
     ):
         super().__init__(message, platform_name=platform_name)
+        self.code = code
         # Refreshed before the send failed, so still the one to store.
         self.token = token
 
@@ -344,6 +346,7 @@ def send(delivery: Delivery) -> dict | None:
         raise AdapterIntegrationError(
             f"Adapter error: {e.message}",
             platform_name=delivery.platform,
+            code=e.code,
             token=e.token,
         ) from e
     logger.info("Published via %r.", delivery.platform)
