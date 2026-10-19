@@ -326,9 +326,8 @@ main() {
     log "Uptime Kuma already running, skipping"
   else
     log "Starting Uptime Kuma"
-    if [ "$KUMA_PORT" != "3001" ]; then
-      sed -i "s/127.0.0.1:3001:3001/127.0.0.1:$KUMA_PORT:3001/" observability/uptime-kuma/docker-compose.yml
-    fi
+    # Compose reads this .env, so a manual `up -d` later keeps the port.
+    echo "KUMA_PORT=$KUMA_PORT" >observability/uptime-kuma/.env
     docker compose -f observability/uptime-kuma/docker-compose.yml up -d
   fi
 
