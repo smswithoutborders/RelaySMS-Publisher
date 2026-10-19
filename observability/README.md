@@ -68,7 +68,8 @@ set it in the UI, under Settings > Workspace > Retention Controls.
 
 ## Uptime Kuma
 
-**Automated**: brings up the container, bound to `127.0.0.1:3001`.
+**Automated**: brings up the container, bound to `127.0.0.1:3001` unless
+another port is chosen, which it saves to `observability/uptime-kuma/.env`.
 
 **Manual**: `docker compose -f observability/uptime-kuma/docker-compose.yml up -d`
 
