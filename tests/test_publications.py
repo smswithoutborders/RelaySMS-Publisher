@@ -363,7 +363,7 @@ def test_a_failed_send_still_saves_the_refreshed_token(account, adapter):
     assert _stored_token(account)[0]["token"] == refreshed
 
 
-def test_adapter_failure_names_the_platform(account, adapter):
+def test_adapter_failure_names_the_platform_and_code(account, adapter):
     adapter.results["send_message"] = UpstreamError("quota exceeded")
     contents = _encrypt(account, account.slot, _email())
     [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
@@ -371,6 +371,7 @@ def test_adapter_failure_names_the_platform(account, adapter):
     with pytest.raises(AdapterIntegrationError, match="quota exceeded") as error:
         _publish(text)
     assert error.value.platform_name == "gmail"
+    assert error.value.code == UpstreamError.code
 
 
 def test_attachment_is_published_once_all_segments_arrive(account, adapter, caplog):
