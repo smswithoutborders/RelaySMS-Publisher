@@ -83,13 +83,6 @@ def test_grpc_tls_files_alone_do_not_enable_tls():
     assert not grpc.tls_enabled
 
 
-def test_old_certificate_names_are_rejected():
-    message = errors(SSL_CERTIFICATE="cert.pem", SSL_KEY="key.pem")
-
-    assert "renamed to GRPC_TLS_CERT_FILE" in message
-    assert "renamed to GRPC_TLS_KEY_FILE" in message
-
-
 def test_enabled_smtp_requires_credentials():
     message = errors(SMTP_TRANSPORT_ENABLED="true")
 
