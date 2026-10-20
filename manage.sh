@@ -209,10 +209,14 @@ cmd_update() {
   cd "$INSTALL_DIR"
   local svc
   if [ "$pulled" = "0" ]; then
+    # Fetch first so a network failure leaves the services running.
+    git fetch
     for svc in "${SERVICE_UNITS[@]}"; do
       systemctl stop "$svc"
     done
-    git pull
+    # Unlike pull, survives a force-pushed branch. Unlike --hard, keeps local
+    # edits and refuses to overwrite them.
+    git reset --keep "@{upstream}"
     git submodule update --init --recursive
     # Finish with the manage.sh just pulled, so changed update steps apply now.
     local args=(--pulled)
