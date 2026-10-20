@@ -128,9 +128,9 @@ class _Reader:
             return None
         return key
 
-    def get_secret(self, name: str) -> str | None:
+    def get_secret(self, name: str, required: bool = False) -> str | None:
         """Check the secret is a valid key, but return it as text to compare."""
-        return self.get_str(name) if self.get_key(name, required=False) else None
+        return self.get_str(name) if self.get_key(name, required) else None
 
     def get_path(self, name: str, default: Path) -> Path:
         """Read a path; a relative one is relative to the install directory."""
@@ -352,9 +352,14 @@ class OfflinePublishConfig(Section):
 
     @classmethod
     def load(cls, read: _Reader) -> Self:
+        allowed = read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
+        # Without the secret, anyone can publish offline payloads over https.
+        https_allowed = not allowed or "https" in allowed
         return cls(
-            allowed_protocols=read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS"),
-            shared_secret=read.get_secret("OFFLINE_PUBLISH_SHARED_SECRET"),
+            allowed_protocols=allowed,
+            shared_secret=read.get_secret(
+                "OFFLINE_PUBLISH_SHARED_SECRET", required=https_allowed
+            ),
         )
 
 

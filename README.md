@@ -181,13 +181,12 @@ Offline payloads are tagged with the protocol they arrived on: `https` for [REST
 
 ```bash
 OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=smtp   # comma-separated; empty allows every protocol
-OFFLINE_PUBLISH_SHARED_SECRET=           # 64-char hex; empty disables the check
+OFFLINE_PUBLISH_SHARED_SECRET=           # 64-char hex; required when https is allowed
 ```
 
-Offline payloads from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` are discarded. When `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads over `https` must carry it in the request's `tag` field.
-
-> [!WARNING]
-> Without `OFFLINE_PUBLISH_SHARED_SECRET`, anyone can publish offline payloads over `https`, so set it before allowing `https`. `template.env` allows only `smtp`, since the SMTP listener checks DKIM and an allowlist.
+- Offline payloads from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` are discarded.
+- Offline payloads over `https` must carry `OFFLINE_PUBLISH_SHARED_SECRET` in the request's `tag` field.
+- Allowing `https`, or every protocol, without the secret fails `config check` and startup.
 
 > [!TIP]
 > For a Twilio number, run [RelaySMS-GatewayClient-Twilio](https://github.com/smswithoutborders/RelaySMS-GatewayClient-Twilio) with `FORWARD_URLS_JSON` set to this server's `/v1/publications` URL and `FORWARD_TAG` set to `OFFLINE_PUBLISH_SHARED_SECRET`, then allow `https`.
