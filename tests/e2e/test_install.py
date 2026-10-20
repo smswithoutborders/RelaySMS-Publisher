@@ -181,6 +181,9 @@ def test_update_moves_legacy_layout_and_refreshes_units(container):
         f"""set -e
         cd {D}
         ./manage.sh stop
+        # Diverges from upstream, as a force-pushed branch leaves the checkout.
+        git -c user.name=e2e -c user.email=e2e@localhost -c commit.gpgsign=false \
+          commit -q --amend -m rewritten
         mkdir platforms && chown --reference=. platforms
         {moves}
         sed -i 's#^PLATFORMS_ADAPTERS_STATE_DIR=#PLATFORMS_ADAPTERS_ASSETS_DIR=#' .env
