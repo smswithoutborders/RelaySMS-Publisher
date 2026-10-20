@@ -41,6 +41,17 @@ class TestReadEnvVar:
         assert bash("read_env_var KEY missing.env").stdout == "\n"
 
 
+class TestPrompt:
+    @pytest.mark.parametrize("name", ["reply", "question", "default"])
+    def test_without_a_terminal_sets_the_default(self, bash, name):
+        # setsid drops the controlling terminal, so nothing can answer.
+        code = 'source scripts/lib.sh; prompt "$0" "Q? " fallback; echo "${!0}"'
+
+        result = bash(f"setsid -w bash -c '{code}' {name} </dev/null")
+
+        assert result.stdout.endswith("fallback\n")
+
+
 class TestAppDirectories:
     def test_unset_vars_use_template_defaults(self, install, bash):
         assert app_directories(bash) == [
