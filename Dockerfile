@@ -24,7 +24,7 @@ COPY requirements.txt requirements-observability.txt ./
 COPY sdk ./sdk
 RUN --mount=type=cache,sharing=locked,target=/root/.cache/pip \
   /venv/bin/pip install --disable-pip-version-check \
-  -r requirements.txt -r requirements-observability.txt
+  -r requirements-observability.txt
 
 COPY . .
 ENV PATH="/venv/bin:${PATH}"

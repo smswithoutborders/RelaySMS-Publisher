@@ -32,4 +32,4 @@ jobs:
       - name: Resolve dependencies
         run: |
           pip install --dry-run --disable-pip-version-check \
-            -r requirements.txt -r requirements-observability.txt
+            -r requirements-observability.txt

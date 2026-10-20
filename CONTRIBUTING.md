@@ -349,7 +349,7 @@ Adapters live in their own repositories and are built with the SDK in `sdk/` ([s
 - **Tests pass on newer Pythons but fail on 3.12:** look for newer syntax or an unquoted forward reference.
 - **Dialect tests:** run `PYTEST_ARGS="-k mysql" make test-dialects` for the failing dialect.
 - **e2e:** run `make test-e2e`, or `PYTEST_ARGS="-k debian" make test-e2e` for the failing distro.
-- **Requirements check:** the pinned dependencies conflict. Run `pip install --dry-run -r requirements.txt -r requirements-observability.txt` to see the conflict.
+- **Requirements check:** the pinned dependencies conflict. Run `pip install --dry-run -r requirements-observability.txt` to see the conflict.
 
 ## AI-assisted contributions
 

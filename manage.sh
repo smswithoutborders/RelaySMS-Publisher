@@ -214,22 +214,23 @@ cmd_update() {
     for svc in "${SERVICE_UNITS[@]}"; do
       systemctl stop "$svc"
     done
-    # Unlike pull, survives a force-pushed branch. Unlike --hard, keeps local
-    # edits and refuses to overwrite them.
+    # Follows a force-pushed branch, and fails rather than overwrite local edits.
     git reset --keep "@{upstream}"
     git submodule update --init --recursive
-    # Finish with the manage.sh just pulled, so changed update steps apply now.
+    # Finish with the manage.sh just checked out, so changed update steps apply now.
     local args=(--pulled)
     [ "$migrate" = "1" ] && args+=(--migrate)
     exec "$INSTALL_DIR/manage.sh" update "${args[@]}"
   fi
 
   venv/bin/pip install --quiet --upgrade pip
-  venv/bin/pip install --quiet -r requirements.txt
-  # Only update observability deps if they were opted into in the first place.
-  if venv/bin/pip show opentelemetry-sdk &>/dev/null; then
-    venv/bin/pip install --quiet -r requirements-observability.txt
+  local reqs=requirements.txt
+  # Only update observability deps if they were opted into. Their requirements
+  # file includes requirements.txt.
+  if venv/bin/pip show opentelemetry-distro &>/dev/null; then
+    reqs=requirements-observability.txt
   fi
+  venv/bin/pip install --quiet -r "$reqs"
 
   export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
   make build
