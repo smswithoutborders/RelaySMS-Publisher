@@ -15,7 +15,6 @@ from publisher.config import (
     OfflinePublishConfig,
     PlatformsConfig,
     SmtpConfig,
-    TwilioConfig,
 )
 
 KEY = "ab" * 32
@@ -91,15 +90,14 @@ def test_old_certificate_names_are_rejected():
     assert "renamed to GRPC_TLS_KEY_FILE" in message
 
 
-def test_enabled_transports_require_credentials():
-    message = errors(SMTP_TRANSPORT_ENABLED="true", TWILIO_SMS_TRANSPORT_ENABLED="true")
+def test_enabled_smtp_requires_credentials():
+    message = errors(SMTP_TRANSPORT_ENABLED="true")
 
     for name in (
         "SMTP_IMAP_SERVER",
         "SMTP_IMAP_USERNAME",
         "SMTP_IMAP_PASSWORD",
         "SMTP_TRUSTED_AUTHSERV_ID",
-        "TWILIO_AUTH_TOKEN",
     ):
         assert name in message
 
@@ -125,12 +123,10 @@ def test_allowed_senders_are_normalized():
     assert smtp.allowed_senders == {"example.com", "user@other.org"}
 
 
-def test_forward_urls_must_be_http():
-    message = errors(
-        TWILIO_FORWARD_URLS_JSON="https://ok.example.com,ftp://bad.example.com"
+def test_push_urls_must_be_http():
+    assert "UPTIME_KUMA_SMTP_PUSH_URL" in errors(
+        UPTIME_KUMA_SMTP_PUSH_URL="ftp://bad.example.com"
     )
-
-    assert "TWILIO_FORWARD_URLS_JSON" in message
 
 
 def test_adapter_paths_resolve_against_the_install_dir():
@@ -168,12 +164,10 @@ def test_server_url_escapes_credentials():
 def test_secrets_are_hidden_from_repr():
     database = load(DatabaseConfig, MYSQL_PASSWORD="hunter2")
     smtp = load(SmtpConfig, SMTP_IMAP_PASSWORD="imap-secret")
-    twilio = load(TwilioConfig, TWILIO_AUTH_TOKEN="twilio-secret")
 
     assert "hunter2" not in repr(database)
     assert repr(bytes.fromhex(KEY)) not in repr(database)
     assert "imap-secret" not in repr(smtp)
-    assert "twilio-secret" not in repr(twilio)
 
 
 def test_celery_concurrency_defaults_by_broker():

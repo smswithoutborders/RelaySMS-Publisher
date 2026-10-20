@@ -204,7 +204,7 @@ Each code row may import only the rows below it, never the other way round, and 
 
 ### How a publication flows
 
-1. A payload arrives over REST (`/v1/publications`, the Twilio webhook) or SMTP.
+1. A payload arrives over REST (`/v1/publications`) or SMTP.
 2. The entry point validates it and calls `queue_publication`, which replaces the sender's address with a keyed hash and queues `publish_message`.
 3. The worker runs `publisher/tasks/publication_task.py`, which in one transaction calls `publications.prepare` (deletes the slot's keys and decrypts), `send` (runs the adapter through `platforms/ipc.py`) and `finish` (stores a refreshed token).
 4. It commits only after a successful send, so a failure leaves the keys usable, and a duplicate payload waits on their row lock.
