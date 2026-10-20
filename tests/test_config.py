@@ -18,7 +18,7 @@ from publisher.config import (
 )
 
 KEY = "ab" * 32
-BASE_ENV = {"DATA_ENCRYPTION_KEY": KEY}
+BASE_ENV = {"DATA_ENCRYPTION_KEY": KEY, "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS": "smtp"}
 
 
 def load(section, **env):
@@ -196,6 +196,14 @@ def test_offline_shared_secret_must_be_a_key():
 
     offline = load(OfflinePublishConfig, OFFLINE_PUBLISH_SHARED_SECRET=KEY)
     assert offline.shared_secret == KEY
+
+
+@pytest.mark.parametrize("protocols", ["https", "smtp,https", ""])
+def test_offline_https_requires_shared_secret(protocols):
+    allowed = {"OFFLINE_PUBLISH_ALLOWED_PROTOCOLS": protocols}
+
+    assert "OFFLINE_PUBLISH_SHARED_SECRET" in errors(**allowed)
+    assert not errors(**allowed, OFFLINE_PUBLISH_SHARED_SECRET=KEY)
 
 
 def test_template_env_paths_match_defaults():

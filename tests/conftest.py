@@ -11,6 +11,7 @@ os.environ.update(
     DATABASE_DIALECT="sqlite",
     SQLITE_DATABASE_PATH=":memory:",
     DATA_ENCRYPTION_KEY="11" * 32,
+    OFFLINE_PUBLISH_ALLOWED_PROTOCOLS="smtp",
 )
 
 # Git hooks export GIT_DIR and others, which would point repos the tests create
