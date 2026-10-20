@@ -16,9 +16,11 @@ DATABASE_DIALECT=sqlite
 
 @pytest.fixture
 def sync(install, bash):
-    """Sync install/.env from a small template."""
+    """Sync install/.env from a small template, passing any extra options."""
     (install / "template.env").write_text(TEMPLATE)
-    return lambda: bash(f'bash "{REPO}/sync-env.sh" .env template.env')
+    return lambda *options: bash(
+        f'bash "{REPO}/sync-env.sh" --yes {" ".join(options)} .env template.env'
+    )
 
 
 class TestSyncEnv:
@@ -32,7 +34,7 @@ class TestSyncEnv:
             "# Server\nHOST=0.0.0.0\nPORT=16000\n\n# Database\nDATABASE_DIALECT=mysql\n"
         )
 
-    def test_keeps_multi_line_comments_next_to_their_variable(self, install, bash):
+    def test_keeps_multi_line_comments_next_to_their_variable(self, install, sync):
         (install / "template.env").write_text(
             "# gRPC\nGRPC_PORT=6000\n"
             "# Leave off behind a proxy.\n# When on, serves TLS.\n"
@@ -41,7 +43,7 @@ class TestSyncEnv:
         env = install / ".env"
         env.write_text("# gRPC\nGRPC_PORT=7000\n\n# Other\nOTHER=2\n")
 
-        bash(f'bash "{REPO}/sync-env.sh" .env template.env')
+        sync()
 
         assert env.read_text() == (
             "# gRPC\nGRPC_PORT=7000\n"
@@ -49,7 +51,7 @@ class TestSyncEnv:
             "GRPC_TLS_ENABLED=false\nGRPC_TLS_CERT_FILE=\n\n# Other\nOTHER=2\n"
         )
 
-    def test_repeated_comment_anchors_to_its_own_section(self, install, bash):
+    def test_repeated_comment_anchors_to_its_own_section(self, install, sync):
         hint = "# Generate: openssl rand -hex 32"
         (install / "template.env").write_text(
             f"# A\nA_ON=true\n{hint}\nA_KEY=\n\n# B\nB_ON=true\n{hint}\nB_KEY=\n"
@@ -57,7 +59,7 @@ class TestSyncEnv:
         env = install / ".env"
         env.write_text(f"# A\nA_ON=true\n{hint}\nA_KEY=x\n\n# B\nB_ON=true\n")
 
-        bash(f'bash "{REPO}/sync-env.sh" .env template.env')
+        sync()
 
         assert env.read_text() == (
             f"# A\nA_ON=true\n{hint}\nA_KEY=x\n\n# B\nB_ON=true\n{hint}\nB_KEY=\n"
@@ -82,26 +84,60 @@ class TestSyncEnv:
             "# Server\nHOST=0.0.0.0\nPORT=1\n\n# Database\nDATABASE_DIALECT=sqlite\n"
         )
 
-    def test_dry_run_prints_the_diff_without_writing(self, install, bash):
-        (install / "template.env").write_text(TEMPLATE)
+    def test_dry_run_prints_the_diff_without_writing(self, install, sync):
         env = install / ".env"
         env.write_text("# Server\nHOST=0.0.0.0\n")
 
-        result = bash(f'bash "{REPO}/sync-env.sh" --dry-run .env template.env')
+        result = sync("--dry-run")
 
-        assert result.returncode == 0
         assert "+PORT=16000\n" in result.stdout
         assert env.read_text() == "# Server\nHOST=0.0.0.0\n"
         assert not (install / ".env.bak").exists()
 
-    def test_dry_run_does_not_create_a_missing_env(self, install, bash):
+        env.unlink()
+        sync("--dry-run")
+
+        assert not env.exists()
+
+    def test_without_yes_and_no_terminal_nothing_is_written(self, install, bash):
         (install / "template.env").write_text(TEMPLATE)
-        (install / ".env").unlink()
+        env = install / ".env"
+        env.write_text("# Server\nHOST=0.0.0.0\n")
+        # setsid drops the controlling terminal, so the prompt gets no answer.
+        run = 'setsid -w bash "{}/sync-env.sh" {} template.env </dev/null'
 
-        result = bash(f'bash "{REPO}/sync-env.sh" --dry-run .env template.env')
+        result = bash(run.format(REPO, ".env"))
+        bash(run.format(REPO, "missing.env"))
 
-        assert "+DATABASE_DIALECT=sqlite\n" in result.stdout
-        assert not (install / ".env").exists()
+        assert "+PORT=16000\n" in result.stdout
+        assert "Aborted" in result.stdout
+        assert env.read_text() == "# Server\nHOST=0.0.0.0\n"
+        assert not (install / ".env.bak").exists()
+        assert not (install / "missing.env").exists()
+
+    def test_prune_removes_variables_the_template_lacks(self, install, sync):
+        env = install / ".env"
+        env.write_text(
+            "# Server\nOLD=1\nHOST=0.0.0.0\nPORT=1\n\n"
+            "# Sentry\n# Error reporting.\nSENTRY_DSN=x\nSENTRY_RATE=1\n\n"
+            "# Database\nDATABASE_DIALECT=mysql\nOLD2=2\n\n"
+            "# Legacy\nLEGACY=1\n"
+        )
+
+        assert "0 variable(s) added, 5 removed" in sync("--prune").stdout
+
+        assert env.read_text() == (
+            "# Server\nHOST=0.0.0.0\nPORT=1\n\n# Database\nDATABASE_DIALECT=mysql\n"
+        )
+
+    def test_prune_keeps_variables_commented_out_in_the_template(self, install, sync):
+        (install / "template.env").write_text("# Broker\n# BROKER_URL=amqp://\nA=1\n")
+        env = install / ".env"
+        env.write_text("# Broker\nBROKER_URL=amqp://prod\nA=1\n")
+
+        assert "Nothing to change" in sync("--prune").stdout
+
+        assert env.read_text() == "# Broker\nBROKER_URL=amqp://prod\nA=1\n"
 
     def test_unknown_option_fails(self, bash):
         result = bash(f'bash "{REPO}/sync-env.sh" --nope')
@@ -117,11 +153,12 @@ class TestSyncEnv:
         assert (install / ".env.bak").read_text() == "HOST=0.0.0.0\n"
 
     def test_complete_env_is_left_untouched(self, install, sync):
-        (install / ".env").write_text(TEMPLATE)
+        # Without --prune, variables the template lacks stay too.
+        (install / ".env").write_text(TEMPLATE + "OLD=1\n")
 
-        assert "Nothing to add" in sync().stdout
+        assert "Nothing to change" in sync().stdout
 
-        assert (install / ".env").read_text() == TEMPLATE
+        assert (install / ".env").read_text() == TEMPLATE + "OLD=1\n"
         assert not (install / ".env.bak").exists()
 
     def test_creates_missing_env(self, install, sync):
