@@ -281,13 +281,6 @@ class GrpcConfig(Section):
     @classmethod
     def load(cls, read: _Reader) -> Self:
         tls_enabled = read.get_bool("GRPC_TLS_ENABLED", False)
-        # The old names would otherwise be ignored and TLS would turn off quietly.
-        for old, new in (
-            ("SSL_CERTIFICATE", "GRPC_TLS_CERT_FILE"),
-            ("SSL_KEY", "GRPC_TLS_KEY_FILE"),
-        ):
-            if read.get_str(old):
-                read.fail(old, f"renamed to {new}, with GRPC_TLS_ENABLED=true")
         return cls(
             host=read.get_str("GRPC_HOST", "127.0.0.1"),
             port=read.get_int("GRPC_PORT", 6000, minimum=1),
