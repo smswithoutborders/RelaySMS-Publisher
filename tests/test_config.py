@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import re
 from pathlib import Path
 
 import pytest
@@ -217,6 +218,36 @@ def test_template_env_paths_match_defaults():
 
     for key, default in defaults.items():
         assert config.ROOT / str(template[key]) == config.ROOT / default, key
+
+
+class RecordingEnv(dict):
+    """An empty environment that records every name config asks for."""
+
+    def __init__(self):
+        super().__init__()
+        self.names = set()
+
+    def get(self, key, default=None):
+        self.names.add(key)
+        return default
+
+
+def test_template_env_lists_every_variable_config_reads():
+    # sync-env.sh --prune drops what the template lacks, so a variable config
+    # reads must be in it, if only commented out.
+    text = (config.ROOT / "template.env").read_text()
+    template = set(re.findall(r"^\s*(?:#\s*)?([A-Za-z_]\w*)=", text, re.M))
+    env = RecordingEnv()
+
+    # Only catches the names config reads when nothing is set.
+    config.check(env)
+
+    assert env.names - template == set(), "missing from template.env"
+    # Read outside config: by scripts/run.sh, Docker and the systemd units, and
+    # OTEL_* by OpenTelemetry.
+    external = {"HOST", "PORT", "WORKERS"}
+    unused = {n for n in template - env.names - external if not n.startswith("OTEL_")}
+    assert unused == set(), "in template.env but unused"
 
 
 def test_auth_session_defaults():
