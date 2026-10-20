@@ -96,12 +96,6 @@ class _Reader:
             self._check_url(name, url)
         return url
 
-    def get_urls(self, name: str) -> list[str]:
-        urls = self.get_list(name)
-        for url in urls:
-            self._check_url(name, url)
-        return urls
-
     def _check_url(self, name: str, url: str) -> None:
         parts = urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.netloc:
@@ -134,9 +128,9 @@ class _Reader:
             return None
         return key
 
-    def get_secret(self, name: str) -> str | None:
+    def get_secret(self, name: str, required: bool = False) -> str | None:
         """Check the secret is a valid key, but return it as text to compare."""
-        return self.get_str(name) if self.get_key(name, required=False) else None
+        return self.get_str(name) if self.get_key(name, required) else None
 
     def get_path(self, name: str, default: Path) -> Path:
         """Read a path; a relative one is relative to the install directory."""
@@ -287,13 +281,6 @@ class GrpcConfig(Section):
     @classmethod
     def load(cls, read: _Reader) -> Self:
         tls_enabled = read.get_bool("GRPC_TLS_ENABLED", False)
-        # The old names would otherwise be ignored and TLS would turn off quietly.
-        for old, new in (
-            ("SSL_CERTIFICATE", "GRPC_TLS_CERT_FILE"),
-            ("SSL_KEY", "GRPC_TLS_KEY_FILE"),
-        ):
-            if read.get_str(old):
-                read.fail(old, f"renamed to {new}, with GRPC_TLS_ENABLED=true")
         return cls(
             host=read.get_str("GRPC_HOST", "127.0.0.1"),
             port=read.get_int("GRPC_PORT", 6000, minimum=1),
@@ -302,35 +289,6 @@ class GrpcConfig(Section):
             tls_key_file=read.get_required("GRPC_TLS_KEY_FILE", tls_enabled),
             max_workers=read.get_int("GRPC_MAX_WORKERS", 10, minimum=1),
             nonce_ttl_seconds=read.get_int("NONCE_TTL_SECONDS", 600, minimum=1),
-        )
-
-
-@dataclass(frozen=True)
-class TwilioConfig(Section):
-    sms_transport_enabled: bool
-    auth_token: str | None = field(repr=False)
-
-    @classmethod
-    def load(cls, read: _Reader) -> Self:
-        enabled = read.get_bool("TWILIO_SMS_TRANSPORT_ENABLED", False)
-        return cls(
-            sms_transport_enabled=enabled,
-            auth_token=read.get_required("TWILIO_AUTH_TOKEN", enabled),
-        )
-
-
-@dataclass(frozen=True)
-class TwilioForwardConfig(Section):
-    urls_raw: list[str]
-    urls_json: list[str]
-    timeout: int
-
-    @classmethod
-    def load(cls, read: _Reader) -> Self:
-        return cls(
-            urls_raw=read.get_urls("TWILIO_FORWARD_URLS_RAW"),
-            urls_json=read.get_urls("TWILIO_FORWARD_URLS_JSON"),
-            timeout=read.get_int("TWILIO_FORWARD_TIMEOUT", 10, minimum=1),
         )
 
 
@@ -387,9 +345,14 @@ class OfflinePublishConfig(Section):
 
     @classmethod
     def load(cls, read: _Reader) -> Self:
+        allowed = read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
+        # Without the secret, anyone can publish offline payloads over https.
+        https_allowed = not allowed or "https" in allowed
         return cls(
-            allowed_protocols=read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS"),
-            shared_secret=read.get_secret("OFFLINE_PUBLISH_SHARED_SECRET"),
+            allowed_protocols=allowed,
+            shared_secret=read.get_secret(
+                "OFFLINE_PUBLISH_SHARED_SECRET", required=https_allowed
+            ),
         )
 
 

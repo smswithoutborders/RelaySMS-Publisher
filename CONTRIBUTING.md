@@ -204,7 +204,7 @@ Each code row may import only the rows below it, never the other way round, and 
 
 ### How a publication flows
 
-1. A payload arrives over REST (`/v1/publications`, the Twilio webhook) or SMTP.
+1. A payload arrives over REST (`/v1/publications`) or SMTP.
 2. The entry point validates it and calls `queue_publication`, which replaces the sender's address with a keyed hash and queues `publish_message`.
 3. The worker runs `publisher/tasks/publication_task.py`, which in one transaction calls `publications.prepare` (deletes the slot's keys and decrypts), `send` (runs the adapter through `platforms/ipc.py`) and `finish` (stores a refreshed token).
 4. It commits only after a successful send, so a failure leaves the keys usable, and a duplicate payload waits on their row lock.
@@ -349,7 +349,7 @@ Adapters live in their own repositories and are built with the SDK in `sdk/` ([s
 - **Tests pass on newer Pythons but fail on 3.12:** look for newer syntax or an unquoted forward reference.
 - **Dialect tests:** run `PYTEST_ARGS="-k mysql" make test-dialects` for the failing dialect.
 - **e2e:** run `make test-e2e`, or `PYTEST_ARGS="-k debian" make test-e2e` for the failing distro.
-- **Requirements check:** the pinned dependencies conflict. Run `pip install --dry-run -r requirements.txt -r requirements-observability.txt` to see the conflict.
+- **Requirements check:** the pinned dependencies conflict. Run `pip install --dry-run -r requirements-observability.txt` to see the conflict.
 
 ## AI-assisted contributions
 

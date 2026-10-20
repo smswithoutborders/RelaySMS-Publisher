@@ -69,9 +69,9 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 ## Publishing
 
-`POST /v1/publications` takes JSON and tags payloads with protocol `https`. `POST /v1/twilio-sms` takes Twilio's webhook and tags them `sms`. See [Offline Publishing](../README.md#offline-publishing) for how the protocol and `tag` decide whether offline payloads publish.
+`POST /v1/publications` takes JSON and tags payloads with protocol `https`. See [Offline Publishing](../README.md#offline-publishing) for how the protocol and `tag` decide whether offline payloads publish.
 
-Both only check the payload's structure before queueing it. Decryption, payload type and adapter errors happen later, so they're logged on the server, not returned.
+It only checks the payload's structure before queueing it. Decryption, payload type and adapter errors happen later, so they're logged on the server, not returned.
 
 ## Errors
 

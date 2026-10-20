@@ -90,7 +90,6 @@ def make_celery() -> Celery:
         "relaysms_publisher",
         include=[
             "publisher.tasks.publication_task",
-            "publisher.tasks.forward_task",
             "publisher.tasks.cleanup_task",
             "publisher.tasks.heartbeat_task",
             "publisher.tasks.platform_task",

@@ -76,7 +76,11 @@ class PublicationStat(BaseModel):
     protocol: str | None = None
     status: str
     country_code: str | None = None
-    failure_reason: str | None = None
+    failure_reason: str | None = Field(
+        None,
+        description="Why it failed, as a short code such as payload_malformed or "
+        "adapter_rate_limited.",
+    )
     created_at: datetime.datetime
 
 

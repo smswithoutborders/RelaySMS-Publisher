@@ -26,15 +26,16 @@ from publisher.models.publication_stats import PublicationStats
 from publisher.platforms.manager import adapter_id
 
 PLATFORMS = ("gmail", "twitter", "telegram", "slack", "bluesky", "mastodon")
-PROTOCOLS = ("https", "smtp", "sms")
+PROTOCOLS = ("https", "smtp")
 COUNTRIES = ("CM", "NG", "GH", "KE", "UG", "ZA", "US", "FR", "DE", "GB")
 FAILURE_REASONS = (
-    "Token not found",
-    "Token hash not found",
-    "Server ephemeral key already used or missing",
-    "Invalid payload structure.",
-    "Payload is not valid base64.",
-    "Invalid tag for offline content.",
+    "token_not_found",
+    "key_unavailable",
+    "payload_malformed",
+    "offline_tag_invalid",
+    "adapter_token_invalid",
+    "adapter_rate_limited",
+    "adapter_upstream",
     "unexpected_error",
 )
 FAILURE_RATE = 0.2

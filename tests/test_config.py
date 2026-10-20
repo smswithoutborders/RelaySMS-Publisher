@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import re
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from dotenv import dotenv_values
@@ -15,11 +17,10 @@ from publisher.config import (
     OfflinePublishConfig,
     PlatformsConfig,
     SmtpConfig,
-    TwilioConfig,
 )
 
 KEY = "ab" * 32
-BASE_ENV = {"DATA_ENCRYPTION_KEY": KEY}
+BASE_ENV = {"DATA_ENCRYPTION_KEY": KEY, "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS": "smtp"}
 
 
 def load(section, **env):
@@ -84,22 +85,14 @@ def test_grpc_tls_files_alone_do_not_enable_tls():
     assert not grpc.tls_enabled
 
 
-def test_old_certificate_names_are_rejected():
-    message = errors(SSL_CERTIFICATE="cert.pem", SSL_KEY="key.pem")
-
-    assert "renamed to GRPC_TLS_CERT_FILE" in message
-    assert "renamed to GRPC_TLS_KEY_FILE" in message
-
-
-def test_enabled_transports_require_credentials():
-    message = errors(SMTP_TRANSPORT_ENABLED="true", TWILIO_SMS_TRANSPORT_ENABLED="true")
+def test_enabled_smtp_requires_credentials():
+    message = errors(SMTP_TRANSPORT_ENABLED="true")
 
     for name in (
         "SMTP_IMAP_SERVER",
         "SMTP_IMAP_USERNAME",
         "SMTP_IMAP_PASSWORD",
         "SMTP_TRUSTED_AUTHSERV_ID",
-        "TWILIO_AUTH_TOKEN",
     ):
         assert name in message
 
@@ -125,12 +118,10 @@ def test_allowed_senders_are_normalized():
     assert smtp.allowed_senders == {"example.com", "user@other.org"}
 
 
-def test_forward_urls_must_be_http():
-    message = errors(
-        TWILIO_FORWARD_URLS_JSON="https://ok.example.com,ftp://bad.example.com"
+def test_push_urls_must_be_http():
+    assert "UPTIME_KUMA_SMTP_PUSH_URL" in errors(
+        UPTIME_KUMA_SMTP_PUSH_URL="ftp://bad.example.com"
     )
-
-    assert "TWILIO_FORWARD_URLS_JSON" in message
 
 
 def test_adapter_paths_resolve_against_the_install_dir():
@@ -168,12 +159,10 @@ def test_server_url_escapes_credentials():
 def test_secrets_are_hidden_from_repr():
     database = load(DatabaseConfig, MYSQL_PASSWORD="hunter2")
     smtp = load(SmtpConfig, SMTP_IMAP_PASSWORD="imap-secret")
-    twilio = load(TwilioConfig, TWILIO_AUTH_TOKEN="twilio-secret")
 
     assert "hunter2" not in repr(database)
     assert repr(bytes.fromhex(KEY)) not in repr(database)
     assert "imap-secret" not in repr(smtp)
-    assert "twilio-secret" not in repr(twilio)
 
 
 def test_celery_concurrency_defaults_by_broker():
@@ -204,6 +193,14 @@ def test_offline_shared_secret_must_be_a_key():
     assert offline.shared_secret == KEY
 
 
+@pytest.mark.parametrize("protocols", ["https", "smtp,https", ""])
+def test_offline_https_requires_shared_secret(protocols):
+    allowed = {"OFFLINE_PUBLISH_ALLOWED_PROTOCOLS": protocols}
+
+    assert "OFFLINE_PUBLISH_SHARED_SECRET" in errors(**allowed)
+    assert not errors(**allowed, OFFLINE_PUBLISH_SHARED_SECRET=KEY)
+
+
 def test_template_env_paths_match_defaults():
     # scripts/lib.sh falls back to template.env for paths unset in .env.
     template = dotenv_values(config.ROOT / "template.env")
@@ -222,6 +219,27 @@ def test_template_env_paths_match_defaults():
 
     for key, default in defaults.items():
         assert config.ROOT / str(template[key]) == config.ROOT / default, key
+
+
+def test_template_env_lists_every_variable_config_reads():
+    # sync-env.sh --prune drops what the template lacks, so a variable config
+    # reads must be in it, if only commented out.
+    text = (config.ROOT / "template.env").read_text()
+    template = set(re.findall(r"^\s*(?:#\s*)?([A-Za-z_]\w*)=", text, re.M))
+    # An empty environment that records every name config asks for.
+    env = Mock()
+    env.get.side_effect = lambda key, default=None: default
+
+    # Only catches the names config reads when nothing is set.
+    config.check(env)
+    names = {call.args[0] for call in env.get.call_args_list}
+
+    assert names - template == set(), "missing from template.env"
+    # Read outside config: by scripts/run.sh, Docker and the systemd units, and
+    # OTEL_* by OpenTelemetry.
+    external = {"HOST", "PORT", "WORKERS"}
+    unused = {n for n in template - names - external if not n.startswith("OTEL_")}
+    assert unused == set(), "in template.env but unused"
 
 
 def test_auth_session_defaults():

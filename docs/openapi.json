@@ -1553,83 +1553,6 @@
         }
       }
     },
-    "/v1/twilio-sms": {
-      "post": {
-        "tags": [
-          "Publishing"
-        ],
-        "summary": "Twilio SMS webhook",
-        "description": "Checks the Twilio signature, then queues the SMS for publishing.\n\nPayloads are tagged with protocol `sms`. Each SMS is also forwarded to\n`TWILIO_FORWARD_URLS_RAW` as Twilio's form and to `TWILIO_FORWARD_URLS_JSON` as\n`{\"sender\", \"text\", \"received_at\"}`.",
-        "operationId": "twilio_incoming_sms_v1_twilio_sms_post",
-        "requestBody": {
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "properties": {
-                  "From": {
-                    "type": "string",
-                    "description": "Sender phone number"
-                  },
-                  "Body": {
-                    "type": "string",
-                    "description": "Base64-encoded SMS payload"
-                  }
-                },
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object",
-                "required": [
-                  "From",
-                  "Body"
-                ]
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Empty TwiML, so Twilio sends no reply.",
-            "content": {
-              "text/xml": {
-                "example": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response />"
-              }
-            }
-          },
-          "400": {
-            "description": "No From or Body field. The payload isn't base64, or isn't a RelaySMS payload.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "No valid X-Twilio-Signature.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "TWILIO_SMS_TRANSPORT_ENABLED isn't true.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/platforms": {
       "get": {
         "tags": [
@@ -5209,7 +5132,8 @@
                 "type": "null"
               }
             ],
-            "title": "Failure Reason"
+            "title": "Failure Reason",
+            "description": "Why it failed, as a short code such as payload_malformed or adapter_rate_limited."
           },
           "created_at": {
             "type": "string",

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from publisher.keys import TokenVerificationError
+from publisher.keys import KeyNotFoundError, KeyUnavailableError, TokenVerificationError
 from publisher.publications import (
     AdapterIntegrationError,
     OfflineTagInvalidError,
@@ -15,6 +15,7 @@ from publisher.publications import (
     ProtocolNotAllowedError,
 )
 from publisher.tasks import publication_task
+from relaysms_adapter_sdk.errors import RateLimitedError, UpstreamError
 
 EVENTS = []
 
@@ -62,17 +63,19 @@ def _run_with_publish_error(monkeypatch, error):
 
 
 @pytest.mark.parametrize(
-    "error",
+    "error, reason",
     [
-        PayloadNotSupportedError("unsupported type"),
-        PayloadMalformedError("bad payload"),
-        ProtocolNotAllowedError("protocol not allowed"),
-        OfflineTagMissingError("missing tag"),
-        OfflineTagInvalidError("invalid tag"),
-        TokenVerificationError("unknown key"),
+        (PayloadNotSupportedError("unsupported type"), "payload_not_supported"),
+        (PayloadMalformedError("bad payload"), "payload_malformed"),
+        (ProtocolNotAllowedError("protocol not allowed"), "protocol_not_allowed"),
+        (OfflineTagMissingError("missing tag"), "offline_tag_missing"),
+        (OfflineTagInvalidError("invalid tag"), "offline_tag_invalid"),
+        (KeyNotFoundError("Token not found"), "token_not_found"),
+        (KeyUnavailableError("key used"), "key_unavailable"),
+        (TokenVerificationError("unknown key"), "token_verification_failed"),
     ],
 )
-def test_pipeline_errors_are_caught_and_logged(monkeypatch, caplog, error):
+def test_pipeline_errors_are_caught_and_logged(monkeypatch, caplog, error, reason):
     """The task must swallow these, not raise; the REST caller already got its 200."""
     stub = _run_with_publish_error(monkeypatch, error)
 
@@ -81,11 +84,38 @@ def test_pipeline_errors_are_caught_and_logged(monkeypatch, caplog, error):
     publication_task.record_publication.assert_called_once()
     kwargs = publication_task.record_publication.call_args.kwargs
     assert kwargs["status"] == "failed"
-    assert kwargs["failure_reason"] == str(error)
+    assert kwargs["failure_reason"] == reason
+
+
+def test_a_subclass_of_a_mapped_error_keeps_its_code(monkeypatch):
+    class TruncatedPayloadError(PayloadMalformedError):
+        pass
+
+    _run_with_publish_error(monkeypatch, TruncatedPayloadError("short"))
+
+    kwargs = publication_task.record_publication.call_args.kwargs
+    assert kwargs["failure_reason"] == "payload_malformed"
+
+
+@pytest.mark.parametrize(
+    "code, reason",
+    [
+        (RateLimitedError.code, "adapter_rate_limited"),
+        (-32099, "adapter_error"),
+    ],
+)
+def test_adapter_failures_record_a_code_not_the_message(monkeypatch, code, reason):
+    error = AdapterIntegrationError("Google returned 400: to=a@b.c", code=code)
+    _stub_publications(monkeypatch, send_error=error)
+
+    publication_task.publish_message("text", "sender", "https")
+
+    kwargs = publication_task.record_publication.call_args.kwargs
+    assert kwargs["failure_reason"] == reason
 
 
 def test_a_failed_send_rolls_back_and_keeps_the_refreshed_token(monkeypatch, caplog):
-    error = AdapterIntegrationError("boom", token={"t": 2})
+    error = AdapterIntegrationError("boom", code=UpstreamError.code, token={"t": 2})
     stub = _stub_publications(monkeypatch, send_error=error)
 
     publication_task.publish_message("text", "sender", "https")
