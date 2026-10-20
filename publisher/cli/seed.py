@@ -26,7 +26,7 @@ from publisher.models.publication_stats import PublicationStats
 from publisher.platforms.manager import adapter_id
 
 PLATFORMS = ("gmail", "twitter", "telegram", "slack", "bluesky", "mastodon")
-PROTOCOLS = ("https", "smtp", "sms")
+PROTOCOLS = ("https", "smtp")
 COUNTRIES = ("CM", "NG", "GH", "KE", "UG", "ZA", "US", "FR", "DE", "GB")
 FAILURE_REASONS = (
     "token_not_found",

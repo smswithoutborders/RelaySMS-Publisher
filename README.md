@@ -21,7 +21,7 @@ Publishes to online platforms (Gmail, X, Telegram and more) from content sent by
 
 1. A user links an account (Gmail, X, ...) through the gRPC API, which stores its token encrypted.
 2. Offline, the user's app encrypts the content and sends it by SMS to a gateway client: a phone number that relays SMS to this server.
-3. The payload arrives over REST, the Twilio webhook or SMTP and is queued.
+3. The payload arrives over REST or SMTP and is queued.
 4. A Celery worker decrypts it and publishes it through the platform's adapter.
 
 ## Requirements
@@ -172,13 +172,12 @@ Settings live in `.env`. `template.env` lists every setting with its default and
 | Server, database, encryption, Celery, adapters | [INSTALL.md](INSTALL.md#configuration) |
 | REST API login and sessions (`AUTH_*`) | [REST API](docs/rest.md#authentication) |
 | SMTP transport (`SMTP_*`) | [SMTP Transport](docs/smtp.md#configuration) |
-| Twilio SMS transport (`TWILIO_*`) | The comments in `template.env` |
 | Tracing, metrics and logs (`OTEL_*`) | [Observability](observability/README.md) |
 | Offline publishing (`OFFLINE_PUBLISH_*`) | [Below](#offline-publishing) |
 
 ### Offline Publishing
 
-Offline payloads are tagged with the protocol they arrived on: `https` for [REST `/publications`](docs/rest.md#publishing), `smtp` for the [SMTP transport](docs/smtp.md) and `sms` for the [Twilio webhook](docs/rest.md#publishing).
+Offline payloads are tagged with the protocol they arrived on: `https` for [REST `/publications`](docs/rest.md#publishing) and `smtp` for the [SMTP transport](docs/smtp.md).
 
 ```bash
 OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=smtp   # comma-separated; empty allows every protocol
@@ -188,7 +187,10 @@ OFFLINE_PUBLISH_SHARED_SECRET=           # 64-char hex; empty disables the check
 Offline payloads from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` are discarded. When `OFFLINE_PUBLISH_SHARED_SECRET` is set, offline payloads over `https` must carry it in the request's `tag` field.
 
 > [!WARNING]
-> `https` is unauthenticated, so anyone can send to it. The SMTP and Twilio listeners authenticate the sender (DKIM and an allowlist for `smtp`, Twilio's signature for `sms`), which is why `template.env` allows only `smtp`.
+> Without `OFFLINE_PUBLISH_SHARED_SECRET`, anyone can publish offline payloads over `https`, so set it before allowing `https`. `template.env` allows only `smtp`, since the SMTP listener checks DKIM and an allowlist.
+
+> [!TIP]
+> For a Twilio number, run [RelaySMS-GatewayClient-Twilio](https://github.com/smswithoutborders/RelaySMS-GatewayClient-Twilio) with `FORWARD_URLS_JSON` set to this server's `/v1/publications` URL and `FORWARD_TAG` set to `OFFLINE_PUBLISH_SHARED_SECRET`, then allow `https`.
 
 ## Platform adapters
 
