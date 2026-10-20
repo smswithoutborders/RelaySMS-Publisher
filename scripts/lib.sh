@@ -73,27 +73,28 @@ validate_hostname() {
 # bash` (stdin is the script itself there). Falls back to $default if no
 # tty is reachable.
 prompt() {
-  local __resultvar="$1" question="> $2" default="${3:-}" reply=""
+  # __-prefixed so a caller's result variable named e.g. reply isn't shadowed.
+  local __resultvar="$1" __question="> $2" __default="${3:-}" __reply=""
   if [ -t 0 ]; then
-    read -r -p "$question" reply
+    read -r -p "$__question" __reply
   elif [ -r /dev/tty ]; then
     # -r only means the device node exists, not that a terminal is attached.
-    read -r -p "$question" reply </dev/tty || true
+    read -r -p "$__question" __reply </dev/tty || true
   fi
-  printf -v "$__resultvar" '%s' "${reply:-$default}"
+  printf -v "$__resultvar" '%s' "${__reply:-$__default}"
 }
 
 # Same as prompt(), but the value isn't echoed to the terminal as it's typed.
 prompt_secret() {
-  local __resultvar="$1" question="> $2" reply=""
+  local __resultvar="$1" __question="> $2" __reply=""
   if [ -t 0 ]; then
-    read -rs -p "$question" reply
+    read -rs -p "$__question" __reply
     echo
   elif [ -r /dev/tty ]; then
-    read -rs -p "$question" reply </dev/tty || true
+    read -rs -p "$__question" __reply </dev/tty || true
     echo
   fi
-  printf -v "$__resultvar" '%s' "$reply"
+  printf -v "$__resultvar" '%s' "$__reply"
 }
 
 # True (0) if nothing is currently listening on the given local TCP port.
