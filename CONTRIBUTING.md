@@ -59,11 +59,12 @@
 git clone --recurse-submodules git@github.com:<your-username>/RelaySMS-Publisher.git
 cd RelaySMS-Publisher
 git remote add upstream git@github.com:smswithoutborders/RelaySMS-Publisher.git
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements-dev.txt
-pre-commit install --install-hooks
-make build      # gRPC code and payload-specs bindings
+make setup
 ```
+
+`make setup` creates `venv` with the dev dependencies and pre-commit hooks, runs `make build`, creates `.env` with fresh encryption keys, checks the config and migrates the database. Running it again keeps an existing `.env` as is; `./sync-env.sh` adds the variables it's missing.
+
+Make targets run `venv/bin/python`. Run `source venv/bin/activate` before the `python` commands below.
 
 > [!NOTE]
 > `make build` generates files that are gitignored. Run it again after pulling changes to `protos/` or the `lib_relaysms_payload_specs` submodule.
@@ -71,14 +72,8 @@ make build      # gRPC code and payload-specs bindings
 ### Run locally
 
 ```bash
-cp template.env .env
-for key in DATABASE_ENCRYPTION_KEY DATABASE_FIELD_ENCRYPTION_KEY DATA_ENCRYPTION_KEY; do
-  sed -i "s/^$key=$/$key=$(openssl rand -hex 32)/" .env
-done
-python -m publisher config check    # names any setting still missing or invalid
-make migrate
-python -m publisher creds create --username dev --administrator   # prints the password once
-make run                            # gRPC, REST, SMTP, worker and beat in the foreground
+make creds    # administrator "dev", prints the password once
+make run      # gRPC, REST, SMTP, worker and beat in the foreground
 ```
 
 Log in to the REST API with that username and password, e.g. `curl -u dev:<password> http://127.0.0.1:16000/v1/auth/me` with the default `PORT`.
@@ -99,10 +94,12 @@ Each service can also run on its own:
 
 | Target | Does |
 | --- | --- |
+| `make setup` | Set up a development checkout, see [Install](#install) |
 | `make build` | `protos` and `specs` |
 | `make protos` | Generate the gRPC code from `protos/*/*.proto` |
 | `make specs` | Build the pinned payload-specs commit and its Python bindings |
 | `make migrate` | Apply Alembic migrations |
+| `make creds` | Create an administrator credential, `dev` unless `CREDS_USER` is set |
 | `make run` | Start every service |
 | `make test` | Run pytest |
 | `make coverage` | Run pytest and list the lines no test runs |

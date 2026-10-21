@@ -50,8 +50,8 @@ runs:
     - name: Build payload specs
       if: steps.specs-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: make specs PYTHON=venv/bin/python
+      run: make specs
 
     - name: Build protos
       shell: bash
-      run: make protos PYTHON=venv/bin/python
+      run: make protos

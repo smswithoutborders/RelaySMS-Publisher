@@ -1,10 +1,29 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-PYTHON ?= python3
+SYSTEM_PYTHON ?= python3
+PYTHON ?= venv/bin/python
+CREDS_USER ?= dev
 SPECS_DIR := lib_relaysms_payload_specs
 SPECS_LIB := $(SPECS_DIR)/target/release/librelaysms_spec_payload.so
 
-.PHONY: build protos specs migrate run test coverage test-sdk test-dialects test-e2e docs check clean
+.PHONY: setup build protos specs migrate creds run test coverage test-sdk test-dialects test-e2e docs check clean
+
+## Set up a development checkout.
+setup: venv/bin/python .env
+	$(PYTHON) -m pip install -r requirements-dev.txt
+	$(PYTHON) -m pre_commit install --install-hooks
+	$(MAKE) build
+	$(PYTHON) -m publisher config check
+	$(MAKE) migrate
+
+venv/bin/python:
+	$(SYSTEM_PYTHON) -m venv venv
+
+.env:
+	install -m 600 template.env $@
+	for key in DATABASE_ENCRYPTION_KEY DATABASE_FIELD_ENCRYPTION_KEY DATA_ENCRYPTION_KEY; do \
+		sed -i "s/^$$key=$$/$$key=$$(openssl rand -hex 32)/" $@; \
+	done
 
 ## Generate the gRPC code and the payload-specs bindings.
 build: protos specs
@@ -25,6 +44,10 @@ specs:
 
 migrate:
 	$(PYTHON) -m alembic upgrade head
+
+## Create an administrator credential named CREDS_USER and print its password once.
+creds:
+	$(PYTHON) -m publisher creds create --username $(CREDS_USER) --administrator
 
 ## Start every service in the foreground.
 run:

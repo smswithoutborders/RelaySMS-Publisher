@@ -31,7 +31,7 @@ jobs:
         run: |
           python -m venv venv
           venv/bin/pip install --disable-pip-version-check "./sdk[console]" "$(grep '^pytest==' requirements-dev.txt)"
-          make test-sdk PYTHON=venv/bin/python
+          make test-sdk
 
       - name: Create the release
         env:

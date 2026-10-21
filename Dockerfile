@@ -19,7 +19,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
   | sh -s -- -y --no-modify-path
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN python3 -m venv /venv
+# Outside /publisher, so a source edit doesn't recopy it in the final stage.
+# The link puts it where make and scripts/run.sh look for it.
+RUN python3 -m venv /venv && ln -s /venv venv
 COPY requirements.txt requirements-observability.txt ./
 COPY sdk ./sdk
 RUN --mount=type=cache,sharing=locked,target=/root/.cache/pip \
@@ -27,7 +29,6 @@ RUN --mount=type=cache,sharing=locked,target=/root/.cache/pip \
   -r requirements-observability.txt
 
 COPY . .
-ENV PATH="/venv/bin:${PATH}"
 # Submodule URL is SSH-based; rewrite to HTTPS since no SSH key is
 # available in the build environment (same fix install.sh applies).
 # The cargo caches outlive the layer, so source edits don't redo the Rust build.

@@ -232,7 +232,7 @@ cmd_update() {
   fi
   venv/bin/pip install --quiet -r "$reqs"
 
-  export PATH="$CARGO_BIN:$INSTALL_DIR/venv/bin:$PATH"
+  export PATH="$CARGO_BIN:$PATH"
   make build
 
   # Directories and units follow .env, which the migration may have just changed.

@@ -124,10 +124,7 @@ See [Service Management](INSTALL.md#service-management) for log filters and what
 2. Create `.env` with fresh encryption keys:
 
    ```bash
-   cp template.env .env
-   for key in DATABASE_ENCRYPTION_KEY DATABASE_FIELD_ENCRYPTION_KEY DATA_ENCRYPTION_KEY; do
-     sed -i "s/^$key=$/$key=$(openssl rand -hex 32)/" .env
-   done
+   make .env
    ```
 
 3. Build and start:
@@ -148,15 +145,13 @@ The container applies pending migrations, then starts every service. It listens 
 ```bash
 git clone --recurse-submodules https://github.com/smswithoutborders/RelaySMS-Publisher.git
 cd RelaySMS-Publisher
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements-dev.txt
-pre-commit install --install-hooks
-make build
+make setup
 ```
 
 Then follow [Run locally](CONTRIBUTING.md#run-locally). To fill a local database with sample data:
 
 ```bash
+source venv/bin/activate
 python -m publisher seed stats --count 5000 --days 90   # publication stats
 python -m publisher seed creds --count 5                # credentials; prints their passwords
 python -m publisher seed platforms                      # adapter rows, without their files
