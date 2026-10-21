@@ -49,7 +49,9 @@ jobs:
 
       # The e2e tests only need pytest, not the app's test environment.
       - name: Install pytest
-        run: pip install --disable-pip-version-check "$(grep -i '^pytest==' requirements-dev.txt)"
+        run: |
+          python -m venv venv
+          venv/bin/pip install --disable-pip-version-check "$(grep -i '^pytest==' requirements-dev.txt)"
 
       - name: Run e2e tests
-        run: make test-e2e PYTHON=python PYTEST_ARGS="-k ${{ matrix.distro }} -v"
+        run: make test-e2e PYTEST_ARGS="-k ${{ matrix.distro }} -v"

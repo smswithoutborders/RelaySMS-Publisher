@@ -15,7 +15,7 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-PYTHON="${PYTHON:-python3}"
+PYTHON="${PYTHON:-$SCRIPT_DIR/../venv/bin/python}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-16000}"
 WORKERS="${WORKERS:-1}"
