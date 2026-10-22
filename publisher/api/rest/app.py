@@ -25,7 +25,7 @@ from publisher.log import setup_logging
 
 logger = logging.getLogger(__name__)
 
-# Query and path values are already in the URL; body values can be secrets.
+# Validation errors echo values from these locations only.
 ECHOED_INPUT_LOCATIONS = frozenset({"query", "path"})
 MAX_ECHOED_INPUT_LENGTH = 50
 

@@ -30,7 +30,8 @@ _GENERIC = frozenset(
 )
 # Snapshot rows that aren't operators.
 _NOT_OPERATORS = frozenset({"", "failed calls", "fix line", "unknown"})
-# A word in this many of a region's networks only weakly tells them apart.
+# A word in at least this many of a region's network names is common, so sharing
+# it is only a weak match.
 _COMMON_IN_REGION = 3
 
 
@@ -85,7 +86,7 @@ def _score(
             ):
                 best = max(best, 2)
             elif shared:
-                best = max(best, 1)  # Only words many of the region's networks have.
+                best = max(best, 1)  # Only common words are shared.
     return best
 
 

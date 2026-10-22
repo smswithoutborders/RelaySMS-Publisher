@@ -26,10 +26,10 @@ type Revocation = tuple[PlatformAdapter, RevokeRequest]
 
 
 def revocation(session: Session, token: Token) -> Revocation | None:
-    """Read what revoking a token takes, before the token is deleted.
+    """Return the adapter and request that revoke a token; call it before deleting it.
 
-    None when no adapter serves its platform. Run it with revoke_upstream once the
-    deletion commits.
+    None when no adapter serves its platform. Pass the result to revoke_upstream
+    after the deletion commits.
     """
     try:
         # Disabled adapters still revoke, so users can always unlink.
@@ -47,7 +47,7 @@ def revocation(session: Session, token: Token) -> Revocation | None:
 
 
 def revoke_upstream(revocation: Revocation | None) -> None:
-    """Revoke at the platform, outside any transaction; failures are only logged."""
+    """Revoke a token at the platform once its deletion commits; failures are logged."""
     if revocation is None:
         return
     adapter, request = revocation

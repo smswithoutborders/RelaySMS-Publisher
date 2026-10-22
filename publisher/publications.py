@@ -84,7 +84,8 @@ class AdapterIntegrationError(PublicationError):
     ):
         super().__init__(message, platform_name=platform_name)
         self.code = code
-        # Refreshed before the send failed, so still the one to store.
+        # A token the adapter refreshed before the send failed; it replaces the
+        # stored one.
         self.token = token
 
 
@@ -354,7 +355,7 @@ def send(delivery: Delivery) -> dict | None:
 
 
 def store_token(session: Session, delivery: Delivery, new_token: dict | None) -> None:
-    """Store a token the adapter refreshed, unless it was unlinked meanwhile."""
+    """Store a token the adapter refreshed, if the account is still linked."""
     token = session.get(Token, delivery.token_id) if delivery.token_id else None
     if token and new_token and new_token != token.token_data.get("token"):
         update_token_data(session, token, {**token.token_data, "token": new_token})

@@ -55,7 +55,6 @@ def validate_client_ephemeral_public_keys(keys) -> None:
 
 
 def find_adapter(platform: str, proto_id: int) -> PlatformAdapter:
-    # Its own session, so none stays open while the adapter runs.
     with get_session() as s:
         return platform_adapters.get_for_protocol(s, platform, proto_id)
 
@@ -63,7 +62,8 @@ def find_adapter(platform: str, proto_id: int) -> PlatformAdapter:
 def call_adapter(adapter: PlatformAdapter, method: str, request: Any) -> dict:
     """Call an adapter, turning its errors into gRPC errors.
 
-    Rejected input and codes reach the client; anything else is logged.
+    Invalid input, failed authentication and rate limits reach the client with the
+    adapter's message; any other error is logged and the client gets a generic one.
     """
     try:
         return ipc.call(adapter, method, request)

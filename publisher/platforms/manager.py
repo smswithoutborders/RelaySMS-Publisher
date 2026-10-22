@@ -244,7 +244,8 @@ def _register(session: Session, adapter: PlatformAdapter, manifest: Manifest) ->
 def activate(adapter: PlatformAdapter) -> None:
     """Move a built version into place. Call it after the install or update commits.
 
-    Run before the commit, a failed commit would leave the new files with the old row.
+    If it ran first and the commit failed, the new files would be in place while the
+    database still names the old version.
     """
     # Renames are atomic, so an adapter call sees the old version or the new.
     for current in (Path(adapter.path), Path(adapter.venv_path)):
@@ -311,7 +312,8 @@ def update(
     """Register tag, or the newest version tag, for an adapter."""
     tag = tag or latest_tag(adapter.source_url)
     commit, manifest = _build(adapter, tag, log)
-    # A tag that now names other code was moved, which a release shouldn't do.
+    # Refused: the installed tag now points to other code, so it was moved after
+    # its release.
     if tag == adapter.tag and commit != adapter.commit:
         _discard_build(adapter)
         raise AdapterError(
@@ -363,7 +365,8 @@ def remove(
     if adapter.id in ("", ".", "..") or "/" in adapter.id:
         raise AdapterError(f"Unsafe adapter id {adapter.id!r}")
     linked = tokens.count_for_platform(session, adapter.name, adapter.proto_id)
-    # Their tokens can only be revoked upstream through the adapter.
+    # Refused while accounts are linked: without the adapter, their tokens can't
+    # be revoked at the platform.
     if linked and not force:
         raise AdapterInUseError(
             f"{linked} linked account(s) use {adapter.name!r}. Disable it instead, "

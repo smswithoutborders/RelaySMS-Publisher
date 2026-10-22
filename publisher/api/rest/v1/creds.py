@@ -72,7 +72,7 @@ def _model_errors(
             log=f"{by}: {e}",
         ) from None
     except CredentialPermissionError as e:
-        # Keep the denial, not the change.
+        # Undo the refused change, then record and commit the denial.
         db.rollback()
         audit_event.record(
             db,

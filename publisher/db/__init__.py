@@ -161,7 +161,8 @@ def _create_engine() -> Engine:
     else:
         _ensure_sqlite_parent_dir(database.sqlite_path)
         if database.encryption_enabled:
-            assert database.encryption_key is not None  # config requires it here
+            # config refuses SQLCipher without a key
+            assert database.encryption_key is not None
             logger.debug("Using SQLCipher3 encryption for SQLite")
             from sqlcipher3 import dbapi2 as sqlcipher3_dbapi
 

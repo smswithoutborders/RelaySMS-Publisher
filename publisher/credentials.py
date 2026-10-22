@@ -33,7 +33,8 @@ _USERNAME_PATTERN = re.compile(rf"^[a-z0-9][a-z0-9._-]{{2,{MAX_USERNAME_LENGTH -
 
 password_hasher = PasswordHasher()
 
-# Each scope here can only be granted with the scope it maps to.
+# Granting the first scope of each pair also needs the second, e.g. gc:write needs
+# gc:read.
 _REQUIRES = {
     Scope.STATS_PUBLICATIONS_REASONS: Scope.STATS_PUBLICATIONS_READ,
     Scope.GC_WRITE: Scope.GC_READ,

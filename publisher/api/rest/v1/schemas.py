@@ -42,7 +42,8 @@ class OAuthClientMetadata(BaseModel):
     client_name: str
     client_uri: str
     scope: str
-    # The same for every atproto web client, so settings don't include them.
+    # The same for every atproto web client, so the adapter's settings leave them
+    # out and these defaults fill them in.
     dpop_bound_access_tokens: bool = True
     application_type: str = "web"
     grant_types: list[str] = ["authorization_code", "refresh_token"]
