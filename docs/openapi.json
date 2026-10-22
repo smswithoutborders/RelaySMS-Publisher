@@ -1507,7 +1507,7 @@
           "Publishing"
         ],
         "summary": "Publish",
-        "description": "Queues an SMS payload for publishing.\n\nMulti-part payloads are kept until every segment arrives, then published. Payloads\nare tagged with protocol `https`; see Offline Publishing in the README for\n`OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors\nhappen later in the queue, so they're logged, not returned.",
+        "description": "Queues an SMS payload for publishing.\n\nMulti-part payloads are kept until every segment arrives, then published. Payloads\nare tagged with protocol `https`; see Offline publishing in the manual for\n`OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors\nhappen later in the queue, so they're logged, not returned.",
         "operationId": "create_publications_v1_publications_post",
         "requestBody": {
           "content": {

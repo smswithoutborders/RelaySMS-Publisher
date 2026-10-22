@@ -66,7 +66,7 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 ## Publishing
 
-`POST /v1/publications` takes JSON and tags payloads with protocol `https`. See [offline publishing](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#offline-publishing) for how the protocol and `tag` decide whether offline payloads publish.
+`POST /v1/publications` takes JSON and tags payloads with protocol `https`. See [offline publishing](../configuration/offline-publishing.md) for how the protocol and `tag` decide whether offline payloads publish.
 
 It only checks the payload's structure before queueing it. Decryption, payload type and adapter errors happen later, so they're logged on the server, not returned.
 

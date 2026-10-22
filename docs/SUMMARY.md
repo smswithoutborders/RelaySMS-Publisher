@@ -19,9 +19,9 @@
 
 # Configuration
 
-- [Settings reference]()
+- [Settings reference](configuration/settings.md)
 - [Encryption keys](configuration/encryption-keys.md)
-- [Offline publishing]()
+- [Offline publishing](configuration/offline-publishing.md)
 - [SMTP transport](configuration/smtp-transport.md)
 
 # Platform adapters

@@ -41,22 +41,9 @@ Two checks must both pass before a message is queued:
 
 ## Configuration
 
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `SMTP_TRANSPORT_ENABLED` | `false` | Enables the listener. |
-| `SMTP_IMAP_SERVER` | - | IMAP host. Required when enabled. |
-| `SMTP_IMAP_PORT` | `993` | IMAP port. |
-| `SMTP_IMAP_USERNAME` | - | Required when enabled. |
-| `SMTP_IMAP_PASSWORD` | - | Required when enabled. |
-| `SMTP_IMAP_MAIL_FOLDER` | `INBOX` | Comma-separated folders to watch. |
-| `SMTP_TLS_CLIENT_CERTIFICATE` / `SMTP_TLS_CLIENT_KEY` | - | Optional mTLS client certificate and key, if the provider requires one. Set both or neither. |
-| `SMTP_ALLOWED_SENDERS` | - | Comma-separated allowlist of addresses and/or domains. |
-| `SMTP_TRUSTED_AUTHSERV_ID` | - | `authserv-id` whose `Authentication-Results` verdicts are trusted. Required when enabled. |
-| `SMTP_REQUIRE_DKIM` | `true` | Require `dkim=pass`. |
-| `SMTP_REQUIRE_SPF` | `true` | Require `spf=pass`. |
-| `SMTP_VERIFY_DKIM_INDEPENDENTLY` | `false` | Also re-verify the DKIM signature via DNS. |
+Settings: [SMTP transport](settings.md#smtp-transport).
 
-The listener tags what it queues with protocol `smtp`. Whether offline payloads from email publish depends on [offline publishing](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#offline-publishing).
+The listener tags what it queues with protocol `smtp`. Whether offline payloads from email publish depends on [offline publishing](offline-publishing.md).
 
 ## Running
 

@@ -1,6 +1,6 @@
 # Install with Docker
 
-`docker-compose.yml` runs every service in one container, with its data in `./data` and its settings in `.env` (`template.env` describes each one):
+`docker-compose.yml` runs every service in one container, with its data in `./data` and its settings in `.env` (see the [settings reference](../configuration/settings.md)):
 
 ```bash
 git clone --recurse-submodules https://github.com/smswithoutborders/RelaySMS-Publisher.git

@@ -161,31 +161,7 @@ python -m publisher seed gateway-clients --count 10     # gateway clients, some 
 
 ## Configuration
 
-Settings live in `.env`. `template.env` lists every setting with its default and what it does, and `python -m publisher config check` (or `sudo ./manage.sh check` on a server) reports any that are missing or invalid.
-
-| Settings | Documented in |
-| --- | --- |
-| Database, Celery broker, encryption keys | [Database](docs/installation/database.md), [Celery broker](docs/installation/celery-broker.md), [Encryption keys](docs/configuration/encryption-keys.md) |
-| REST API login and sessions (`AUTH_*`) | [REST API](docs/reference/rest-api.md#authentication) |
-| SMTP transport (`SMTP_*`) | [SMTP transport](docs/configuration/smtp-transport.md#configuration) |
-| Tracing, metrics and logs (`OTEL_*`) | [Observability](docs/operating/observability.md) |
-| Offline publishing (`OFFLINE_PUBLISH_*`) | [Below](#offline-publishing) |
-
-### Offline Publishing
-
-Offline payloads are tagged with the protocol they arrived on: `https` for [REST `/publications`](docs/reference/rest-api.md#publishing) and `smtp` for the [SMTP transport](docs/configuration/smtp-transport.md).
-
-```bash
-OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=smtp   # comma-separated; empty allows every protocol
-OFFLINE_PUBLISH_SHARED_SECRET=           # 64-char hex; required when https is allowed
-```
-
-- Offline payloads from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` are discarded.
-- Offline payloads over `https` must carry `OFFLINE_PUBLISH_SHARED_SECRET` in the request's `tag` field.
-- Allowing `https`, or every protocol, without the secret fails `config check` and startup.
-
-> [!TIP]
-> For a Twilio number, run [RelaySMS-GatewayClient-Twilio](https://github.com/smswithoutborders/RelaySMS-GatewayClient-Twilio) with `FORWARD_URLS_JSON` set to this server's `/v1/publications` URL and `FORWARD_TAG` set to `OFFLINE_PUBLISH_SHARED_SECRET`, then allow `https`.
+Settings live in `.env`. The [settings reference](docs/configuration/settings.md) lists each one, and `sudo ./manage.sh check` reports any that are missing or invalid.
 
 ## Platform adapters
 

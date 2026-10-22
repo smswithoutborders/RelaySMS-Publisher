@@ -2,7 +2,7 @@
 
 To run a second Publisher on the same host, give it its own install directory, instance name and ports:
 
-1. Install it without nginx. When it shares a RabbitMQ or database server with the first instance, also pass `--broker-vhost acme` or `--db-name acme`:
+1. Install it without nginx. When it shares a database or RabbitMQ server with the first instance, also pass `--db-name acme --db-user acme` or `--broker-vhost acme --broker-user acme`; reusing the first instance's user would give it a new password and break the first instance:
 
    ```bash
    sudo ./install.sh --install-dir /srv/relaysms-acme --instance-name acme --skip-nginx

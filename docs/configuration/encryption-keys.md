@@ -5,8 +5,8 @@ Three keys in `.env` protect the data. The installer and `make .env` generate th
 | Setting | Protects | Used |
 | --- | --- | --- |
 | `DATA_ENCRYPTION_KEY` | The server's private keys, and the keyed hash that replaces each sender's address | Always |
-| `DATABASE_FIELD_ENCRYPTION_KEY` | Linked accounts' platform tokens | When `DATABASE_FIELD_ENCRYPTION_ENABLED=true` (the default) |
-| `DATABASE_ENCRYPTION_KEY` | The whole SQLite database file (SQLCipher) | When `DATABASE_ENCRYPTION_ENABLED=true` (the default) and the database is SQLite |
+| `DATABASE_FIELD_ENCRYPTION_KEY` | Linked accounts' platform tokens | When `DATABASE_FIELD_ENCRYPTION_ENABLED=true`, as `template.env` sets it |
+| `DATABASE_ENCRYPTION_KEY` | The whole SQLite database file (SQLCipher) | When `DATABASE_ENCRYPTION_ENABLED=true`, as `template.env` sets it, and the database is SQLite |
 
 > [!CAUTION]
 > Back up `.env` with the database, and never change a key once the install holds data. Data encrypted with a lost or changed key can't be read again, and a new `DATA_ENCRYPTION_KEY` also gives every sender a new hash.

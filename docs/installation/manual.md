@@ -41,7 +41,7 @@ These are the steps the [installer](server.md) runs, for when you need to change
    make build
    ```
 
-6. Create `.env` with fresh encryption keys, then set what you need (`template.env` describes each one):
+6. Create `.env` with fresh encryption keys, then set what you need (see the [settings reference](../configuration/settings.md)):
 
    ```bash
    make .env

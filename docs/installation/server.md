@@ -52,7 +52,7 @@ Running it again updates the install in place and keeps its `.env`. Run it as th
 
    You should see `{"status":"ok"}`.
 
-2. Set what you need in `.env` (`template.env` describes each setting), then check it and restart:
+2. Set what you need in `.env` (see the [settings reference](../configuration/settings.md)), then check it and restart:
 
    ```bash
    sudo ./manage.sh check
