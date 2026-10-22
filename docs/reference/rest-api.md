@@ -1,8 +1,8 @@
-# Publisher REST API
+# REST API
 
 The REST API serves platform, gateway client and server key metadata, accepts encrypted payloads for publishing, and lets credentials read stats, manage credentials and read the audit log.
 
-The endpoint reference is [openapi.json](openapi.json), generated from the app. Open it in any OpenAPI viewer, or set `API_DOCS_ENABLED=true` on a dev server and browse `/docs`. After changing an endpoint, run `make docs`; a test fails while the file is stale.
+The endpoint reference is [openapi.json](../openapi.json), generated from the app. Open it in any OpenAPI viewer, or set `API_DOCS_ENABLED=true` on a development server and browse `/docs`.
 
 This page covers what the reference doesn't show well.
 
@@ -16,33 +16,30 @@ https://<host>/v1
 
 ## Authentication
 
-Credentials and their scopes are managed with [`./publisher.sh creds`](../README.md#credentials) or the `/v1/creds` endpoints.
+Credentials and their scopes are managed with [`./publisher.sh creds`](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#credentials) or the `/v1/creds` endpoints.
 
-* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after 30 minutes idle or 12 hours.
+* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after `AUTH_SESSION_IDLE_MINUTES` idle (30) or `AUTH_SESSION_MAX_HOURS` (12).
 * **HTTP Basic:** username and password on every request, e.g. `curl -u analyst:<password> .../v1/stats/publications`.
-
-> [!WARNING]
-> Basic auth sends the password with every request. Use it over HTTPS only.
 
 Scope changes apply on the credential's next request. Each endpoint's description names the scopes it needs.
 
-## Managing Credentials
+## Managing credentials
 
 A credential can only grant scopes it holds, can't change itself, and can't change a credential holding scopes it lacks. These return `403`.
 
 `GET /v1/creds/{username}` returns an opaque `ETag`. Send it back unchanged as `If-Match` to change, reset or delete that credential: a missing header gets `428`, a stale one `412`. Responses that change a credential return its new `ETag`. Generated passwords appear only in the response that creates them.
 
-## Managing Platform Adapters
+## Managing platform adapters
 
-`/v1/platforms/adapters` lists every installed adapter, with its source, version tag, commit and who last changed it, and takes the same `ETag` and `If-Match` rules as credentials. A disabled adapter disappears from `/v1/platforms` and can't publish or link accounts, but still revokes tokens so users can unlink. Uninstalling is refused with `409` while accounts are linked through the adapter; disable it instead, or remove it with `./publisher.sh platforms remove --force`.
+`/v1/platforms/adapters` lists every installed adapter, with its source, version tag, commit and who last changed it, and takes the same `ETag` and `If-Match` rules as credentials. A disabled adapter disappears from `/v1/platforms` and can't publish or link accounts, but still revokes tokens so users can unlink. Uninstalling is refused with `409` while accounts are linked through the adapter; see [Removing](../platforms/manage.md#removing).
 
-Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/adapters/{id}/update`) run code from the repository on the server, so they need an administrator and a GitHub repository of an org in `PLATFORMS_GITHUB_ORGS`. Both take an optional `tag`, defaulting to the newest version tag, and return `202` with the job's URL in `Location`. Poll the job until its `state` is `succeeded` or `failed`; its `log` has the end of the git and pip output. An adapter has one job at a time; another gets `409`.
+Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/adapters/{id}/update`) run code from the repository on the server, so they need an administrator and a repository from an org in `PLATFORMS_GITHUB_ORGS`. Both take an optional `tag`, defaulting to the newest version tag, and return `202` with the job's URL in `Location`. Poll the job until its `state` is `succeeded` or `failed`; its `log` has the end of the git and pip output. An adapter has one job at a time; another gets `409`.
 
 An adapter's settings are at `/v1/platforms/adapters/{id}/config`, for administrators only. `GET` lists each setting, with secrets only marked `is_set`, and the inputs its setup takes. `PATCH` changes the settings sent and keeps the rest; `POST .../setup` runs the adapter's setup and replaces them all, with a file input sent as the file's text. `configured` in the adapter list says whether every required setting has a value.
 
-## Managing Gateway Clients
+## Managing gateway clients
 
-`/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm; see [how suggest works](gateway-clients.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.
+`/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm; see [how suggest works](../gateway-clients/manage.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.
 
 ## Pagination
 
@@ -50,7 +47,7 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 `since` and `until` take ISO-8601 times, UTC if there's no offset. `since` is inclusive and `until` exclusive.
 
-## Audit Events
+## Audit events
 
 `GET /v1/audit-events` needs `audit:read`, and each area also needs its read scope: `creds:read` for `auth.*` and `creds.*` events, `platforms:read` for `platforms.*`, `gc:read` for `gateway_clients.*`. Events from areas you can't read are left out.
 
@@ -69,7 +66,7 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 ## Publishing
 
-`POST /v1/publications` takes JSON and tags payloads with protocol `https`. See [Offline Publishing](../README.md#offline-publishing) for how the protocol and `tag` decide whether offline payloads publish.
+`POST /v1/publications` takes JSON and tags payloads with protocol `https`. See [offline publishing](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#offline-publishing) for how the protocol and `tag` decide whether offline payloads publish.
 
 It only checks the payload's structure before queueing it. Decryption, payload type and adapter errors happen later, so they're logged on the server, not returned.
 

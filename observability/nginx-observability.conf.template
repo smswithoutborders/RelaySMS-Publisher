@@ -1,5 +1,5 @@
 # nginx reverse proxy site template for SigNoz.
-# Setup: observability/README.md
+# Setup: docs/operating/observability.md
 
 upstream signoz_ui {
     server 127.0.0.1:8080;

@@ -88,7 +88,7 @@ Each service can also run on its own:
 | Celery worker and beat | `celery -A publisher.tasks.celery_app:celery_app worker` / `beat` |
 | CLI | `python -m publisher --help` (or `./publisher.sh`) |
 
-`python -m tools.client` drives the gRPC and REST flows by hand, see [tools/README.md](tools/README.md).
+`python -m tools.client` drives the gRPC and REST flows by hand, see [docs/developers/reference-client.md](docs/developers/reference-client.md).
 
 ### Make targets
 
@@ -104,6 +104,8 @@ Each service can also run on its own:
 | `make test` | Run pytest |
 | `make coverage` | Run pytest and list the lines no test runs |
 | `make docs` | Regenerate `docs/openapi.json` from the REST app |
+| `make book` | Build the manual in `docs/` into `book/` |
+| `make book-serve` | Preview the manual on <http://localhost:3000>, rebuilding on changes |
 | `make test-dialects` | Migrate and query SQLite, SQLCipher, Postgres, MySQL and MariaDB (podman) |
 | `make test-e2e` | Install, update and uninstall in a systemd container (podman) |
 | `make check` | Run every pre-commit hook on all files |
@@ -306,14 +308,14 @@ make build test PYTHON=.venv312/bin/python
 1. Add the route to the matching module in `publisher/api/rest/v1/` (or a new module with its own `APIRouter`, registered in `routes.py`).
 2. Put request and response models in `schemas.py`. Use `Depends(get_db)` for the session, and `Security(authorize, scopes=[...])` if it needs a login. A new scope goes in `Scope` in `publisher/models/credential.py`.
 3. Map domain errors to `ApiError` (`errors.py`) with a message a client can show, and put ids and other detail in its `log=`.
-4. Test it in `tests/api/rest/`, describe it in its docstring and run `make docs`. Update [docs/rest.md](docs/rest.md) only for what the reference doesn't show.
+4. Test it in `tests/api/rest/`, describe it in its docstring and run `make docs`. Update [docs/reference/rest-api.md](docs/reference/rest-api.md) only for what the reference doesn't show.
 
 ### Change the gRPC API
 
 1. Edit `protos/v3/publisher.proto` and run `make protos`.
 2. Add a module per RPC in `publisher/api/grpc/v3/` and a thin method on the servicer that calls it.
 3. Raise `grpc_interceptor` exceptions such as `InvalidArgument` or `Unauthenticated`; `ErrorInterceptor` turns them into status codes and anything else into `INTERNAL`.
-4. Test it in `tests/api/grpc/` and update [docs/grpc.md](docs/grpc.md).
+4. Test it in `tests/api/grpc/` and update [docs/reference/grpc-api.md](docs/reference/grpc-api.md).
 
 > [!WARNING]
 > Deployed clients depend on the proto: only add fields.
@@ -328,13 +330,17 @@ Add it under `publisher/tasks/`. Keep the explicit `tasks.*` name so queued mess
 
 ### Platform adapters
 
-Adapters live in their own repositories and are built with the SDK in `sdk/` ([sdk/README.md](sdk/README.md)). Their CI runs `.github/workflows/adapter.yml` at the SDK tag they pin, so a change to it reaches an adapter only when it moves its pin. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [docs/platforms.md](docs/platforms.md).
+Adapters live in their own repositories and are built with the SDK in `sdk/` ([sdk/README.md](sdk/README.md)). Their CI runs `.github/workflows/adapter.yml` at the SDK tag they pin, so a change to it reaches an adapter only when it moves its pin. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [docs/platforms/manage.md](docs/platforms/manage.md).
 
 ## Documentation
 
-- [docs/rest.md](docs/rest.md) (with the generated [docs/openapi.json](docs/openapi.json)), [docs/grpc.md](docs/grpc.md) and [docs/smtp.md](docs/smtp.md) describe each interface. Update them in the same PR as the behaviour.
-- The README covers installation, configuration and operations. Keep it in step with `template.env` and the CLI.
-- Write plainly and briefly. Use code blocks for commands and tables for options.
+The manual in `docs/` is an [mdBook](https://rust-lang.github.io/mdBook/) that reads the same on GitHub. Preview it with `make book-serve`.
+
+- Update the pages a change affects in the same PR.
+- List a new page in `docs/SUMMARY.md`, or the book leaves it out.
+- Link pages in `docs/` relatively, and files outside it by their full GitHub URL, since the book only has `docs/`.
+- Draw diagrams as `mermaid` code blocks.
+- Write plainly and briefly, one paragraph per line, with sentence-case headings, code blocks for commands and tables for options.
 
 ## When CI fails
 

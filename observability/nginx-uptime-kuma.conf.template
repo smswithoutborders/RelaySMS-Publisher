@@ -1,5 +1,5 @@
 # nginx reverse proxy site template for Uptime Kuma.
-# Setup: observability/README.md
+# Setup: docs/operating/observability.md
 
 upstream uptime_kuma_ui {
     server 127.0.0.1:3001;

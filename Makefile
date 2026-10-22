@@ -6,7 +6,7 @@ CREDS_USER ?= dev
 SPECS_DIR := lib_relaysms_payload_specs
 SPECS_LIB := $(SPECS_DIR)/target/release/librelaysms_spec_payload.so
 
-.PHONY: setup build protos specs migrate creds run test coverage test-sdk test-dialects test-e2e docs check clean
+.PHONY: setup build protos specs migrate creds run test coverage test-sdk test-dialects test-e2e docs book book-serve check clean
 
 ## Set up a development checkout.
 setup: venv/bin/python .env
@@ -75,6 +75,14 @@ test-e2e:
 ## Regenerate docs/openapi.json from the REST app. A test fails when it's stale.
 docs:
 	$(PYTHON) -m publisher.api.rest.openapi
+
+## Build the manual in docs/ into book/.
+book:
+	./scripts/build-book.sh
+
+## Serve the manual on http://localhost:3000, rebuilding on changes.
+book-serve:
+	./scripts/build-book.sh --serve
 
 check:
 	$(PYTHON) -m pre_commit run --all-files

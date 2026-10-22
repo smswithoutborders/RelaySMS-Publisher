@@ -165,7 +165,7 @@ The [README](README.md#manage-the-services) lists the `manage.sh` commands. Run 
 ./publisher.sh shell    # a shell as the service user with .env loaded
 ```
 
-[Platform adapters](docs/platforms.md), [gateway clients](docs/gateway-clients.md) and [credentials](README.md#credentials) each have their own guide. Observability is optional; see [observability/README.md](observability/README.md).
+[Platform adapters](docs/platforms/manage.md), [gateway clients](docs/gateway-clients/manage.md) and [credentials](README.md#credentials) each have their own guide. Observability is optional; see [docs/operating/observability.md](docs/operating/observability.md).
 
 ## Configuration
 

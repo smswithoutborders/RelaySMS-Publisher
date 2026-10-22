@@ -1,8 +1,8 @@
-# SMTP Transport
+# SMTP transport
 
-Publishes RelaySMS payloads received by email. Incoming mails are picked up by polling a mailbox over IMAP (`publisher/smtp/listener.py`), authenticated, and queued for publication.
+Publishes RelaySMS payloads that gateway clients send by email. The listener watches a mailbox over IMAP, checks each sender, and queues the payload for publication.
 
-## Message Format
+## Message format
 
 The body of each email must be a JSON object:
 
@@ -20,13 +20,13 @@ The body of each email must be a JSON object:
 | dialing_code | string | Optional. Sender's country calling code, for publication stats |
 | text | string | Base64-encoded serialized payload |
 
-## How It Works
+## How it works
 
 1. Waits for unseen mail in `SMTP_IMAP_MAIL_FOLDER` with IMAP IDLE. List several folders, such as `INBOX,Spam`, to catch mail a provider misfiled.
 2. Rejects each email unless the sender is allowlisted and authenticated (see [Security](#security)).
 3. Parses the body as JSON and validates the payload.
 4. Queues the payload for publication.
-5. Deletes the handled emails, in one call per folder.
+5. Deletes each handled email. An email that hits an unexpected error stays in the folder and is retried on the next cycle.
 
 ## Security
 
@@ -48,19 +48,16 @@ Two checks must both pass before a message is queued:
 | `SMTP_IMAP_PORT` | `993` | IMAP port. |
 | `SMTP_IMAP_USERNAME` | - | Required when enabled. |
 | `SMTP_IMAP_PASSWORD` | - | Required when enabled. |
-| `SMTP_IMAP_MAIL_FOLDER` | `INBOX` | Comma-separated folders to poll. |
-| `SMTP_TLS_CLIENT_CERTIFICATE` / `SMTP_TLS_CLIENT_KEY` | - | Optional mTLS client cert, only if the provider requires one. |
+| `SMTP_IMAP_MAIL_FOLDER` | `INBOX` | Comma-separated folders to watch. |
+| `SMTP_TLS_CLIENT_CERTIFICATE` / `SMTP_TLS_CLIENT_KEY` | - | Optional mTLS client certificate and key, if the provider requires one. Set both or neither. |
 | `SMTP_ALLOWED_SENDERS` | - | Comma-separated allowlist of addresses and/or domains. |
-| `SMTP_TRUSTED_AUTHSERV_ID` | - | `authserv-id` whose `Authentication-Results` verdicts are trusted. |
+| `SMTP_TRUSTED_AUTHSERV_ID` | - | `authserv-id` whose `Authentication-Results` verdicts are trusted. Required when enabled. |
 | `SMTP_REQUIRE_DKIM` | `true` | Require `dkim=pass`. |
 | `SMTP_REQUIRE_SPF` | `true` | Require `spf=pass`. |
 | `SMTP_VERIFY_DKIM_INDEPENDENTLY` | `false` | Also re-verify the DKIM signature via DNS. |
-| `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` | - | Comma-separated allowlist of protocols allowed to publish offline payloads. Messages queued by this listener are tagged `smtp`; if set and `smtp` isn't listed, offline payloads from email are discarded. |
+
+The listener tags what it queues with protocol `smtp`. Whether offline payloads from email publish depends on [offline publishing](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#offline-publishing).
 
 ## Running
 
-```sh
-python3 -m publisher.smtp
-```
-
-`scripts/run.sh` and the `relaysms-publisher-smtp` unit start it too; it exits at once while `SMTP_TRANSPORT_ENABLED` is off.
+Set `SMTP_TRANSPORT_ENABLED=true`, then run `sudo ./manage.sh restart`. The `relaysms-publisher-smtp` service runs the listener and exits at once while the setting is off.

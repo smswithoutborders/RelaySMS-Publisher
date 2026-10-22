@@ -1,6 +1,6 @@
-# Platform Adapters
+# Managing adapters
 
-Each platform (Gmail, X, Telegram, ...) is served by an adapter installed from its own GitHub repository. Adapters are registered in the `platform_adapters` table; their files live under `data/platforms/` (`PLATFORMS_ADAPTERS_*` in `.env`).
+Each platform (Gmail, Telegram, Mastodon, ...) is served by an adapter installed from its own GitHub repository. Its files live under `data/platforms/` (see [Files](#files)).
 
 > [!IMPORTANT]
 > Run these commands with `./publisher.sh` from the install directory, not `python3 -m publisher`. It runs as the service user, so the services can still read the adapter files.
@@ -21,7 +21,7 @@ Each platform (Gmail, X, Telegram, ...) is served by an adapter installed from i
 ./publisher.sh platforms exec <NAME> -- <COMMAND> [ARGS]    # run a command the adapter installs
 ```
 
-Commands taking a name also take `--proto-id` and `--cat-id`, for when a name matches more than one adapter. Administrators can do the same over the [REST API](rest.md#managing-platform-adapters), installing only from orgs in `PLATFORMS_GITHUB_ORGS`.
+Commands taking a name also take `--proto-id` and `--cat-id`, for when a name matches more than one adapter. Administrators can do the same over the [REST API](../reference/rest-api.md#managing-platform-adapters), but only from GitHub orgs listed in `PLATFORMS_GITHUB_ORGS`.
 
 ## Versions
 
@@ -30,7 +30,7 @@ Adapters are installed and updated by version tag, such as `v1.2.0`, so a reposi
 An update builds the new version and its virtualenv beside the running one, then switches over, so a failed update leaves the running version in place.
 
 > [!NOTE]
-> An update is refused if the installed tag now points to a different commit. Release tags shouldn't move.
+> An update is refused if the installed tag now points to a different commit. Publish a new tag instead of moving one.
 
 ## Removing
 
@@ -58,13 +58,13 @@ An adapter reads its settings, such as API keys, from `credentials.json` in its 
 ./publisher.sh platforms config set rmail --unset alias_prefix
 ```
 
-`config set` changes only the keys given. `setup` is for adapters whose settings come from the platform, such as an app it registers or a file its console downloads; it replaces the whole file. `--input KEY=@PATH` reads a file:
+`config set` changes only the keys given. `setup` is for adapters whose settings come from the platform (e.g. a registered app for Mastodon, a downloaded client file for Gmail) and replaces all of them. `--input KEY=@PATH` reads a file:
 
 ```bash
 ./publisher.sh platforms setup gmail --input client_file=@client_secret.json
 ```
 
-## An Adapter's Own Commands
+## An adapter's own commands
 
 An adapter may install admin commands. `exec` runs one from the adapter's virtualenv with its config and state directories; put `--` before it:
 
@@ -72,6 +72,6 @@ An adapter may install admin commands. `exec` runs one from the adapter's virtua
 ./publisher.sh platforms exec <NAME> -- <COMMAND> --help
 ```
 
-## Writing an Adapter
+## Writing an adapter
 
-Build it with the [adapter SDK](../sdk/README.md), then tag a release and `add` it.
+Build it with the [adapter SDK](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk), then tag a release and `add` it.

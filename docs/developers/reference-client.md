@@ -1,13 +1,13 @@
 # Reference Client
 
-`tools/client.py` drives the gRPC and REST flows by hand, the way a phone app would. It keeps tokens and key pools in local state between runs.
+`tools/client.py` drives the gRPC and REST flows by hand, the way a phone app would. It keeps tokens and key pools in `tools/db.json` between runs.
 
 ```bash
 pip install -r requirements.txt
 python -m tools.client <COMMAND> [ARGS]
 ```
 
-## Connection Options
+## Connection options
 
 | Option | Default | Does |
 | --- | --- | --- |
@@ -15,10 +15,10 @@ python -m tools.client <COMMAND> [ARGS]
 | `--tls` | off | Use TLS for gRPC |
 | `--rest-api` | `http://localhost:16000` | REST API base URL |
 | `--platform`, `-p` | | Platform name, such as `gmail` or `telegram` |
-| `--phone-number` | | Phone number, for PNBA |
+| `--phone-number` | | Phone number, for phone number-based authentication (PNBA, e.g. Telegram) |
 | `--request-identifier` | | Optional request identifier |
 
-## Linking Accounts
+## Linking accounts
 
 | Command | Does |
 | --- | --- |

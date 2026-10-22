@@ -52,7 +52,7 @@ The installer sets up everything else, including the system packages and Rust.
    | `--site-name DOMAIN` | Puts nginx with a Let's Encrypt certificate in front; `--skip-nginx` skips it |
    | `--setup-db mysql\|postgres` | Installs the database server and writes its details to `.env` ([details](INSTALL.md#database)) |
    | `--setup-broker rabbitmq` | Uses RabbitMQ instead of SQLite as the Celery broker, for heavier load ([details](INSTALL.md#celery-worker-and-beat)) |
-   | `--setup-observability` | Adds SigNoz and Uptime Kuma ([details](observability/README.md)) |
+   | `--setup-observability` | Adds SigNoz and Uptime Kuma ([details](docs/operating/observability.md)) |
    | `--install-dir PATH`, `--instance-name NAME` | Installs elsewhere, or a second copy on the same host ([details](INSTALL.md#running-multiple-instances)) |
 
    `install.sh --help` lists every flag.
@@ -165,14 +165,14 @@ Settings live in `.env`. `template.env` lists every setting with its default and
 | Settings | Documented in |
 | --- | --- |
 | Server, database, encryption, Celery, adapters | [INSTALL.md](INSTALL.md#configuration) |
-| REST API login and sessions (`AUTH_*`) | [REST API](docs/rest.md#authentication) |
-| SMTP transport (`SMTP_*`) | [SMTP Transport](docs/smtp.md#configuration) |
-| Tracing, metrics and logs (`OTEL_*`) | [Observability](observability/README.md) |
+| REST API login and sessions (`AUTH_*`) | [REST API](docs/reference/rest-api.md#authentication) |
+| SMTP transport (`SMTP_*`) | [SMTP transport](docs/configuration/smtp-transport.md#configuration) |
+| Tracing, metrics and logs (`OTEL_*`) | [Observability](docs/operating/observability.md) |
 | Offline publishing (`OFFLINE_PUBLISH_*`) | [Below](#offline-publishing) |
 
 ### Offline Publishing
 
-Offline payloads are tagged with the protocol they arrived on: `https` for [REST `/publications`](docs/rest.md#publishing) and `smtp` for the [SMTP transport](docs/smtp.md).
+Offline payloads are tagged with the protocol they arrived on: `https` for [REST `/publications`](docs/reference/rest-api.md#publishing) and `smtp` for the [SMTP transport](docs/configuration/smtp-transport.md).
 
 ```bash
 OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=smtp   # comma-separated; empty allows every protocol
@@ -197,15 +197,15 @@ Each platform is served by an adapter installed from its own repository. `GET /v
 - [Bluesky](https://github.com/smswithoutborders/bluesky-oauth2-adapter)
 - [Mastodon](https://github.com/smswithoutborders/mastodon-oauth2-adapter)
 
-[docs/platforms.md](docs/platforms.md) covers adding, updating, disabling and removing adapters. Each adapter's README covers its own settings.
+[docs/platforms/manage.md](docs/platforms/manage.md) covers adding, updating, disabling and removing adapters. Each adapter's README covers its own settings.
 
 ## Gateway clients
 
-Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/gateway-clients` lists the enabled ones, and [docs/gateway-clients.md](docs/gateway-clients.md) covers managing them.
+Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/gateway-clients` lists the enabled ones, and [docs/gateway-clients/manage.md](docs/gateway-clients/manage.md) covers managing them.
 
 ## Credentials
 
-Credentials log in to the REST API, each with its own scopes. One holding every scope is an administrator. They can also be managed over the [REST API](docs/rest.md#managing-credentials).
+Credentials log in to the REST API, each with its own scopes. One holding every scope is an administrator. They can also be managed over the [REST API](docs/reference/rest-api.md#managing-credentials).
 
 ```bash
 ./publisher.sh creds scopes                                        # list scopes
@@ -222,14 +222,15 @@ Credentials log in to the REST API, each with its own scopes. One holding every 
 
 ## Documentation
 
-- [Installation Guide](INSTALL.md): installing by hand and every setting
-- [REST API](docs/rest.md): publishing, authentication and the [OpenAPI reference](docs/openapi.json)
-- [gRPC API](docs/grpc.md): linking accounts and syncing keys
-- [SMTP Transport](docs/smtp.md): publishing payloads sent by email
-- [Platform Adapters](docs/platforms.md): installing and managing adapters
-- [Gateway Clients](docs/gateway-clients.md): managing gateway clients
-- [Observability](observability/README.md): tracing, metrics, logs and uptime monitoring
-- [Reference Client](tools/README.md): exercising the gRPC and REST flows by hand
+- [Manual](docs/README.md): installing, configuring and running the Publisher
+- [Installation guide](INSTALL.md): installing by hand and every setting
+- [REST API](docs/reference/rest-api.md): publishing, authentication and the [OpenAPI reference](docs/openapi.json)
+- [gRPC API](docs/reference/grpc-api.md): linking accounts and syncing keys
+- [SMTP transport](docs/configuration/smtp-transport.md): publishing payloads sent by email
+- [Platform adapters](docs/platforms/manage.md): installing and managing adapters
+- [Gateway clients](docs/gateway-clients/manage.md): managing gateway clients
+- [Observability](docs/operating/observability.md): tracing, metrics, logs and uptime monitoring
+- [Reference client](docs/developers/reference-client.md): exercising the gRPC and REST flows by hand
 - [Contributing](CONTRIBUTING.md): setup, workflow, conventions and testing
 
 ## License

@@ -1,80 +1,41 @@
-# Publisher gRPC Documentation
+# gRPC API
 
-## Table of Contents
+The gRPC API links and unlinks platform accounts and syncs ephemeral key pools. The RelaySMS app calls it while online.
 
-- [Download Protocol Buffer Files](#download-protocol-buffer-files)
-- [Prerequisites](#prerequisites)
-- [Version 3 API](#version-3-api)
-  - [v3: Get OAuth2 Authorization URL](#v3-get-oauth2-authorization-url)
-  - [v3: Exchange OAuth2 Code and Store Token](#v3-exchange-oauth2-code-and-store-token)
-  - [v3: Revoke and Delete OAuth2 Token](#v3-revoke-and-delete-oauth2-token)
-  - [v3: Get PNBA Code](#v3-get-pnba-code)
-  - [v3: Exchange PNBA Code and Store Token](#v3-exchange-pnba-code-and-store-token)
-  - [v3: Revoke and Delete PNBA Token](#v3-revoke-and-delete-pnba-token)
-  - [v3: Sync Keys](#v3-sync-keys)
-
-## Download Protocol Buffer Files
-
-### Version 3
+## Protocol buffer file
 
 ```bash
-curl -O -L https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/staging/protos/v3/publisher.proto
+curl -O -L https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/protos/v3/publisher.proto
 ```
 
-**Package:** `publisher.v3`  
-**Service:** `Publisher`
+Package `publisher.v3`, service `Publisher`.
 
-## Prerequisites
+## Generate a client
 
-### Install Dependencies
+Generate stubs with `protoc` for your [language](https://grpc.io/docs/languages/). For Python:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+pip install grpcio-tools
+python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. publisher.proto
 ```
 
-For other languages, see [Supported languages](https://grpc.io/docs/languages/).
+## Request headers
 
-### Compile gRPC
-
-```bash
-python -m grpc_tools.protoc -I protos/v3 --python_out=. --grpc_python_out=. protos/v3/publisher.proto
-```
-
-### Starting the Server
-
-```bash
-GRPC_PORT=<your_port> \
-GRPC_HOST=<your_host> \
-python3 -m publisher.api.grpc
-```
-
----
-
-## Version 3 API
-
-**Package:** `publisher.v3`  
-**Service:** `Publisher`
-
-### v3 Request Headers
-
-All v3 RPC calls require the following headers:
+Every RPC needs these headers. Headers ending in `-bin` carry raw binary.
 
 | Header | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `x-payload-bin` | bytes | Yes | Encrypted request payload ciphertext (binary) |
-| `x-public-key-bin` | bytes | Yes | Client ephemeral public key ($eC_{pk}$, 32 bytes, binary) |
-| `x-key-id` | string | Yes | Server static key ID used for encrypting the payload |
-| `x-nonce-bin` | bytes | Yes | Request nonce (16 bytes, binary) |
-| `x-timestamp` | string | Yes | Unix timestamp in seconds |
+| `x-payload-bin` | bytes | Yes | Encrypted request payload ciphertext |
+| `x-public-key-bin` | bytes | Yes | Client ephemeral public key ($eC_{pk}$, 32 bytes) |
+| `x-key-id` | string | Yes | ID of the server identity key used to encrypt the payload |
+| `x-nonce-bin` | bytes | Yes | Request nonce (16 bytes) |
+| `x-timestamp` | string | Yes | Unix timestamp in seconds, within `NONCE_TTL_SECONDS` of the server's clock |
 
-> [!NOTE]
-> Headers ending in `-bin` are treated as binary metadata and expect raw binary data.
+The examples use `-plaintext` against a local server; drop it for a server behind TLS on port 443.
 
----
+## Methods
 
-### v3: Get OAuth2 Authorization URL
+### Get OAuth2 authorization URL
 
 Generates an OAuth2 authorization URL for initiating the OAuth2 flow.
 
@@ -114,13 +75,11 @@ grpcurl -plaintext \
     "platform": "gmail",
     "autogenerate_code_verifier": true
   }' \
-  -proto protos/v3/publisher.proto \
+  -proto publisher.proto \
   <your_host>:<your_port> publisher.v3.Publisher/GetOAuth2AuthorizationUrl
 ```
 
----
-
-### v3: Exchange OAuth2 Code and Store Token
+### Exchange OAuth2 code and store token
 
 Exchanges an OAuth2 authorization code for tokens and stores them. Returns encrypted token data and a set of server ephemeral keys.
 
@@ -163,7 +122,7 @@ grpcurl -plaintext \
   -H 'x-nonce-bin: <nonce_binary>' \
   -H 'x-timestamp: <timestamp>' \
   -d @ \
-  -proto protos/v3/publisher.proto \
+  -proto publisher.proto \
   <your_host>:<your_port> publisher.v3.Publisher/ExchangeOAuth2CodeAndStore <<EOF
 {
   "platform": "gmail",
@@ -177,9 +136,7 @@ grpcurl -plaintext \
 EOF
 ```
 
----
-
-### v3: Revoke and Delete OAuth2 Token
+### Revoke and delete OAuth2 token
 
 Revokes and deletes a stored OAuth2 token, identified by its token ID and the key ID that encrypted it.
 
@@ -210,13 +167,11 @@ grpcurl -plaintext \
     "token_id": 2941967295,
     "key_id": 123
   }' \
-  -proto protos/v3/publisher.proto \
+  -proto publisher.proto \
   <your_host>:<your_port> publisher.v3.Publisher/RevokeOAuth2Token
 ```
 
----
-
-### v3: Get PNBA Code
+### Get PNBA code
 
 Requests a one-time passcode (OTP) for Phone Number-Based Authentication.
 
@@ -250,13 +205,11 @@ grpcurl -plaintext \
     "platform": "telegram",
     "phone_number": "+1234567890"
   }' \
-  -proto protos/v3/publisher.proto \
+  -proto publisher.proto \
   <your_host>:<your_port> publisher.v3.Publisher/GetPNBACode
 ```
 
----
-
-### v3: Exchange PNBA Code and Store Token
+### Exchange PNBA code and store token
 
 Exchanges a one-time passcode (OTP) for a token, stores it, and returns encrypted token data.
 
@@ -295,7 +248,7 @@ grpcurl -plaintext \
   -H 'x-nonce-bin: <nonce_binary>' \
   -H 'x-timestamp: <timestamp>' \
   -d @ \
-  -proto protos/v3/publisher.proto \
+  -proto publisher.proto \
   <your_host>:<your_port> publisher.v3.Publisher/ExchangePNBACodeAndStore <<EOF
 {
   "platform": "telegram",
@@ -310,9 +263,7 @@ grpcurl -plaintext \
 EOF
 ```
 
----
-
-### v3: Revoke and Delete PNBA Token
+### Revoke and delete PNBA token
 
 Revokes and deletes a stored PNBA token.
 
@@ -343,15 +294,13 @@ grpcurl -plaintext \
     "token_id": 2941967295,
     "key_id": 123
   }' \
-  -proto protos/v3/publisher.proto \
+  -proto publisher.proto \
   <your_host>:<your_port> publisher.v3.Publisher/RevokePNBAToken
 ```
 
----
+### Sync keys
 
-### v3: Sync Keys
-
-Syncs the client and server ephemeral key pools for a token. It rotates the client's key pool with a new set of 256 client ephemeral public keys, and the server generates a new pool of 256 server ephemeral keys.
+Replaces a token's key pools: the client sends 256 new ephemeral public keys and the server returns 256 of its own.
 
 **Request:** `SyncKeysRequest`
 
@@ -379,7 +328,7 @@ grpcurl -plaintext \
   -H 'x-nonce-bin: <nonce_binary>' \
   -H 'x-timestamp: <timestamp>' \
   -d @ \
-  -proto protos/v3/publisher.proto \
+  -proto publisher.proto \
   <your_host>:<your_port> publisher.v3.Publisher/SyncKeys <<EOF
 {
   "token_id": 2941967295,
@@ -392,8 +341,6 @@ grpcurl -plaintext \
 }
 EOF
 ```
-
----
 
 > [!NOTE]
 > Every RPC returns a standard [gRPC status code](https://grpc.github.io/grpc/core/md_doc_statuscodes.html); `0 OK` is success.
