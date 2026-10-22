@@ -22,8 +22,9 @@ venv/bin/python:
 .env:
 	install -m 600 template.env $@
 	for key in DATABASE_ENCRYPTION_KEY DATABASE_FIELD_ENCRYPTION_KEY DATA_ENCRYPTION_KEY; do \
-		sed -i "s/^$$key=$$/$$key=$$(openssl rand -hex 32)/" $@; \
+		sed -i.bak "s/^$$key=$$/$$key=$$(openssl rand -hex 32)/" $@; \
 	done
+	rm -f $@.bak
 
 ## Generate the gRPC code and the payload-specs bindings.
 build: protos specs
