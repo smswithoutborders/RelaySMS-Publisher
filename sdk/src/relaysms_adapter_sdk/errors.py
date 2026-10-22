@@ -12,7 +12,10 @@ INTERNAL_ERROR = -32603
 
 
 class AdapterError(Exception):
-    """A failure the Publisher should report as is."""
+    """A failure whose message reaches the Publisher.
+
+    Any other exception reaches it only as INTERNAL_ERROR, with details in the log.
+    """
 
     code: int = -32000
 

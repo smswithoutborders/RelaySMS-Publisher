@@ -49,7 +49,7 @@ class Adapter(ABC):
     def setup(cls, request: SetupRequest) -> MaybeAwaitable[SetupResult]:
         """Turn the [setup] inputs into settings, e.g. by registering an app.
 
-        A classmethod: it runs before the settings an instance reads exist.
+        A classmethod, since an adapter's __init__ may read the settings setup creates.
         """
         raise AdapterError(
             f"{cls.__name__} has no setup; set its config instead.",
