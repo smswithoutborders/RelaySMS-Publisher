@@ -271,6 +271,17 @@ restored on failure.
 EOF
 }
 
+docs_usage() {
+  cat <<'EOF'
+Usage: manage.sh docs [DOMAIN]
+
+Builds the manual into book/, then renders its nginx site from the template,
+reattaches or obtains its certificate and reloads nginx. DOMAIN defaults to
+this install's manual site. The previous file is kept as <site>.conf.bak and
+restored on failure. manage.sh update rebuilds the manual afterwards.
+EOF
+}
+
 # Matches publisher_rest_<PORT> (this install) or an unsuffixed publisher_rest.
 detect_nginx_site() {
   local port sites=()
@@ -282,9 +293,18 @@ detect_nginx_site() {
   basename "${sites[0]}" .conf
 }
 
+detect_docs_site() {
+  local sites=()
+  mapfile -t sites < <(grep -lF "root $INSTALL_DIR/book;" /etc/nginx/sites-available/*.conf 2>/dev/null)
+  [ "${#sites[@]}" -eq 1 ] ||
+    error "Found ${#sites[@]} matching nginx sites; pass the domain: $0 docs DOMAIN"
+  basename "${sites[0]}" .conf
+}
+
+# $1=domain $2=site file $3=function that writes it, called as "$3 DOMAIN FILE"
 install_nginx_site() {
-  local site="$1" conf="$2"
-  render_nginx_site "$site" "$conf" || return 1
+  local site="$1" conf="$2" render="$3"
+  "$render" "$site" "$conf" || return 1
   ln -sf "$conf" "/etc/nginx/sites-enabled/${site}.conf" || return 1
 
   # Re-adds the 443 block that re-rendering dropped.
@@ -298,26 +318,21 @@ install_nginx_site() {
   nginx -t || return 1
 }
 
-cmd_nginx() {
-  case "${1:-}" in
-  -h | --help)
-    nginx_usage
-    return
-    ;;
-  esac
-  require_root
+require_nginx() {
   if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
     error "nginx and certbot must be installed"
   fi
+}
 
-  local site="${1:-}"
-  [ -n "$site" ] || site=$(detect_nginx_site)
+# $1=domain $2=function that writes its site file
+apply_nginx_site() {
+  local site="$1" render="$2"
   validate_hostname "DOMAIN" "$site"
 
   local conf="/etc/nginx/sites-available/${site}.conf"
   [ -f "$conf" ] && cp -p "$conf" "$conf.bak"
 
-  if ! install_nginx_site "$site" "$conf"; then
+  if ! install_nginx_site "$site" "$conf" "$render"; then
     if [ -f "$conf.bak" ]; then
       cp -p "$conf.bak" "$conf"
       nginx -t && systemctl reload nginx
@@ -326,6 +341,36 @@ cmd_nginx() {
   fi
   systemctl reload nginx
   log "nginx site $site updated"
+}
+
+cmd_nginx() {
+  case "${1:-}" in
+  -h | --help)
+    nginx_usage
+    return
+    ;;
+  esac
+  require_root
+  require_nginx
+  local site="${1:-}"
+  [ -n "$site" ] || site=$(detect_nginx_site)
+  apply_nginx_site "$site" render_nginx_site
+}
+
+cmd_docs() {
+  case "${1:-}" in
+  -h | --help)
+    docs_usage
+    return
+    ;;
+  esac
+  require_root
+  require_nginx
+  local site="${1:-}"
+  [ -n "$site" ] || site=$(detect_docs_site)
+  validate_hostname "DOMAIN" "$site"
+  "$INSTALL_DIR/scripts/build-book.sh"
+  apply_nginx_site "$site" render_docs_site
 }
 
 cmd_uninstall() {
@@ -357,7 +402,7 @@ cmd_uninstall() {
 }
 
 usage() {
-  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|check|migrate|update|nginx|uninstall}"
+  echo "Usage: $0 {start|stop|restart|status|logs|enable|disable|check|migrate|update|nginx|docs|uninstall}"
   exit 1
 }
 
@@ -378,6 +423,10 @@ main() {
   nginx)
     shift
     cmd_nginx "$@"
+    ;;
+  docs)
+    shift
+    cmd_docs "$@"
     ;;
   update)
     shift

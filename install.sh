@@ -593,11 +593,6 @@ configure_nginx() {
   install_site "$site" render_nginx_site "$interactive"
 }
 
-render_docs_site() {
-  sed -e "s/__SERVER_NAME__/$1/g" -e "s|__BOOK_DIR__|$INSTALL_DIR/book|g" \
-    "$INSTALL_DIR/deploy/nginx/relaysms-publisher-docs-nginx.conf.template" >"$2"
-}
-
 configure_docs_site() {
   if [ "${SKIP_NGINX:-0}" = "1" ]; then
     return
