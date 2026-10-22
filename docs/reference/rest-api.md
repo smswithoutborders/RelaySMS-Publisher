@@ -16,7 +16,7 @@ https://<host>/v1
 
 ## Authentication
 
-Credentials and their scopes are managed with [`./publisher.sh creds`](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#credentials) or the `/v1/creds` endpoints.
+Credentials and their scopes are managed with [`sudo ./publisher.sh creds`](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#credentials) or the `/v1/creds` endpoints.
 
 * **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after `AUTH_SESSION_IDLE_MINUTES` idle (30) or `AUTH_SESSION_MAX_HOURS` (12).
 * **HTTP Basic:** username and password on every request, e.g. `curl -u analyst:<password> .../v1/stats/publications`.

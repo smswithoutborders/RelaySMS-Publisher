@@ -2,23 +2,22 @@
 
 Each platform (Gmail, Telegram, Mastodon, ...) is served by an adapter installed from its own GitHub repository. Its files live under `data/platforms/` (see [Files](#files)).
 
-> [!IMPORTANT]
-> Run these commands with `./publisher.sh` from the install directory, not `python3 -m publisher`. It runs as the service user, so the services can still read the adapter files.
+Run these commands from the install directory with [`publisher.sh`](../operating/services.md#publishersh), which runs them as the service user.
 
 ## Commands
 
 ```bash
-./publisher.sh platforms add <GITHUB_URL> [--tag TAG]       # install the newest, or a given, version tag
-./publisher.sh platforms update [NAME] [--tag TAG]          # move one adapter, or all, to a version tag
-./publisher.sh platforms list                               # every adapter, disabled ones included
-./publisher.sh platforms disable <NAME>                     # hide it from users; it still revokes tokens
-./publisher.sh platforms enable <NAME>                      # offer it again
-./publisher.sh platforms remove <NAME> [--force]            # uninstall
-./publisher.sh platforms config show <NAME>                 # its settings, without secret values
-./publisher.sh platforms config set <NAME> KEY=VALUE|KEY    # change settings; a bare KEY asks for the value
-./publisher.sh platforms setup <NAME> [--input KEY=VALUE]   # run the adapter's setup and save its settings
-./publisher.sh platforms import                             # register adapter directories, move their files out of the code
-./publisher.sh platforms exec <NAME> -- <COMMAND> [ARGS]    # run a command the adapter installs
+sudo ./publisher.sh platforms add <GITHUB_URL> [--tag TAG]       # install the newest, or a given, version tag
+sudo ./publisher.sh platforms update [NAME] [--tag TAG]          # move one adapter, or all, to a version tag
+sudo ./publisher.sh platforms list                               # every adapter, disabled ones included
+sudo ./publisher.sh platforms disable <NAME>                     # hide it from users; it still revokes tokens
+sudo ./publisher.sh platforms enable <NAME>                      # offer it again
+sudo ./publisher.sh platforms remove <NAME> [--force]            # uninstall
+sudo ./publisher.sh platforms config show <NAME>                 # its settings, without secret values
+sudo ./publisher.sh platforms config set <NAME> KEY=VALUE|KEY    # change settings; a bare KEY asks for the value
+sudo ./publisher.sh platforms setup <NAME> [--input KEY=VALUE]   # run the adapter's setup and save its settings
+sudo ./publisher.sh platforms import                             # register adapter directories, move their files out of the code
+sudo ./publisher.sh platforms exec <NAME> -- <COMMAND> [ARGS]    # run a command the adapter installs
 ```
 
 Commands taking a name also take `--proto-id` and `--cat-id`, for when a name matches more than one adapter. Administrators can do the same over the [REST API](../reference/rest-api.md#managing-platform-adapters), but only from GitHub orgs listed in `PLATFORMS_GITHUB_ORGS`.
@@ -53,15 +52,15 @@ An update builds the new version and its virtualenv beside the running one, then
 An adapter reads its settings, such as API keys, from `credentials.json` in its config directory. Its `adapter.toml` declares each one. Lists are comma-separated.
 
 ```bash
-./publisher.sh platforms config set rmail smtp_host=smtp.example.com smtp_port=465
-./publisher.sh platforms config set rmail smtp_password
-./publisher.sh platforms config set rmail --unset alias_prefix
+sudo ./publisher.sh platforms config set rmail smtp_host=smtp.example.com smtp_port=465
+sudo ./publisher.sh platforms config set rmail smtp_password
+sudo ./publisher.sh platforms config set rmail --unset alias_prefix
 ```
 
 `config set` changes only the keys given. `setup` is for adapters whose settings come from the platform (e.g. a registered app for Mastodon, a downloaded client file for Gmail) and replaces all of them. `--input KEY=@PATH` reads a file:
 
 ```bash
-./publisher.sh platforms setup gmail --input client_file=@client_secret.json
+sudo ./publisher.sh platforms setup gmail --input client_file=@client_secret.json
 ```
 
 ## An adapter's own commands
@@ -69,7 +68,7 @@ An adapter reads its settings, such as API keys, from `credentials.json` in its 
 An adapter may install admin commands. `exec` runs one from the adapter's virtualenv with its config and state directories; put `--` before it:
 
 ```bash
-./publisher.sh platforms exec <NAME> -- <COMMAND> --help
+sudo ./publisher.sh platforms exec <NAME> -- <COMMAND> --help
 ```
 
 ## Writing an adapter

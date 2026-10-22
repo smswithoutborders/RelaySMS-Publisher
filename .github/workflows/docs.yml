@@ -28,7 +28,7 @@ jobs:
       - name: Check Markdown links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --offline --include-fragments --no-progress README.md INSTALL.md CONTRIBUTING.md sdk/README.md "docs/**/*.md"
+          args: --offline --include-fragments --no-progress README.md CONTRIBUTING.md sdk/README.md "docs/**/*.md"
 
       - name: Build
         run: make book

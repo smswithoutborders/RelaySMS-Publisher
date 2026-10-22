@@ -4,23 +4,23 @@
 
 # Getting started
 
-- [Quick start]()
+- [Quick start](getting-started/quick-start.md)
 
 # Installation
 
-- [Requirements]()
-- [Install on a server]()
-- [Install with Docker]()
-- [Install by hand]()
-- [Database]()
-- [Celery broker]()
-- [Reverse proxy and TLS]()
-- [Multiple instances]()
+- [Requirements](installation/requirements.md)
+- [Install on a server](installation/server.md)
+- [Install with Docker](installation/docker.md)
+- [Install by hand](installation/manual.md)
+- [Database](installation/database.md)
+- [Celery broker](installation/celery-broker.md)
+- [Reverse proxy and TLS](installation/reverse-proxy.md)
+- [Multiple instances](installation/multiple-instances.md)
 
 # Configuration
 
 - [Settings reference]()
-- [Encryption keys]()
+- [Encryption keys](configuration/encryption-keys.md)
 - [Offline publishing]()
 - [SMTP transport](configuration/smtp-transport.md)
 
@@ -40,7 +40,7 @@
 
 # Operating
 
-- [Services]()
+- [Services](operating/services.md)
 - [Credentials and access]()
 - [Upgrading]()
 - [Backup and restore]()

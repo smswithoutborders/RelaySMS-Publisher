@@ -36,16 +36,12 @@ flowchart TB
 3. The gateway client posts the payload to the REST API, or emails it to a mailbox the Publisher reads.
 4. A Celery worker decrypts the payload and publishes it through the platform's adapter.
 
-## What you need
-
-- A server running Ubuntu 24.04 or Debian 13, with a domain name pointing at it
-- Developer credentials from each platform you offer, such as a Google Cloud OAuth client for Gmail
-- At least one gateway client: a phone number whose SMS reach the REST API or a mailbox
-
 ## Where to start
 
 | To | Read |
 | --- | --- |
+| Try the Publisher on your machine | [Quick start](getting-started/quick-start.md) |
+| Run it in production | [Requirements](installation/requirements.md), then [Install on a server](installation/server.md) |
 | Offer a platform | [Managing adapters](platforms/manage.md) |
 | Relay SMS to the Publisher | [Managing gateway clients](gateway-clients/manage.md) |
 | Build a client | [gRPC API](reference/grpc-api.md) and [REST API](reference/rest-api.md) |

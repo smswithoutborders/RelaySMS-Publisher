@@ -50,11 +50,11 @@ The installer sets up everything else, including the system packages and Rust.
    | Flag | Does |
    | --- | --- |
    | `--site-name DOMAIN` | Puts nginx with a Let's Encrypt certificate in front; `--skip-nginx` skips it |
-   | `--setup-db mysql\|postgres` | Installs the database server and writes its details to `.env` ([details](INSTALL.md#database)) |
-   | `--setup-broker rabbitmq` | Uses RabbitMQ instead of SQLite as the Celery broker, for heavier load ([details](INSTALL.md#celery-worker-and-beat)) |
+   | `--setup-db mysql\|postgres` | Installs the database server and writes its details to `.env` ([details](docs/installation/database.md)) |
+   | `--setup-broker rabbitmq` | Uses RabbitMQ instead of SQLite as the Celery broker, for heavier load ([details](docs/installation/celery-broker.md)) |
    | `--docs-site-name DOMAIN` | Serves the manual in `docs/` on its own domain, rebuilt by every `manage.sh update` |
    | `--setup-observability` | Adds SigNoz and Uptime Kuma ([details](docs/operating/observability.md)) |
-   | `--install-dir PATH`, `--instance-name NAME` | Installs elsewhere, or a second copy on the same host ([details](INSTALL.md#running-multiple-instances)) |
+   | `--install-dir PATH`, `--instance-name NAME` | Installs elsewhere, or a second copy on the same host ([details](docs/installation/multiple-instances.md)) |
 
    `install.sh --help` lists every flag.
 
@@ -93,7 +93,7 @@ The installer sets up everything else, including the system packages and Rust.
    curl http://127.0.0.1:16000/health
    ```
 
-[INSTALL.md](INSTALL.md) covers installing by hand and every setting.
+[Installation](docs/installation/server.md) covers the installer, installing by hand, databases and nginx.
 
 ## Manage the services
 
@@ -111,7 +111,7 @@ From the install directory:
 | `sudo ./manage.sh nginx [DOMAIN]` | Re-render the nginx site and reattach or obtain its certificate |
 | `sudo ./manage.sh uninstall` | Remove the services and the install directory |
 
-See [Service Management](INSTALL.md#service-management) for log filters and what `update` and `nginx` do.
+See [Services](docs/operating/services.md) for log filters and what `update` and `nginx` do.
 
 ## Run with Docker
 
@@ -137,7 +137,7 @@ See [Service Management](INSTALL.md#service-management) for log filters and what
 The container applies pending migrations, then starts every service. It listens on `PORT` (16000) and `GRPC_PORT` (6000) from `.env`, and keeps its data in `./data`.
 
 > [!CAUTION]
-> Back up `.env` with `./data`: its [encryption keys](INSTALL.md#encryption) are the only way to read the data.
+> Back up `.env` with `./data`: its [encryption keys](docs/configuration/encryption-keys.md) are the only way to read the data.
 
 ## Development
 
@@ -165,7 +165,7 @@ Settings live in `.env`. `template.env` lists every setting with its default and
 
 | Settings | Documented in |
 | --- | --- |
-| Server, database, encryption, Celery, adapters | [INSTALL.md](INSTALL.md#configuration) |
+| Database, Celery broker, encryption keys | [Database](docs/installation/database.md), [Celery broker](docs/installation/celery-broker.md), [Encryption keys](docs/configuration/encryption-keys.md) |
 | REST API login and sessions (`AUTH_*`) | [REST API](docs/reference/rest-api.md#authentication) |
 | SMTP transport (`SMTP_*`) | [SMTP transport](docs/configuration/smtp-transport.md#configuration) |
 | Tracing, metrics and logs (`OTEL_*`) | [Observability](docs/operating/observability.md) |
@@ -224,7 +224,6 @@ Credentials log in to the REST API, each with its own scopes. One holding every 
 ## Documentation
 
 - [Manual](docs/README.md): installing, configuring and running the Publisher
-- [Installation guide](INSTALL.md): installing by hand and every setting
 - [REST API](docs/reference/rest-api.md): publishing, authentication and the [OpenAPI reference](docs/openapi.json)
 - [gRPC API](docs/reference/grpc-api.md): linking accounts and syncing keys
 - [SMTP transport](docs/configuration/smtp-transport.md): publishing payloads sent by email
