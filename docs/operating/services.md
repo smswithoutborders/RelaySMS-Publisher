@@ -2,13 +2,30 @@
 
 The Publisher runs as five systemd services, grouped under `relaysms-publisher.target`:
 
-| Service | Runs | Listens on |
-| --- | --- | --- |
-| `relaysms-publisher-rest` | REST API | `HOST:PORT` (`127.0.0.1:16000`) |
-| `relaysms-publisher-grpc` | gRPC API | `GRPC_HOST:GRPC_PORT` (`127.0.0.1:6000`) |
-| `relaysms-publisher-worker` | Celery worker: publishes queued payloads | - |
-| `relaysms-publisher-beat` | Celery Beat: schedules cleanups, and the worker heartbeat with Uptime Kuma | - |
-| `relaysms-publisher-smtp` | [Email listener](../configuration/smtp-transport.md); exits at once while `SMTP_TRANSPORT_ENABLED` is off | - |
+| Service | Runs |
+| --- | --- |
+| `relaysms-publisher-rest` | REST API |
+| `relaysms-publisher-grpc` | gRPC API |
+| `relaysms-publisher-worker` | Celery worker: publishes queued payloads |
+| `relaysms-publisher-beat` | Celery Beat: schedules cleanups, and the worker heartbeat with Uptime Kuma |
+| `relaysms-publisher-smtp` | [Email listener](../configuration/smtp-transport.md); exits at once while `SMTP_TRANSPORT_ENABLED` is off |
+
+The REST API listens on `HOST:PORT` (`127.0.0.1:16000`) and gRPC on `GRPC_HOST:GRPC_PORT` (`127.0.0.1:6000`).
+
+## Is it working?
+
+```bash
+sudo ./manage.sh status
+curl http://127.0.0.1:16000/health
+```
+
+You should see every service active, and `{"status":"ok"}`. To follow publications as they happen:
+
+```bash
+sudo ./manage.sh logs --unit worker
+```
+
+Each published payload logs `Published via '<PLATFORM>'.`, and each failure logs `Failed to publish message`. Credentials with `stats:publications:read` can also query the counts at `GET /v1/stats/publications`.
 
 ## manage.sh
 
@@ -24,9 +41,19 @@ Run it from the install directory with `sudo`:
 | `migrate` | Applies database migrations |
 | `check` | Reports every missing or invalid setting |
 | `nginx [DOMAIN]` | Renders the nginx site again and reattaches or obtains its certificate ([details](../installation/reverse-proxy.md#on-an-existing-install)) |
-| `uninstall` | Removes the services and the install directory, with `.env` and `data/`. nginx sites, certificates, database and broker servers, and the service user stay. |
+| `docs [DOMAIN]` | Builds this manual and serves it on its own domain ([details](../installation/server.md#serving-the-manual)) |
+| `uninstall` | Removes the services and the install directory, with `.env` and `data/` |
 
-`logs` takes `-u/--unit` (`rest`, `grpc`, `worker`, `beat` or `smtp`; repeatable), `-n/--lines` and `-s/--since`, and `--no-follow` prints and exits:
+`uninstall` leaves the nginx sites, certificates, database and broker servers, and the service user.
+
+`logs` takes:
+
+- `-u`, `--unit`: `rest`, `grpc`, `worker`, `beat` or `smtp`; repeatable
+- `-n`, `--lines`: how many lines to show
+- `-s`, `--since`: a time, such as `"1 hour ago"`
+- `--no-follow`: print and exit
+
+For example:
 
 ```bash
 sudo ./manage.sh logs --unit rest --unit grpc --since "1 hour ago" --lines 200

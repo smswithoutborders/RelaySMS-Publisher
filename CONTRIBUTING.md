@@ -31,7 +31,7 @@
 ## Reporting security issues
 
 > [!CAUTION]
-> Don't open a public issue for a vulnerability. Email **<developers@smswithoutborders.com>** with a description, the affected versions and steps to reproduce.
+> Don't open a public issue for a vulnerability. See [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
@@ -175,8 +175,8 @@ Common types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` and `c
 
 - [ ] The PR targets `staging` and does one thing.
 - [ ] `make check` and `make test` pass locally.
-- [ ] New behaviour and bug fixes come with tests. A bug fix has a test that fails without it.
-- [ ] Docs, `template.env` and the README are updated if behaviour, settings or commands changed.
+- [ ] New behavior and bug fixes come with tests. A bug fix has a test that fails without it.
+- [ ] Docs, `template.env` and the README are updated if behavior, settings or commands changed.
 - [ ] Schema changes include a migration, and a commit message with `[migrate]`.
 - [ ] The description says what changed, why, and how it was tested. Link the issue with `Closes #123`.
 - [ ] Anything operators must do on deploy is called out.
@@ -215,7 +215,7 @@ The gRPC service handles the account side: storing OAuth2 and PNBA tokens, revok
 
 The hooks enforce formatting, lint, types and commit messages. These rules are checked in review:
 
-- **Functions by default.** Modules group related behaviour. Use a class only for real state (a cache, a connection) or when a framework needs one (ORM models, structs, interceptors, servicers, config sections).
+- **Functions by default.** Modules group related behavior. Use a class only for real state (a cache, a connection) or when a framework needs one (ORM models, structs, interceptors, servicers, config sections).
 - **Dependencies are arguments.** Domain and model functions take the database `session` first, then anything else they need, such as the acting credential.
 - **The entry point owns the transaction.** A route, gRPC handler, task or CLI command opens the session; code below it never opens a session or commits.
 - **No transaction stays open while an adapter runs,** since a call can take a minute. Publishing is the one exception (see above).
@@ -253,7 +253,7 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 ### Writing tests
 
 - Put a test where its module lives: `publisher/api/rest/v1/stats.py` is tested in `tests/api/rest/test_stats.py`.
-- Name tests after the behaviour, such as `test_list_skips_disabled_items`, not the function.
+- Name tests after the behavior, such as `test_list_skips_disabled_items`, not the function.
 - Test through the public interface (a route, an RPC, a domain function). Patch only what crosses the process boundary, such as adapter IPC or outbound HTTP.
 
 ### Fixtures and helpers
@@ -340,7 +340,9 @@ The manual in `docs/` is an [mdBook](https://rust-lang.github.io/mdBook/) that r
 - List a new page in `docs/SUMMARY.md`, or the book leaves it out.
 - Link pages in `docs/` relatively, and files outside it by their full GitHub URL, since the book only has `docs/`.
 - Draw diagrams as `mermaid` code blocks.
-- Write plainly and briefly, one paragraph per line, with sentence-case headings, code blocks for commands and tables for options.
+- Start a task page with its requirements, and end it with a link to the next step when that isn't the following page.
+- Use tables for reference data, numbered steps for procedures, and one heading per symptom for troubleshooting.
+- Write plainly and briefly in US English, one paragraph per line, with sentence-case headings and `<UPPER_SNAKE>` placeholders.
 
 ## When CI fails
 

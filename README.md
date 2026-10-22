@@ -40,7 +40,7 @@ The installer sets up everything else, including the system packages and Rust.
    curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | sudo bash
    ```
 
-   With no flags it asks about each option. To choose up front, pass flags after `bash -s --`:
+   It asks about each option you don't pass as a flag. To choose up front, pass flags after `bash -s --`:
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | \
@@ -68,22 +68,22 @@ The installer sets up everything else, including the system packages and Rust.
 3. Create an administrator credential for the REST API:
 
    ```bash
-   ./publisher.sh creds create --username ops --administrator
+   sudo ./publisher.sh creds create --username ops --administrator
    ```
 
    > [!IMPORTANT]
-   > The password is printed once. Store it before closing the terminal.
+   > The password is printed only once.
 
-4. Add the platform adapters you want to offer, then follow each adapter's README to configure it:
+4. Add the platform adapters you want to offer, then configure each with its [provider guide](docs/platforms/manage.md#provider-guides):
 
    ```bash
-   ./publisher.sh platforms add https://github.com/smswithoutborders/gmail-oauth2-adapter
+   sudo ./publisher.sh platforms add https://github.com/smswithoutborders/gmail-oauth2-adapter
    ```
 
 5. Register the gateway clients that relay SMS to this server:
 
    ```bash
-   ./publisher.sh gateway-clients create --msisdn +237123456789 --protocols https
+   sudo ./publisher.sh gateway-clients create --msisdn +237123456789 --protocols https
    ```
 
 6. Check that the services are up:
@@ -109,6 +109,7 @@ From the install directory:
 | `sudo ./manage.sh migrate` | Apply database migrations |
 | `sudo ./manage.sh check` | Report every missing or invalid setting |
 | `sudo ./manage.sh nginx [DOMAIN]` | Re-render the nginx site and reattach or obtain its certificate |
+| `sudo ./manage.sh docs [DOMAIN]` | Build the manual and serve it on its own domain |
 | `sudo ./manage.sh uninstall` | Remove the services and the install directory |
 
 See [Services](docs/operating/services.md) for log filters and what `update` and `nginx` do.
@@ -174,7 +175,7 @@ Each platform is served by an adapter installed from its own repository. `GET /v
 - [Bluesky](https://github.com/smswithoutborders/bluesky-oauth2-adapter)
 - [Mastodon](https://github.com/smswithoutborders/mastodon-oauth2-adapter)
 
-[docs/platforms/manage.md](docs/platforms/manage.md) covers adding, updating, disabling and removing adapters. Each adapter's README covers its own settings.
+[Managing adapters](docs/platforms/manage.md) covers adding, updating, disabling and removing adapters, and links a guide for each.
 
 ## Gateway clients
 
@@ -185,16 +186,16 @@ Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/ga
 Credentials log in to the REST API, each with its own scopes. One holding every scope is an administrator. They can also be managed over the [REST API](docs/reference/rest-api.md#managing-credentials).
 
 ```bash
-./publisher.sh creds scopes                                        # list scopes
-./publisher.sh creds create --username ops --administrator         # prints the password once
-./publisher.sh creds create --username analyst --scope stats:publications:read
-./publisher.sh creds set-scopes --username analyst --scope stats:publications:read --scope stats:publications:reasons
-./publisher.sh creds list
-./publisher.sh creds reset-password --username analyst
-./publisher.sh creds disable --username analyst
-./publisher.sh creds enable --username analyst
-./publisher.sh creds revoke-sessions --username analyst
-./publisher.sh creds delete --username analyst
+sudo ./publisher.sh creds scopes                                        # list scopes
+sudo ./publisher.sh creds create --username ops --administrator         # prints the password once
+sudo ./publisher.sh creds create --username analyst --scope stats:publications:read
+sudo ./publisher.sh creds set-scopes --username analyst --scope stats:publications:read --scope stats:publications:reasons
+sudo ./publisher.sh creds list
+sudo ./publisher.sh creds reset-password --username analyst
+sudo ./publisher.sh creds disable --username analyst
+sudo ./publisher.sh creds enable --username analyst
+sudo ./publisher.sh creds revoke-sessions --username analyst
+sudo ./publisher.sh creds delete --username analyst
 ```
 
 ## Documentation

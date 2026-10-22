@@ -1,13 +1,11 @@
 # Offline publishing
 
-An offline payload carries no linked account: the app encrypts it to the server's identity key, and the Publisher publishes it through the RelaySMS Mail adapter (`rmail`), which must be installed. Anyone who can reach an allowed protocol can send one.
+Use this to let people send email through [RelaySMS Mail](../platforms/relaysms-mail.md) without linking an account first. Payloads from linked accounts, such as Gmail ones, need none of these settings. An offline payload carries no linked account: the app encrypts it to the server's identity key, and the Publisher publishes it through the RelaySMS Mail adapter (`rmail`), which must be installed. Anyone who can reach an allowed protocol can send one.
 
 Each payload is tagged with the protocol it arrived on:
 
-| Protocol | Arrives through |
-| --- | --- |
-| `https` | [REST `POST /v1/publications`](../reference/rest-api.md#publishing) |
-| `smtp` | The [SMTP transport](smtp-transport.md) |
+- `https`: [REST `POST /v1/publications`](../reference/rest-api.md#publishing)
+- `smtp`: the [SMTP transport](smtp-transport.md)
 
 Settings: [Offline publishing](settings.md#offline-publishing).
 
@@ -24,7 +22,7 @@ Settings: [Offline publishing](settings.md#offline-publishing).
    openssl rand -hex 32
    ```
 
-2. Set `OFFLINE_PUBLISH_SHARED_SECRET` to it, and add `https` to `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS`, e.g. `smtp,https`.
+2. Set `OFFLINE_PUBLISH_SHARED_SECRET` to it, and add `https` to `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS`, such as `smtp,https`.
 3. Check and restart:
 
    ```bash

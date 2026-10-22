@@ -1,20 +1,26 @@
 # Managing gateway clients
 
-Gateway clients are the phone numbers that relay SMS to this server. The enabled ones are listed publicly at `GET /v1/gateway-clients`. Credentials with `gc:read` and `gc:write` can manage them over the [REST API](../reference/rest-api.md#managing-gateway-clients). Every change is recorded in the [audit log](../reference/rest-api.md#audit-events).
+A gateway client is a phone number that relays the SMS people send to this server: an Android phone running Deku SMS, or a Twilio number. Register each number here so the RelaySMS app lists it, then [connect its relay](connect-a-relay.md). The enabled ones are listed publicly at `GET /v1/gateway-clients`. Credentials with `gc:read` and `gc:write` can manage them over the [REST API](../reference/rest-api.md#managing-gateway-clients). Every change is recorded in the [audit log](../reference/rest-api.md#audit-events).
 
 ## Commands
 
+| Command | Does |
+| --- | --- |
+| `gateway-clients suggest <MSISDN>` | Shows the number's details and PLMN candidates; saves nothing |
+| `gateway-clients create --msisdn <MSISDN> --protocols <PROTOCOLS>` | Registers a number; also takes `--country`, `--operator` and `--operator-code` |
+| `gateway-clients list` | Lists them; filter with `--msisdn`, `--country` or `--operator` |
+| `gateway-clients update <MSISDN>` | Changes `--country`, `--operator`, `--operator-code` or `--protocols` |
+| `gateway-clients disable <MSISDN>` | Hides it from the public list |
+| `gateway-clients enable <MSISDN>` | Lists it publicly again |
+| `gateway-clients delete <MSISDN>` | Removes it |
+| `gateway-clients countries` | Lists the countries that have a gateway client |
+| `gateway-clients operators --country <COUNTRY>` | Lists the operators of that country's gateway clients |
+| `gateway-clients mcc-mnc list` | Searches the PLMN table; filter with `--country-code`, `--network` or `--iso` |
+
+Prefix each with `sudo ./publisher.sh`. `<PROTOCOLS>` is comma-separated, such as `https,smtp`. For example:
+
 ```bash
-sudo ./publisher.sh gateway-clients suggest <MSISDN>                 # details and PLMN candidates; saves nothing
-sudo ./publisher.sh gateway-clients create --msisdn <MSISDN> --protocols <PROTOCOL,...> [--country <COUNTRY>] [--operator <OPERATOR>] [--operator-code <PLMN>]
-sudo ./publisher.sh gateway-clients list [--msisdn <MSISDN>] [--country <COUNTRY>] [--operator <OPERATOR>]
-sudo ./publisher.sh gateway-clients update <MSISDN> [--country <COUNTRY>] [--operator <OPERATOR>] [--operator-code <PLMN>] [--protocols <PROTOCOL,...>]
-sudo ./publisher.sh gateway-clients disable <MSISDN>                 # hide it from the public list
-sudo ./publisher.sh gateway-clients enable <MSISDN>
-sudo ./publisher.sh gateway-clients delete <MSISDN>
-sudo ./publisher.sh gateway-clients countries
-sudo ./publisher.sh gateway-clients operators --country <COUNTRY>
-sudo ./publisher.sh gateway-clients mcc-mnc list [--country-code <CODE>] [--network <NAME>] [--iso <ISO>]   # search the PLMN table
+sudo ./publisher.sh gateway-clients create --msisdn +237600000000 --protocols https
 ```
 
 `create` fills in any of `--country`, `--operator` and `--operator-code` you leave out with what `suggest` finds. It fills the PLMN code (MCC+MNC) only when every candidate shares it; otherwise run `suggest`, pick a candidate and pass it with `--operator-code`.
@@ -31,8 +37,7 @@ Names are compared word by word, ignoring case, accents, company-type words ("Te
 | `region` | Every operator in the country, because the carrier is unknown (common for US and Canadian numbers) or matched nothing |
 | `none` | None: the number couldn't be placed. Enter the details yourself. |
 
-> [!TIP]
-> A PLMN missing from the snapshot can still be entered with `--operator-code`.
+A PLMN missing from the snapshot can still be entered with `--operator-code`.
 
 ## Upgrading from the JSON registry
 

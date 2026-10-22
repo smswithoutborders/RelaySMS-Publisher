@@ -5,14 +5,23 @@ The installer sets up the Publisher on Ubuntu 24.04 or Debian 13 under systemd, 
 ## Run the installer
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh \
+  | sudo bash
+```
+
+To read the script before running it:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh
+less install.sh
+sudo bash install.sh
 ```
 
 It asks about each option you don't pass as a flag. To choose up front, pass flags after `bash -s --`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | \
-  sudo bash -s -- --site-name publisher.example.com --setup-db postgres
+curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh \
+  | sudo bash -s -- --site-name publisher.example.com --setup-db postgres
 ```
 
 | Flag | Does |
@@ -40,6 +49,21 @@ The installer:
 
 Running it again updates the install in place and keeps its `.env`. Run it as the same user as the first time; it refuses another service user.
 
+## Serving the manual
+
+`--docs-site-name` builds this manual into `book/` and serves it with nginx on its own domain and certificate. `manage.sh update` rebuilds it.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh \
+  | sudo bash -s -- --site-name publisher.example.com --docs-site-name docs.publisher.example.com
+```
+
+On an install that's already running, add it from the install directory:
+
+```bash
+sudo ./manage.sh docs docs.publisher.example.com
+```
+
 ## After installing
 
 1. Go to the install directory and check that the services are up:
@@ -47,10 +71,10 @@ Running it again updates the install in place and keeps its `.env`. Run it as th
    ```bash
    cd /opt/relaysms/relaysms-publisher
    sudo ./manage.sh status
-   curl http://127.0.0.1:16000/health   # or https://<domain>/health with nginx
+   curl http://127.0.0.1:16000/health
    ```
 
-   You should see `{"status":"ok"}`.
+   You should see `{"status":"ok"}`, also at `https://<DOMAIN>/health` once nginx is set up.
 
 2. Set what you need in `.env` (see the [settings reference](../configuration/settings.md)), then check it and restart:
 
@@ -66,19 +90,10 @@ Running it again updates the install in place and keeps its `.env`. Run it as th
    ```
 
    > [!IMPORTANT]
-   > The password is printed once. Store it before closing the terminal.
+   > The password is printed only once.
 
 4. Back up `.env`: its [encryption keys](../configuration/encryption-keys.md) are the only way to read the data.
 
 5. [Add the platform adapters](../platforms/manage.md) you want to offer, and [register the gateway clients](../gateway-clients/manage.md) that relay SMS to this server.
 
-[Services](../operating/services.md) covers `manage.sh` and `publisher.sh`.
-
-## Serving the manual
-
-`--docs-site-name` builds this manual into `book/` and serves it with nginx on its own domain and certificate. `manage.sh update` rebuilds it.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | \
-    sudo bash -s -- --site-name publisher.example.com --docs-site-name docs.publisher.example.com
-```
+Next: [Services](../operating/services.md).

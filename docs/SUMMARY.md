@@ -27,16 +27,16 @@
 # Platform adapters
 
 - [Managing adapters](platforms/manage.md)
-- [Gmail]()
-- [Mastodon]()
-- [Bluesky]()
-- [Telegram]()
-- [RelaySMS Mail]()
+- [Gmail](platforms/gmail.md)
+- [Mastodon](platforms/mastodon.md)
+- [Bluesky](platforms/bluesky.md)
+- [Telegram](platforms/telegram.md)
+- [RelaySMS Mail](platforms/relaysms-mail.md)
 
 # Gateway clients
 
 - [Managing gateway clients](gateway-clients/manage.md)
-- [Connecting a relay]()
+- [Connecting a relay](gateway-clients/connect-a-relay.md)
 
 # Operating
 

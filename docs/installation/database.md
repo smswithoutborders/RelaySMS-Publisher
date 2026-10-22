@@ -10,36 +10,59 @@ Sensitive fields are also encrypted in every dialect; see [Encryption keys](../c
 
 ## MySQL, MariaDB or PostgreSQL
 
-A setup script installs the server, creates the database and user, and writes the connection details to `.env`. Running it again without `--db-password` gives the user a new password; restart the services afterwards. The MySQL script installs `mysql-server`, which only Ubuntu ships; on Debian, set up MariaDB yourself and pass `--db-existing`.
+A setup script installs the server, creates the database and user, and writes the connection details to `.env`. Running it again without `--db-password` gives the user a new password. The MySQL script installs `mysql-server`, which only Ubuntu ships; on Debian, set up MariaDB yourself and pass `--db-existing`.
+
+During install:
 
 ```bash
-sudo ./install.sh --setup-db postgres                                    # during install
-sudo ./scripts/setup-postgres.sh --db-name relaysms --db-user relaysms   # afterwards
-sudo ./scripts/setup-mysql.sh --db-name relaysms --db-user relaysms
+sudo ./install.sh --setup-db postgres
 ```
 
-`--db-password PASS` sets the password instead of generating one.
+On an existing install, from the install directory:
+
+```bash
+sudo ./scripts/setup-postgres.sh --db-name relaysms --db-user relaysms
+```
+
+For MySQL or MariaDB, use `--setup-db mysql` or `scripts/setup-mysql.sh` the same way.
+
+`--db-password <PASSWORD>` sets the password instead of generating one.
 
 To use a server you already have, pass its details. The script only checks the connection and writes `.env`; it never changes the server:
 
 ```bash
 sudo ./install.sh --setup-db postgres --db-existing \
     --db-host db.example.com --db-port 5432 \
-    --db-name relaysms --db-user relaysms --db-password 'your-password'
-
-sudo ./scripts/setup-postgres.sh --existing \
-    --db-host db.example.com --db-name relaysms --db-user relaysms --db-password 'your-password'
+    --db-name relaysms --db-user relaysms --db-password '<PASSWORD>'
 ```
 
-Or set it by hand:
+On an existing install:
 
 ```bash
-DATABASE_DIALECT=postgres       # or mysql, for MySQL and MariaDB
-POSTGRES_HOST=127.0.0.1         # MYSQL_HOST, MYSQL_PORT, ... for mysql
+sudo ./scripts/setup-postgres.sh --existing \
+    --db-host db.example.com --db-name relaysms --db-user relaysms --db-password '<PASSWORD>'
+```
+
+Or set it by hand in `.env`. For PostgreSQL:
+
+```bash
+DATABASE_DIALECT=postgres
+POSTGRES_HOST=127.0.0.1
 POSTGRES_PORT=5432
 POSTGRES_USER=relaysms
-POSTGRES_PASSWORD=your-password
+POSTGRES_PASSWORD=<PASSWORD>
 POSTGRES_DATABASE=relaysms
+```
+
+For MySQL or MariaDB:
+
+```bash
+DATABASE_DIALECT=mysql
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=relaysms
+MYSQL_PASSWORD=<PASSWORD>
+MYSQL_DATABASE=relaysms
 ```
 
 Then apply the migrations and restart:
@@ -49,5 +72,4 @@ sudo ./manage.sh migrate
 sudo ./manage.sh restart
 ```
 
-> [!WARNING]
-> The new database starts empty. Switching doesn't copy data from SQLite.
+The new database starts empty: switching doesn't copy the data from SQLite.

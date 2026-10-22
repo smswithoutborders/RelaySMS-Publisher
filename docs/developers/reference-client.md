@@ -14,9 +14,9 @@ python -m tools.client <COMMAND> [ARGS]
 | `--host`, `--port` | `127.0.0.1`, `6000` | gRPC server |
 | `--tls` | off | Use TLS for gRPC |
 | `--rest-api` | `http://localhost:16000` | REST API base URL |
-| `--platform`, `-p` | | Platform name, such as `gmail` or `telegram` |
-| `--phone-number` | | Phone number, for phone number-based authentication (PNBA, e.g. Telegram) |
-| `--request-identifier` | | Optional request identifier |
+| `--platform`, `-p` | None | Platform name, such as `gmail` or `telegram` |
+| `--phone-number` | None | Phone number, for phone number-based authentication (PNBA), such as for Telegram |
+| `--request-identifier` | None | Optional request identifier |
 
 ## Linking accounts
 
@@ -37,8 +37,7 @@ python -m tools.client get-pnba-code --platform telegram --phone-number +2371234
 python -m tools.client exchange-pnba-code --platform telegram --phone-number +237123456789 --code <OTP>
 ```
 
-> [!NOTE]
-> With several stored tokens, `sync-keys` and the revoke commands ask which one to use. Pass `--token` to choose up front.
+With several stored tokens, `sync-keys` and the revoke commands ask which one to use. Pass `--token` to choose up front.
 
 ## Publishing
 
@@ -69,8 +68,6 @@ python -m tools.client send --offline --platform rmail --address +237123456789 \
 | `--offline` | Uses offline-first encryption, which needs no linked token (`rmail` only) |
 | `--tag` | The server's `OFFLINE_PUBLISH_SHARED_SECRET`, when it sets one |
 
-> [!NOTE]
-> Each online send uses up one ephemeral key pair. Run `sync-keys` when the pool runs low. Offline sends use none.
+Each online send uses up one ephemeral key pair. Run `sync-keys` when the pool runs low. Offline sends use none.
 
-> [!TIP]
-> `--shuffle --dry-run` shows the segment order before a live send, to check the server reassembles out-of-order segments.
+`--shuffle --dry-run` shows the segment order before a live send, to check the server reassembles out-of-order segments.

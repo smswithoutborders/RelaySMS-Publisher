@@ -1,0 +1,4 @@
+/* Tables fill the column and keep long code readable. */
+.content table { width: 100%; }
+.content td { vertical-align: top; }
+.content td code { overflow-wrap: anywhere; }

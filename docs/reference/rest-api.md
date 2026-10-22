@@ -18,8 +18,8 @@ https://<host>/v1
 
 Credentials and their scopes are managed with [`sudo ./publisher.sh creds`](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#credentials) or the `/v1/creds` endpoints.
 
-* **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after `AUTH_SESSION_IDLE_MINUTES` idle (30) or `AUTH_SESSION_MAX_HOURS` (12).
-* **HTTP Basic:** username and password on every request, e.g. `curl -u analyst:<password> .../v1/stats/publications`.
+- **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after `AUTH_SESSION_IDLE_MINUTES` idle (30) or `AUTH_SESSION_MAX_HOURS` (12).
+- **HTTP Basic:** username and password on every request, such as `curl -u analyst:<PASSWORD> .../v1/stats/publications`.
 
 Scope changes apply on the credential's next request. Each endpoint's description names the scopes it needs.
 
@@ -62,11 +62,11 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 | `gateway_clients.create`, `gateway_clients.update`, `gateway_clients.delete` | A gateway client changes. `details` has its fields, or what changed. |
 | `gateway_clients.enable`, `gateway_clients.disable` | A gateway client is listed publicly again, or hidden |
 
-`outcome` is `success`, `denied` (the change went beyond the actor's scopes) or `failed` (a refused login for an existing username: wrong password or disabled). Successful HTTP Basic requests aren't recorded, since every request authenticates. `actor` is the username at the time, and null for the CLI or a failed login. Events are kept for `AUDIT_RETENTION_DAYS` (365 by default).
+`outcome` is `success`, `denied` (the change went beyond the actor's scopes) or `failed` (a refused login for an existing username: wrong password or disabled). Successful HTTP Basic requests aren't recorded, since every request authenticates. `actor` is the username at the time, and null for the CLI or a failed login. Events are kept for `AUDIT_RETENTION_DAYS`.
 
 ## Publishing
 
-`POST /v1/publications` takes JSON and tags payloads with protocol `https`. See [offline publishing](../configuration/offline-publishing.md) for how the protocol and `tag` decide whether offline payloads publish.
+`POST /v1/publications` takes JSON and tags payloads with protocol `https`. It needs no credentials: a payload publishes only if it decrypts with the keys of a linked account or, for an offline payload, passes the [offline publishing](../configuration/offline-publishing.md) rules. See [offline publishing](../configuration/offline-publishing.md) for how the protocol and `tag` decide whether offline payloads publish.
 
 It only checks the payload's structure before queueing it. Decryption, payload type and adapter errors happen later, so they're logged on the server, not returned.
 

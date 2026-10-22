@@ -14,6 +14,7 @@ command = "mdbook-mermaid"
 
 [output.html]
 git-repository-url = "https://github.com/smswithoutborders/RelaySMS-Publisher"
-edit-url-template = "https://github.com/smswithoutborders/RelaySMS-Publisher/edit/main/{path}"
+edit-url-template = "https://github.com/smswithoutborders/RelaySMS-Publisher/edit/staging/{path}"
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
+additional-css = ["docs/theme/custom.css"]
 no-section-label = true

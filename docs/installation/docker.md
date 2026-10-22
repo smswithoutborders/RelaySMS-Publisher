@@ -1,6 +1,8 @@
 # Install with Docker
 
-`docker-compose.yml` runs every service in one container, with its data in `./data` and its settings in `.env` (see the [settings reference](../configuration/settings.md)):
+`docker-compose.yml` runs every service in one container, with its data in `./data` and its settings in `.env` (see the [settings reference](../configuration/settings.md)). It needs the tools in the [quick start's requirements](../getting-started/quick-start.md#requirements).
+
+To install:
 
 ```bash
 git clone --recurse-submodules https://github.com/smswithoutborders/RelaySMS-Publisher.git
@@ -21,3 +23,5 @@ Back up `.env` with `./data`: its [encryption keys](../configuration/encryption-
 git pull --recurse-submodules
 docker compose up -d --build
 ```
+
+Next: [Settings reference](../configuration/settings.md).
