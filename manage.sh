@@ -252,6 +252,10 @@ cmd_update() {
     systemctl restart "$svc"
   done
   systemctl start "$TARGET_UNIT"
+  # book/ exists only when install.sh set up a site for the manual, so other installs skip the rebuild.
+  if [ -d book ]; then
+    ./scripts/build-book.sh
+  fi
   [ "$config_ok" = "1" ] || error "Update applied, but .env has errors (above); services using those settings won't start"
   log "Update complete"
 }

@@ -52,6 +52,7 @@ BRANCH="${BRANCH:-main}"
 CARGO_BIN="$HOME/.cargo/bin"
 DEPS_MARKER="/var/lib/relaysms-publisher-deps-installed"
 SITE_NAME="${SITE_NAME:-}"
+DOCS_SITE_NAME="${DOCS_SITE_NAME:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 SKIP_NGINX="${SKIP_NGINX:-0}"
 FORCE_DEPS="${FORCE_DEPS:-0}"
@@ -101,7 +102,8 @@ Usage: install.sh [OPTIONS]
   --branch BRANCH                          Git branch to install (default: main)
   --site-name DOMAIN                       Domain to front with nginx + Let's Encrypt
   --letsencrypt-email EMAIL                Email for Let's Encrypt renewal notices
-  --skip-nginx                             Skip the nginx/TLS setup entirely
+  --docs-site-name DOMAIN                  Domain to serve the manual on with nginx + Let's Encrypt
+  --skip-nginx                             Skip the nginx/TLS setup entirely, the manual's site included
   --force-deps                             Reinstall system dependencies even if already marked done
   --setup-db {mysql|postgres}              Install and provision a database server, or connect to an existing one
   --db-existing                            Use an already-running database server instead of installing one locally
@@ -166,6 +168,14 @@ parse_args() {
       ;;
     --site-name=*)
       SITE_NAME="${1#*=}"
+      shift
+      ;;
+    --docs-site-name)
+      DOCS_SITE_NAME="$2"
+      shift 2
+      ;;
+    --docs-site-name=*)
+      DOCS_SITE_NAME="${1#*=}"
       shift
       ;;
     --letsencrypt-email)
@@ -577,14 +587,49 @@ configure_nginx() {
     }
   fi
   validate_hostname "--site-name" "$site"
+  SITE_NAME="$site"
 
   install_nginx_certbot
+  install_site "$site" render_nginx_site "$interactive"
+}
 
+render_docs_site() {
+  sed -e "s/__SERVER_NAME__/$1/g" -e "s|__BOOK_DIR__|$INSTALL_DIR/book|g" \
+    "$INSTALL_DIR/deploy/nginx/relaysms-publisher-docs-nginx.conf.template" >"$2"
+}
+
+configure_docs_site() {
+  if [ "${SKIP_NGINX:-0}" = "1" ]; then
+    return
+  fi
+
+  local site="$DOCS_SITE_NAME" interactive=0
+  if [ -z "$site" ]; then
+    # Without --docs-site-name, ask only when the API has a site, since the manual's site needs nginx and certbot.
+    [ -n "$SITE_NAME" ] || return 0
+    interactive=1
+    prompt site "Domain name to serve the manual on (e.g. docs.publisher.example.com, blank to skip): " ""
+    [ -n "$site" ] || {
+      log "Skipping the manual's site"
+      return
+    }
+  fi
+  validate_hostname "--docs-site-name" "$site"
+
+  log "Building the manual"
+  "$INSTALL_DIR/scripts/build-book.sh"
+  install_nginx_certbot
+  install_site "$site" render_docs_site "$interactive"
+}
+
+# $1=domain $2=function that writes the site file, called as "$2 DOMAIN FILE" $3=1 to ask before certbot and for its email
+install_site() {
+  local site="$1" render="$2" interactive="$3"
   local conf_dest="/etc/nginx/sites-available/${site}.conf"
   if [ -f "$conf_dest" ]; then
     log "nginx site $conf_dest already exists, leaving it untouched"
   else
-    render_nginx_site "$site" "$conf_dest"
+    "$render" "$site" "$conf_dest"
     log "Wrote $conf_dest"
   fi
   ln -sf "$conf_dest" "/etc/nginx/sites-enabled/${site}.conf"
@@ -607,12 +652,11 @@ configure_nginx() {
     ;;
   esac
 
-  local email="${LETSENCRYPT_EMAIL:-}"
-  if [ -z "$email" ] && [ "$interactive" = "1" ]; then
-    prompt email "Email for Let's Encrypt renewal notices (optional): " ""
+  if [ -z "$LETSENCRYPT_EMAIL" ] && [ "$interactive" = "1" ]; then
+    prompt LETSENCRYPT_EMAIL "Email for Let's Encrypt renewal notices (optional): " ""
   fi
 
-  request_certificate "$site" "$email" || error "certbot failed to obtain a certificate for $site"
+  request_certificate "$site" "$LETSENCRYPT_EMAIL" || error "certbot failed to obtain a certificate for $site"
   log "Certificate installed for $site"
 
   enable_nginx_http2 "$conf_dest"
@@ -817,6 +861,7 @@ main() {
   run_migrations
   install_services
   configure_nginx
+  configure_docs_site
   configure_observability
 
   log "Installation complete"

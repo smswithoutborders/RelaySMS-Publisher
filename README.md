@@ -52,6 +52,7 @@ The installer sets up everything else, including the system packages and Rust.
    | `--site-name DOMAIN` | Puts nginx with a Let's Encrypt certificate in front; `--skip-nginx` skips it |
    | `--setup-db mysql\|postgres` | Installs the database server and writes its details to `.env` ([details](INSTALL.md#database)) |
    | `--setup-broker rabbitmq` | Uses RabbitMQ instead of SQLite as the Celery broker, for heavier load ([details](INSTALL.md#celery-worker-and-beat)) |
+   | `--docs-site-name DOMAIN` | Serves the manual in `docs/` on its own domain, rebuilt by every `manage.sh update` |
    | `--setup-observability` | Adds SigNoz and Uptime Kuma ([details](docs/operating/observability.md)) |
    | `--install-dir PATH`, `--instance-name NAME` | Installs elsewhere, or a second copy on the same host ([details](INSTALL.md#running-multiple-instances)) |
 
