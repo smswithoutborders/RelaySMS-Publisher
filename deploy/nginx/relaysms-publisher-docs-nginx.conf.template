@@ -1,0 +1,30 @@
+# RelaySMS Publisher manual - nginx static site template
+#
+# Installed to /etc/nginx/sites-available/<domain>.conf by install.sh
+# --docs-site-name. Only the port 80 block is defined; certbot adds HTTPS.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SERVER_NAME__;
+
+    server_tokens off;
+    root __BOOK_DIR__;
+
+    access_log /var/log/nginx/__SERVER_NAME__.access.log combined buffer=512k flush=1m;
+    error_log  /var/log/nginx/__SERVER_NAME__.error.log warn;
+
+    add_header Strict-Transport-Security    "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options       "nosniff" always;
+    add_header X-Frame-Options              "DENY" always;
+    add_header Referrer-Policy              "no-referrer" always;
+    add_header Cross-Origin-Opener-Policy   "same-origin" always;
+    # mdBook pages and Mermaid diagrams use inline scripts and styles.
+    add_header Content-Security-Policy      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'none'" always;
+
+    gzip       on;
+    gzip_vary  on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    error_page 404 /404.html;
+}

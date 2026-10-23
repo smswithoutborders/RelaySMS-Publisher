@@ -173,7 +173,8 @@ def gateway_clients_command(count):
         while added < count:
             msisdn = _random_mobile(random.choice(COUNTRIES))
             suggestion = gateway_clients.suggest(msisdn)
-            # Picks for the ambiguous ones, as an administrator would.
+            # Takes the first candidate when the operator is ambiguous, as an
+            # administrator would.
             candidate = suggestion.candidates[0]
             try:
                 client = gateway_clients.create(

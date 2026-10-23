@@ -299,7 +299,7 @@ main() {
     fi
     case "$create_admin" in
     n | N | no | NO)
-      log "Skipping SigNoz admin account. OTLP ingestion stays blocked until one is created, see observability/README.md"
+      log "Skipping SigNoz admin account. OTLP ingestion stays blocked until one is created, see docs/operating/observability.md"
       ;;
     *)
       [ "$SIGNOZ_EMAIL_SET" = "1" ] || prompt SIGNOZ_EMAIL "SigNoz admin email [$SIGNOZ_EMAIL]: " "$SIGNOZ_EMAIL"
@@ -351,7 +351,7 @@ main() {
   log "SigNoz: http://localhost:$SIGNOZ_PORT  Uptime Kuma: http://localhost:$KUMA_PORT"
   [ -n "$SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "SigNoz reverse proxy: $signoz_external_url"
   [ -n "$KUMA_SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "Uptime Kuma reverse proxy: https://$KUMA_SITE_NAME"
-  log "Create Uptime Kuma monitors and set retention in SigNoz, see observability/README.md"
+  log "Create Uptime Kuma monitors and set retention in SigNoz, see docs/operating/observability.md"
 }
 
 main "$@"

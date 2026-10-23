@@ -83,8 +83,11 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
-docs/_build/
+# mdBook output and tools, see scripts/build-book.sh
+/book/
+/.mdbook/
+/mermaid.min.js
+/mermaid-init.js
 
 # PyBuilder
 target/

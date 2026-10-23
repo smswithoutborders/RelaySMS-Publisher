@@ -78,7 +78,7 @@ def _bind_port(grpc_server: grpc.Server) -> None:
         return
 
     cert_file, key_file = grpc_config.tls_cert_file, grpc_config.tls_key_file
-    assert cert_file and key_file  # config requires both when TLS is on
+    assert cert_file and key_file  # config refuses TLS without both files
     try:
         credentials = _load_ssl_credentials(Path(cert_file), Path(key_file))
     except FileNotFoundError as e:
@@ -105,7 +105,8 @@ def serve() -> None:
     grpc_server = _build_server(grpc_config.max_workers)
     _bind_port(grpc_server)
 
-    # Stopping inside the handler hangs if a second signal arrives mid-stop.
+    # The handler only sets this flag: stopping inside it would hang if a second
+    # signal arrived while the server was stopping.
     stop_requested = threading.Event()
 
     def request_stop(signum: int, _frame) -> None:

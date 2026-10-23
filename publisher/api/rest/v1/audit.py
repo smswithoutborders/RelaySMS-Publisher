@@ -46,7 +46,7 @@ def list_audit_events(
     ),
     db: Session = Depends(get_db),
 ) -> AuditEventPage:
-    """Newest first. Scope: audit:read, plus creds:read or platforms:read per area."""
+    """Newest first. Scope: audit:read, plus each area's read scope."""
     since, until = check_time_range(since, until)
     page = audit_event.list_events(
         db,

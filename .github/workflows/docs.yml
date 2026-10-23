@@ -1,0 +1,40 @@
+name: Docs
+
+# Checks Markdown links and builds the manual.
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+    paths:
+      - "**.md"
+      - "docs/**"
+      - "book.toml"
+      - "scripts/build-book.sh"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Local files and anchors only, so an external site being down can't fail a PR.
+      - name: Check Markdown links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --include-fragments --no-progress README.md CONTRIBUTING.md SECURITY.md sdk/README.md "docs/**/*.md"
+
+      - name: Build
+        run: make book
+
+      # Catches links that resolve on GitHub but not in the book, such as to files outside docs/.
+      - name: Check book links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --include-fragments --no-progress --root-dir "${{ github.workspace }}/book" "book/**/*.html"

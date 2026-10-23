@@ -105,7 +105,6 @@ def _adapter_errors(context: AuthContext):
     except (AdapterInUseError, AdapterConflictError) as e:
         raise ApiError(409, str(e), log=f"{by}: {e}") from None
     except AdapterFaultError as e:
-        # Its message can name files on this server.
         message = "The adapter or its files are broken; see the server log."
         raise ApiError(502, message, log=f"{by}: {e}") from None
     except AdapterError as e:
@@ -292,7 +291,8 @@ def setup_config(
     _require_administrator(context, "Adapter settings")
     adapter = _load(db, adapter_id)
     check_if_match(request, _etag(adapter), "adapter")
-    # End the read before the adapter runs; the version still catches a change.
+    # End the read transaction before the adapter runs. A change made meanwhile
+    # still fails the save, which checks the adapter's version.
     db.commit()
     with _adapter_errors(context):
         adapter_config.setup(db, adapter, body.inputs, actor=context.credential)
@@ -320,7 +320,8 @@ def _queue(
     try:
         run_adapter_job.delay(str(job.id))
     except Exception as e:
-        # Fail it now, or its lock would block the adapter until cleanup.
+        # Fail the job now. Otherwise it stays active and blocks every other job for
+        # the adapter until cleanup fails it as abandoned.
         jobs.finish(db, job.id, state="failed", log=[f"Queueing failed: {e}"])
         db.commit()
         raise ApiError(

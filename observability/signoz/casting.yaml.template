@@ -3,7 +3,7 @@
 # Not run directly: the placeholders below are filled in by
 # scripts/setup-observability.sh, which writes
 # observability/signoz/casting.yaml (gitignored, contains real
-# credentials). See observability/README.md for the manual equivalent.
+# credentials). See docs/operating/observability.md for the manual equivalent.
 #
 # Left unset, Foundry defaults the Postgres fields to the literal string
 # "signoz", so don't cast this template file directly.

@@ -163,13 +163,14 @@ def _save(
     actor: Credential | None,
     changed: dict[str, Any],
 ) -> None:
-    # Touching the row moves its version on, so a concurrent change conflicts.
+    # Updating the row bumps its version, so a concurrent change to the adapter
+    # fails with a conflict.
     adapter.updated_at = utc_now()
     adapter.updated_by = actor.id if actor else None
     flush(session, adapter)
     audit_event.record(
         session, action, actor=actor, target=adapter, details={"keys": sorted(changed)}
     )
-    # Written before the commit, unlike manager.activate: the flush holds the row,
-    # so concurrent saves reach the file in order.
+    # Written before the commit, unlike manager.activate: the flush locks the row
+    # until the commit, so concurrent saves write the file one at a time.
     write_config(settings, directory=Path(adapter.config_path))

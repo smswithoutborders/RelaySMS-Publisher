@@ -35,8 +35,8 @@ class PlatformAdapterJob(Base):
     from_commit: Mapped[str | None] = mapped_column(String(40), default=None)
     to_commit: Mapped[str | None] = mapped_column(String(40), default=None)
     state: Mapped[str] = mapped_column(String(16), default="queued")
-    # The adapter id while the job is active, NULL after. Being unique, it allows
-    # one active job per adapter on every database.
+    # The adapter id while the job is queued or running, NULL once it finishes.
+    # Its unique index allows one active job per adapter.
     lock: Mapped[str | None] = mapped_column(String(36), default=None)
     log: Mapped[str] = mapped_column(Text, default="")
     requested_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
@@ -159,7 +159,8 @@ def delete_older_than(session: Session, cutoff: datetime.datetime) -> int:
     result = cast(
         CursorResult,
         session.execute(
-            # By finish time, so a job failed just now as abandoned stays readable.
+            # By finished_at, so an old job that cleanup just failed as abandoned
+            # is kept for the full retention period.
             delete(PlatformAdapterJob).where(PlatformAdapterJob.finished_at < cutoff)
         ),
     )

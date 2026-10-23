@@ -36,8 +36,9 @@ def handle(
 ) -> str:
     """Answer one JSON-RPC request line.
 
-    Given the class, it creates the adapter for the request, except for setup,
-    which runs on the class before the settings an adapter reads exist.
+    Given the class, it creates an adapter for each request, except setup, which
+    runs on the class because an adapter's __init__ may read the settings setup
+    creates.
     """
     try:
         request = wire.parse_request(line)

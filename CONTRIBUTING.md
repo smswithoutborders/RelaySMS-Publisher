@@ -31,7 +31,7 @@
 ## Reporting security issues
 
 > [!CAUTION]
-> Don't open a public issue for a vulnerability. Email **<developers@smswithoutborders.com>** with a description, the affected versions and steps to reproduce.
+> Don't open a public issue for a vulnerability. See [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
@@ -88,7 +88,7 @@ Each service can also run on its own:
 | Celery worker and beat | `celery -A publisher.tasks.celery_app:celery_app worker` / `beat` |
 | CLI | `python -m publisher --help` (or `./publisher.sh`) |
 
-`python -m tools.client` drives the gRPC and REST flows by hand, see [tools/README.md](tools/README.md).
+`python -m tools.client` drives the gRPC and REST flows by hand, see [docs/developers/reference-client.md](docs/developers/reference-client.md).
 
 ### Make targets
 
@@ -104,6 +104,8 @@ Each service can also run on its own:
 | `make test` | Run pytest |
 | `make coverage` | Run pytest and list the lines no test runs |
 | `make docs` | Regenerate `docs/openapi.json` from the REST app |
+| `make book` | Build the manual in `docs/` into `book/` |
+| `make book-serve` | Preview the manual on <http://localhost:3000>, rebuilding on changes |
 | `make test-dialects` | Migrate and query SQLite, SQLCipher, Postgres, MySQL and MariaDB (podman) |
 | `make test-e2e` | Install, update and uninstall in a systemd container (podman) |
 | `make check` | Run every pre-commit hook on all files |
@@ -173,8 +175,8 @@ Common types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` and `c
 
 - [ ] The PR targets `staging` and does one thing.
 - [ ] `make check` and `make test` pass locally.
-- [ ] New behaviour and bug fixes come with tests. A bug fix has a test that fails without it.
-- [ ] Docs, `template.env` and the README are updated if behaviour, settings or commands changed.
+- [ ] New behavior and bug fixes come with tests. A bug fix has a test that fails without it.
+- [ ] The manual in `docs/` and `template.env` are updated if behavior, settings or commands changed.
 - [ ] Schema changes include a migration, and a commit message with `[migrate]`.
 - [ ] The description says what changed, why, and how it was tested. Link the issue with `Closes #123`.
 - [ ] Anything operators must do on deploy is called out.
@@ -213,7 +215,7 @@ The gRPC service handles the account side: storing OAuth2 and PNBA tokens, revok
 
 The hooks enforce formatting, lint, types and commit messages. These rules are checked in review:
 
-- **Functions by default.** Modules group related behaviour. Use a class only for real state (a cache, a connection) or when a framework needs one (ORM models, structs, interceptors, servicers, config sections).
+- **Functions by default.** Modules group related behavior. Use a class only for real state (a cache, a connection) or when a framework needs one (ORM models, structs, interceptors, servicers, config sections).
 - **Dependencies are arguments.** Domain and model functions take the database `session` first, then anything else they need, such as the acting credential.
 - **The entry point owns the transaction.** A route, gRPC handler, task or CLI command opens the session; code below it never opens a session or commits.
 - **No transaction stays open while an adapter runs,** since a call can take a minute. Publishing is the one exception (see above).
@@ -251,7 +253,7 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 ### Writing tests
 
 - Put a test where its module lives: `publisher/api/rest/v1/stats.py` is tested in `tests/api/rest/test_stats.py`.
-- Name tests after the behaviour, such as `test_list_skips_disabled_items`, not the function.
+- Name tests after the behavior, such as `test_list_skips_disabled_items`, not the function.
 - Test through the public interface (a route, an RPC, a domain function). Patch only what crosses the process boundary, such as adapter IPC or outbound HTTP.
 
 ### Fixtures and helpers
@@ -291,7 +293,7 @@ make build test PYTHON=.venv312/bin/python
 ### Add a setting
 
 1. Add the field to its section in `publisher/config.py` and read it in that section's `load`.
-2. Add it, commented, to `template.env` and to the Configuration section of the README.
+2. Add it, commented, to `template.env` and to [docs/configuration/settings.md](docs/configuration/settings.md); a test fails until both list it.
 3. Check validation with `python -m publisher config check`, and add a test in `tests/test_config.py`.
 
 ### Change the database schema
@@ -306,14 +308,14 @@ make build test PYTHON=.venv312/bin/python
 1. Add the route to the matching module in `publisher/api/rest/v1/` (or a new module with its own `APIRouter`, registered in `routes.py`).
 2. Put request and response models in `schemas.py`. Use `Depends(get_db)` for the session, and `Security(authorize, scopes=[...])` if it needs a login. A new scope goes in `Scope` in `publisher/models/credential.py`.
 3. Map domain errors to `ApiError` (`errors.py`) with a message a client can show, and put ids and other detail in its `log=`.
-4. Test it in `tests/api/rest/`, describe it in its docstring and run `make docs`. Update [docs/rest.md](docs/rest.md) only for what the reference doesn't show.
+4. Test it in `tests/api/rest/`, describe it in its docstring and run `make docs`. Update [docs/reference/rest-api.md](docs/reference/rest-api.md) only for what the reference doesn't show.
 
 ### Change the gRPC API
 
 1. Edit `protos/v3/publisher.proto` and run `make protos`.
 2. Add a module per RPC in `publisher/api/grpc/v3/` and a thin method on the servicer that calls it.
 3. Raise `grpc_interceptor` exceptions such as `InvalidArgument` or `Unauthenticated`; `ErrorInterceptor` turns them into status codes and anything else into `INTERNAL`.
-4. Test it in `tests/api/grpc/` and update [docs/grpc.md](docs/grpc.md).
+4. Test it in `tests/api/grpc/` and update [docs/reference/grpc-api.md](docs/reference/grpc-api.md).
 
 > [!WARNING]
 > Deployed clients depend on the proto: only add fields.
@@ -328,13 +330,20 @@ Add it under `publisher/tasks/`. Keep the explicit `tasks.*` name so queued mess
 
 ### Platform adapters
 
-Adapters live in their own repositories and are built with the SDK in `sdk/` ([sdk/README.md](sdk/README.md)). Their CI runs `.github/workflows/adapter.yml` at the SDK tag they pin, so a change to it reaches an adapter only when it moves its pin. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [docs/platforms.md](docs/platforms.md).
+Adapters live in their own repositories and are built with the SDK in `sdk/` ([sdk/README.md](sdk/README.md)). Their CI runs `.github/workflows/adapter.yml` at the SDK tag they pin, so a change to it reaches an adapter only when it moves its pin. Install one locally with `python -m publisher platforms add <GITHUB_URL>`; on a server use `./publisher.sh platforms`, which runs as the service user. See [docs/platforms/manage.md](docs/platforms/manage.md).
 
 ## Documentation
 
-- [docs/rest.md](docs/rest.md) (with the generated [docs/openapi.json](docs/openapi.json)), [docs/grpc.md](docs/grpc.md) and [docs/smtp.md](docs/smtp.md) describe each interface. Update them in the same PR as the behaviour.
-- The README covers installation, configuration and operations. Keep it in step with `template.env` and the CLI.
-- Write plainly and briefly. Use code blocks for commands and tables for options.
+The manual in `docs/` is an [mdBook](https://rust-lang.github.io/mdBook/) that reads the same on GitHub. Preview it with `make book-serve`.
+
+- Update the pages a change affects in the same PR.
+- List a new page in `docs/SUMMARY.md`, or the book leaves it out.
+- Link pages in `docs/` relatively, and files outside it by their full GitHub URL, since the book only has `docs/`.
+- Draw diagrams as `mermaid` code blocks.
+- Say "web client" and "public", and use `publisher.example.com`, `example.com` and `+237600000000` in examples. Keep GitHub alerts for what readers must not miss.
+- Start a task page with its requirements. End a page that points onward with a `## Next steps` section of one or two linked sentences or a short list; skip it when the book's next page is the only next step.
+- Use tables for reference data, numbered steps for procedures, and one heading per symptom for troubleshooting.
+- Write plainly and briefly in US English, one paragraph per line, with sentence-case headings and `<UPPER_SNAKE>` placeholders.
 
 ## When CI fails
 

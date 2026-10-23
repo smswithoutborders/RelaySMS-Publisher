@@ -88,8 +88,6 @@ def get_platform_oauth_client_metadata(
             detail="OAuth client metadata file not found for this platform",
         ) from exc
     except ValueError as exc:
-        # The error names the file's path on this server, so the client only gets
-        # a generic message.
         logger.error("Invalid OAuth client metadata: %s", exc)
         raise HTTPException(
             status_code=500, detail="OAuth client metadata is invalid"

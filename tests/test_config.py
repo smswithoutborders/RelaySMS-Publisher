@@ -31,6 +31,11 @@ def errors(**env):
     return "\n".join(config.check({**BASE_ENV, **env}))
 
 
+def template_env_names():
+    text = (config.ROOT / "template.env").read_text()
+    return set(re.findall(r"^\s*(?:#\s*)?([A-Za-z_]\w*)=", text, re.M))
+
+
 def test_defaults():
     assert load(LoggingConfig).log_level == "INFO"
     assert not load(GrpcConfig).tls_enabled
@@ -224,8 +229,7 @@ def test_template_env_paths_match_defaults():
 def test_template_env_lists_every_variable_config_reads():
     # sync-env.sh --prune drops what the template lacks, so a variable config
     # reads must be in it, if only commented out.
-    text = (config.ROOT / "template.env").read_text()
-    template = set(re.findall(r"^\s*(?:#\s*)?([A-Za-z_]\w*)=", text, re.M))
+    template = template_env_names()
     # An empty environment that records every name config asks for.
     env = Mock()
     env.get.side_effect = lambda key, default=None: default
@@ -240,6 +244,20 @@ def test_template_env_lists_every_variable_config_reads():
     external = {"HOST", "PORT", "WORKERS"}
     unused = {n for n in template - names - external if not n.startswith("OTEL_")}
     assert unused == set(), "in template.env but unused"
+
+
+def test_settings_reference_matches_template_env():
+    template = template_env_names()
+    reference = (config.ROOT / "docs" / "configuration" / "settings.md").read_text()
+    # Only the first column, so a name mentioned in a description doesn't count.
+    documented = {
+        name
+        for row in re.findall(r"^\|\s*(`[A-Z].*?)\s*\|", reference, re.M)
+        for name in re.findall(r"`([A-Z][A-Z0-9_]*)`", row)
+    }
+
+    assert template - documented == set(), "missing from the settings reference"
+    assert documented - template == set(), "in the settings reference, not template.env"
 
 
 def test_auth_session_defaults():

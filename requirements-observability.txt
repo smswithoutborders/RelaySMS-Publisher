@@ -1,6 +1,6 @@
 # OpenTelemetry SDK, exporter and auto-instrumentation, needed only to export
 # traces, metrics and logs. Without them the app's opentelemetry-api calls do
-# nothing. See observability/README.md.
+# nothing. See docs/operating/observability.md.
 #
 # Includes requirements.txt, since both pull in OTel packages that must
 # resolve to the same versions.

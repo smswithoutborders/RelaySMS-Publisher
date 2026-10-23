@@ -82,8 +82,9 @@ def publish_message(
     """Validate and publish a payload, then record the outcome."""
     delivery = refreshed_token = None
     try:
-        # Commits only after a successful send, so a failure leaves the payload's
-        # keys usable, and a copy of it arriving meanwhile waits on their row lock.
+        # Commits only after a successful send. A failure rolls back, so the payload's
+        # keys can be used again, and a duplicate that arrives during the send waits
+        # on their row lock.
         with get_session() as db:
             payload_raw, raw_segment, payload_type = publications.validate(text_payload)
             delivery = publications.prepare(
@@ -96,7 +97,7 @@ def publish_message(
                 tag=tag,
             )
             if delivery is None:
-                # Incomplete multi-segment session, awaiting more parts.
+                # Segments of a multi-part payload are still missing.
                 return
             new_token = publications.send(delivery)
             publications.finish(db, delivery, new_token)

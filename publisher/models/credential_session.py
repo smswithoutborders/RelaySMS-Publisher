@@ -106,7 +106,8 @@ def get_active(session: Session, raw_token: str) -> CredentialSession | None:
         return None
 
     credential = credential_session.credential
-    # None if a login raced a delete, since sqlite doesn't enforce the foreign key.
+    # None when the credential was deleted while this session was being created,
+    # since SQLite doesn't enforce the foreign key.
     if credential is None or not credential.is_active:
         return None
     if credential_session.session_version != credential.session_version:

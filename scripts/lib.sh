@@ -257,6 +257,12 @@ render_nginx_site() {
     "$INSTALL_DIR/deploy/nginx/relaysms-publisher-nginx.conf.template" >"$conf"
 }
 
+# Renders the manual's nginx site for $1 into $2, serving $INSTALL_DIR/book.
+render_docs_site() {
+  sed -e "s/__SERVER_NAME__/$1/g" -e "s|__BOOK_DIR__|$INSTALL_DIR/book|g" \
+    "$INSTALL_DIR/deploy/nginx/relaysms-publisher-docs-nginx.conf.template" >"$2"
+}
+
 install_nginx_certbot() {
   if ! command -v nginx &>/dev/null || ! command -v certbot &>/dev/null; then
     log "Installing nginx and certbot"

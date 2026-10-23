@@ -105,7 +105,8 @@ def _request_origin(request: Request) -> str | None:
 
 
 def _record_failed_login(db: Session, username: str, method: str) -> None:
-    # Not for unknown usernames: anyone can send those, so they'd flood the table.
+    # Recorded only for existing usernames: anyone can send unknown ones, which
+    # would fill the audit table.
     target = get_by_username(db, username)
     if target is None:
         return

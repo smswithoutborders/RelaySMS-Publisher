@@ -1,0 +1,20 @@
+[book]
+title = "RelaySMS Publisher"
+description = "Install, configure and run the RelaySMS Publisher."
+language = "en"
+src = "docs"
+
+[build]
+create-missing = false
+# Without the index preprocessor, README.md pages stay README.html, so links to them work in the book as on GitHub.
+use-default-preprocessors = false
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html]
+git-repository-url = "https://github.com/smswithoutborders/RelaySMS-Publisher"
+edit-url-template = "https://github.com/smswithoutborders/RelaySMS-Publisher/edit/staging/{path}"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+additional-css = ["docs/theme/custom.css"]
+no-section-label = true
