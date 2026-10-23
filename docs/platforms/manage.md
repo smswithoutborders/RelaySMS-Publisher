@@ -99,4 +99,4 @@ sudo ./publisher.sh platforms exec <NAME> -- <COMMAND> --help
 
 ## Writing an adapter
 
-Build it with the [adapter SDK](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk), then tag a release and `add` it.
+See [Writing an adapter](../developers/writing-an-adapter.md).

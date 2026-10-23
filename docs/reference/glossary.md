@@ -1,0 +1,24 @@
+# Glossary
+
+- **Adapter** (platform adapter): the plugin that publishes to one platform, such as Gmail, installed from its own repository. See [Managing adapters](../platforms/manage.md).
+- **Administrator**: a credential holding every scope.
+- **Audit event**: a record of a change or login. See [Audit log](../operating/audit-log.md).
+- **Category**: what an adapter publishes: email, message, text or bridge (`--cat-id`).
+- **Credential**: a username and password that logs in to the REST API's admin endpoints, with its own scopes. See [Credentials and access](../operating/credentials.md).
+- **Ephemeral key pool**: the client public keys and server key pairs each linked account holds, up to 256 of each; each pair is used once, with an identity key, by a payload or a token check. See [Security model](../explanation/security-model.md).
+- **Gateway client**: a phone number that relays SMS to the Publisher, from an Android phone running Deku SMS or from Twilio. See [Connecting a relay](../gateway-clients/connect-a-relay.md).
+- **Identity key**: one of the server's 256 long-term X25519 keys, used in every gRPC request and payload, and alone for offline payloads.
+- **Linked account**: a user's account on a platform, authorized once while online. The Publisher stores its token encrypted.
+- **MSISDN**: a phone number in international format, such as `+237600000000`.
+- **OAuth2**: linking through the platform's consent page, as Gmail, Mastodon and Bluesky do.
+- **Offline payload**: content sent without a linked account, published through RelaySMS Mail; the whitepaper calls these offline-first publications. See [Offline publishing](../configuration/offline-publishing.md).
+- **Payload**: the encrypted content the RelaySMS app sends by SMS; one carrying an attachment arrives in several segments.
+- **PLMN**: a mobile network, identified by its MCC (country code) and MNC (network code). See [How suggest works](../gateway-clients/manage.md#how-suggest-works).
+- **PNBA** (phone number-based authentication): linking with a code sent to the user's phone, as Telegram and RelaySMS Mail do.
+- **Protocol**: how an adapter links accounts, `oauth2` or `pnba` (`--proto-id`). For a payload, how it reached the Publisher: `https` (the REST API) or `smtp` (the email listener).
+- **Redirect URI**: where an OAuth2 platform sends the user back after they authorize. See [Redirect URIs](../platforms/manage.md#redirect-uris).
+- **rmail**: the name of the RelaySMS Mail adapter. See [RelaySMS Mail](../platforms/relaysms-mail.md).
+- **Scope**: a permission a credential holds, such as `gc:write`. See [Scopes](../operating/credentials.md#scopes).
+- **Sender hash**: the keyed hash that replaces a sender's phone number before anything is stored.
+- **Token**: what the Publisher stores for a linked account to act on the platform, encrypted.
+- **Web session**: a REST API login kept in a cookie, for a web client.

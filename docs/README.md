@@ -44,10 +44,12 @@ The shaded box is the Publisher.
 ## Key terms
 
 - **Gateway client**: a phone number that relays SMS to the Publisher, from an Android phone running Deku SMS or from Twilio. See [Connecting a relay](gateway-clients/connect-a-relay.md).
-- **Platform adapter**: the plugin that publishes to one platform, such as Gmail, installed from its own repository. See [Managing adapters](platforms/manage.md).
+- **Adapter** (platform adapter): the plugin that publishes to one platform, such as Gmail, installed from its own repository. See [Managing adapters](platforms/manage.md).
 - **Linked account**: a user's account on a platform, authorized once while online. The Publisher stores its token encrypted.
 - **OAuth2 and PNBA**: the two ways an account links. OAuth2 goes through the platform's consent page (Gmail, Mastodon, Bluesky). Phone number-based authentication (PNBA) uses a code sent to the user's phone (Telegram, RelaySMS Mail).
 - **Offline payload**: content sent without a linked account, published through [RelaySMS Mail](platforms/relaysms-mail.md).
+
+The [glossary](reference/glossary.md) defines the rest, and [Architecture](explanation/architecture.md) shows every component.
 
 ## Where to start
 
@@ -58,7 +60,7 @@ The shaded box is the Publisher.
 | Offer a platform | [Managing adapters](platforms/manage.md) |
 | Relay SMS to the Publisher | [Managing gateway clients](gateway-clients/manage.md) |
 | Build a client | [gRPC API](reference/grpc-api.md) and [REST API](reference/rest-api.md) |
-| Understand the protocol | [RelaySMS whitepaper](explanation/relaysms-whitepaper.pdf) |
+| Understand the protocol | [Security model](explanation/security-model.md) and the [RelaySMS whitepaper](explanation/relaysms-whitepaper.pdf) |
 
 ## Getting help
 

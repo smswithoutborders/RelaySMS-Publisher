@@ -51,18 +51,18 @@
 
 # Reference
 
-- [Command-line tools]()
+- [Command-line tools](reference/cli.md)
 - [REST API](reference/rest-api.md)
 - [gRPC API](reference/grpc-api.md)
-- [Glossary]()
+- [Glossary](reference/glossary.md)
 
 # Explanation
 
-- [Architecture]()
-- [Security model]()
-- [Data and retention]()
+- [Architecture](explanation/architecture.md)
+- [Security model](explanation/security-model.md)
+- [Data and retention](explanation/data-retention.md)
 
 # Developers
 
-- [Writing an adapter]()
+- [Writing an adapter](developers/writing-an-adapter.md)
 - [Reference client](developers/reference-client.md)
