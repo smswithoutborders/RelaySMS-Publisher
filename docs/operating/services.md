@@ -25,7 +25,7 @@ You should see every service active, and `{"status":"ok"}`. To follow publicatio
 sudo ./manage.sh logs --unit worker
 ```
 
-Each published payload logs `Published via '<PLATFORM>'.`, and each failure logs `Failed to publish message`. Credentials with `stats:publications:read` can also query the counts at `GET /v1/stats/publications`.
+Each published payload logs `Published via '<PLATFORM>'.`, and each failure a line starting `Failed to` ([what each means](troubleshooting.md#a-payload-is-accepted-but-never-published)). Credentials with `stats:publications:read` can also query the counts at `GET /v1/stats/publications`.
 
 ## manage.sh
 
@@ -37,7 +37,7 @@ Run it from the install directory with `sudo`:
 | `logs` | Follows the service logs |
 | `start`, `stop`, `restart` | Controls every service together |
 | `enable`, `disable` | Starts the services on boot, or stops doing so |
-| `update` | Pulls the latest code, rebuilds and restarts the services |
+| `update [--migrate]` | Pulls the latest code, rebuilds and restarts the services ([details](upgrading.md)) |
 | `migrate` | Applies database migrations |
 | `check` | Reports every missing or invalid setting |
 | `nginx [DOMAIN]` | Renders the nginx site again and reattaches or obtains its certificate ([details](../installation/reverse-proxy.md#on-an-existing-install)) |
@@ -59,10 +59,7 @@ For example:
 sudo ./manage.sh logs --unit rest --unit grpc --since "1 hour ago" --lines 200
 ```
 
-> [!IMPORTANT]
-> Run `update --migrate` to apply the release's database migrations; with none pending it changes nothing. They run after the dependencies are reinstalled and before the services restart.
-
-`update` also checks `.env`. When a setting is invalid, it still restarts every service, then exits with an error; services that use that setting fail to start.
+When `.env` has an invalid setting, `update` still restarts every service, then exits with an error; services that use that setting fail to start ([fix](troubleshooting.md#update-ends-with-env-has-errors)). See [Upgrading](upgrading.md).
 
 ## publisher.sh
 

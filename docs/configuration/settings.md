@@ -115,7 +115,7 @@ With `PLATFORMS_GITHUB_ORGS` empty, the REST API refuses to install or update ad
 
 ## REST API access
 
-See [REST API](../reference/rest-api.md#authentication).
+See [Credentials and access](../operating/credentials.md#logging-in).
 
 | Setting | Default | Description |
 | --- | --- | --- |

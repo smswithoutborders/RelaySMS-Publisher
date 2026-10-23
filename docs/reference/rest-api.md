@@ -16,12 +16,7 @@ https://<host>/v1
 
 ## Authentication
 
-Credentials and their scopes are managed with [`sudo ./publisher.sh creds`](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/README.md#credentials) or the `/v1/creds` endpoints.
-
-- **Web session:** `POST /v1/auth/login`, then send the cookie with every request (`credentials: "include"` in `fetch`). Writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from this API's origin or `AUTH_WEB_ORIGINS`. Sessions end after `AUTH_SESSION_IDLE_MINUTES` idle (30) or `AUTH_SESSION_MAX_HOURS` (12).
-- **HTTP Basic:** username and password on every request, such as `curl -u analyst:<PASSWORD> .../v1/stats/publications`.
-
-Scope changes apply on the credential's next request. Each endpoint's description names the scopes it needs.
+Admin endpoints take a web session cookie or HTTP Basic credentials; see [Logging in](../operating/credentials.md#logging-in). Each endpoint's description names the scopes it needs.
 
 ## Managing credentials
 
@@ -49,20 +44,7 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 ## Audit events
 
-`GET /v1/audit-events` needs `audit:read`, and each area also needs its read scope: `creds:read` for `auth.*` and `creds.*` events, `platforms:read` for `platforms.*`, `gc:read` for `gateway_clients.*`. Events from areas you can't read are left out.
-
-| Action | Recorded when |
-| :--- | :--- |
-| `creds.create`, `creds.update`, `creds.reset_password`, `creds.revoke_sessions`, `creds.delete` | A credential changes, over the API or the CLI. `details` says what changed, never secrets. |
-| `auth.login` | A web session starts, or a login for an existing username is refused |
-| `auth.logout` | A web session ends |
-| `platforms.add`, `platforms.update`, `platforms.remove` | An adapter is installed, updated or removed. `details` has the source URL and commits. |
-| `platforms.enable`, `platforms.disable` | An adapter is offered to users again, or hidden from them |
-| `platforms.configure`, `platforms.setup` | An adapter's settings are changed, or set up from inputs. `details` has the keys saved. |
-| `gateway_clients.create`, `gateway_clients.update`, `gateway_clients.delete` | A gateway client changes. `details` has its fields, or what changed. |
-| `gateway_clients.enable`, `gateway_clients.disable` | A gateway client is listed publicly again, or hidden |
-
-`outcome` is `success`, `denied` (the change went beyond the actor's scopes) or `failed` (a refused login for an existing username: wrong password or disabled). Successful HTTP Basic requests aren't recorded, since every request authenticates. `actor` is the username at the time, and null for the CLI or a failed login. Events are kept for `AUDIT_RETENTION_DAYS`.
+`GET /v1/audit-events` returns the [audit log](../operating/audit-log.md).
 
 ## Publishing
 

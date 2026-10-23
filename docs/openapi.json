@@ -848,7 +848,7 @@
           "Audit"
         ],
         "summary": "List audit events",
-        "description": "Newest first. Scope: audit:read, plus creds:read or platforms:read per area.",
+        "description": "Newest first. Scope: audit:read, plus each area's read scope.",
         "operationId": "list_audit_events_v1_audit_events_get",
         "security": [
           {

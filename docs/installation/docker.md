@@ -15,13 +15,10 @@ The container applies pending migrations, then starts every service. It publishe
 
 Run the admin CLI with `docker compose exec publisher python -m publisher <command>`.
 
-Back up `.env` with `./data`: its [encryption keys](../configuration/encryption-keys.md) are the only way to read the data.
+[Back up](../operating/backup-restore.md) `.env` and `./data`: its [encryption keys](../configuration/encryption-keys.md) are the only way to read the data.
 
 ## Updating
 
-```bash
-git pull --recurse-submodules
-docker compose up -d --build
-```
+See [Upgrading](../operating/upgrading.md#update-with-docker).
 
 Next: [Settings reference](../configuration/settings.md).

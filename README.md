@@ -183,20 +183,7 @@ Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/ga
 
 ## Credentials
 
-Credentials log in to the REST API, each with its own scopes. One holding every scope is an administrator. They can also be managed over the [REST API](docs/reference/rest-api.md#managing-credentials).
-
-```bash
-sudo ./publisher.sh creds scopes                                        # list scopes
-sudo ./publisher.sh creds create --username ops --administrator         # prints the password once
-sudo ./publisher.sh creds create --username analyst --scope stats:publications:read
-sudo ./publisher.sh creds set-scopes --username analyst --scope stats:publications:read --scope stats:publications:reasons
-sudo ./publisher.sh creds list
-sudo ./publisher.sh creds reset-password --username analyst
-sudo ./publisher.sh creds disable --username analyst
-sudo ./publisher.sh creds enable --username analyst
-sudo ./publisher.sh creds revoke-sessions --username analyst
-sudo ./publisher.sh creds delete --username analyst
-```
+Credentials log in to the REST API's admin endpoints, each with its own scopes. See [Credentials and access](docs/operating/credentials.md).
 
 ## Documentation
 

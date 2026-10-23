@@ -17,7 +17,7 @@ Run these commands from the install directory with [`publisher.sh`](../operating
 | `platforms config show <NAME>` | Lists its settings, without secret values |
 | `platforms config set <NAME> <KEY>=<VALUE>\|<KEY>` | Changes settings; a bare `<KEY>` asks for its value |
 | `platforms setup <NAME> [--input <KEY>=<VALUE>]` | Runs the adapter's setup and saves its settings |
-| `platforms import` | Registers adapter directories and moves their files out of the code |
+| `platforms import` | Registers adapters installed before the database registry ([details](../operating/upgrading.md#adapters-moved-to-the-database)) |
 | `platforms exec <NAME> -- <COMMAND>` | Runs a command the adapter installs |
 
 Prefix each with `sudo ./publisher.sh`, for example:

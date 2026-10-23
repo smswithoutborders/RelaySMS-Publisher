@@ -1,6 +1,6 @@
 # Managing gateway clients
 
-A gateway client is a phone number that relays the SMS people send to this server: an Android phone running Deku SMS, or a Twilio number. Register each number here so the RelaySMS app lists it, then [connect its relay](connect-a-relay.md). The enabled ones are listed publicly at `GET /v1/gateway-clients`. Credentials with `gc:read` and `gc:write` can manage them over the [REST API](../reference/rest-api.md#managing-gateway-clients). Every change is recorded in the [audit log](../reference/rest-api.md#audit-events).
+A gateway client is a phone number that relays the SMS people send to this server: an Android phone running Deku SMS, or a Twilio number. Register each number here so the RelaySMS app lists it, then [connect its relay](connect-a-relay.md). The enabled ones are listed publicly at `GET /v1/gateway-clients`. Credentials with `gc:read` and `gc:write` can manage them over the [REST API](../reference/rest-api.md#managing-gateway-clients). Every change is recorded in the [audit log](../operating/audit-log.md).
 
 ## Commands
 
@@ -38,7 +38,3 @@ Names are compared word by word, ignoring case, accents, company-type words ("Te
 | `none` | None: the number couldn't be placed. Enter the details yourself. |
 
 A PLMN missing from the snapshot can still be entered with `--operator-code`.
-
-## Upgrading from the JSON registry
-
-Migration 019 imports `data/gateway_clients/registry.json` (or `GATEWAY_CLIENTS_REGISTRY_FILE`, if `.env` sets it). It logs any entries in `mcc_mnc_overrides.json` without importing them. Both files can then be deleted.

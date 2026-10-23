@@ -41,13 +41,13 @@
 # Operating
 
 - [Services](operating/services.md)
-- [Credentials and access]()
-- [Upgrading]()
-- [Backup and restore]()
+- [Credentials and access](operating/credentials.md)
+- [Upgrading](operating/upgrading.md)
+- [Backup and restore](operating/backup-restore.md)
 - [Observability](operating/observability.md)
-- [Audit log]()
-- [Security hardening]()
-- [Troubleshooting]()
+- [Audit log](operating/audit-log.md)
+- [Security hardening](operating/security-hardening.md)
+- [Troubleshooting](operating/troubleshooting.md)
 
 # Reference
 
