@@ -1,6 +1,6 @@
 # Telegram
 
-Lets users send Telegram messages. Users link with their phone number, a login code and, if they set one, their two-step verification password. The adapter needs a Telegram API ID and hash.
+Lets users send Telegram messages. Users link with their phone number, a login code and, if they set one, their two-step verification password.
 
 *Last checked against my.telegram.org: 2026-10-22.*
 

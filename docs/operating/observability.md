@@ -1,6 +1,6 @@
 # Observability
 
-Self-hosted tracing, metrics and log export (SigNoz) and uptime monitoring (Uptime Kuma) for the Publisher's five services. Both are optional; tracing stays off while `OTEL_EXPORTER_OTLP_ENDPOINT` is blank.
+Self-hosted tracing, metrics and log export (SigNoz) and uptime monitoring (Uptime Kuma) for the Publisher's services. Both are optional; tracing, metrics and log export stay off while `OTEL_EXPORTER_OTLP_ENDPOINT` is blank.
 
 ## Set up
 
@@ -149,7 +149,7 @@ docker compose \
 until curl -fs http://127.0.0.1:8090/api/v1/version | grep -q setupCompleted; do sleep 2; done
 curl -X POST http://127.0.0.1:8090/api/v1/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"Admin","orgId":"","orgName":"RelaySMS","email":"admin@relaysms.local","password":"<PASSWORD>"}'
+  -d '{"name":"Admin","orgId":"","orgName":"RelaySMS","email":"admin@example.com","password":"<PASSWORD>"}'
 ```
 
 The template stores SigNoz's metadata in Postgres (`metastore.kind: postgres`); set `sqlite` for a single node.

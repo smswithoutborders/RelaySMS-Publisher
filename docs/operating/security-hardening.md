@@ -2,7 +2,7 @@
 
 A server install listens on `127.0.0.1` only, runs each service under systemd sandboxing with everything read-only except its data directories, and sits behind nginx with TLS and rate limits. These steps close what's left to you.
 
-## Network
+## Network and firewall
 
 1. Allow only SSH, HTTP and HTTPS in:
 

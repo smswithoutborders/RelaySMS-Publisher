@@ -11,7 +11,7 @@ An adapter publishes to one platform. It's a Python package in its own repositor
 ## Steps
 
 1. Copy the SDK's [echo adapter](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk/examples/echo-adapter) into a new repository named after the platform and protocol, such as `example-oauth2-adapter`.
-2. Subclass `OAuth2Adapter` or `PNBAAdapter` and implement its methods ([Write an adapter](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk#write-an-adapter)).
+2. Subclass the SDK's base class for its protocol, such as `OAuth2Adapter`, and implement its methods ([Write an adapter](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk#write-an-adapter)).
 3. Describe it in `adapter.toml`: its name, protocol, category, and a `[config]` table for each setting ([Describe it](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk#describe-it)).
 4. Try it with the `relaysms-adapter` console, which runs it the way the Publisher does ([Try it](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk#try-it)).
 5. Tag a release, such as `v1.0.0` ([Release an adapter](https://github.com/smswithoutborders/RelaySMS-Publisher/tree/main/sdk#release-an-adapter)).
@@ -27,4 +27,4 @@ An adapter publishes to one platform. It's a Python package in its own repositor
 
 `sudo ./publisher.sh platforms list` shows the adapter with its tag, and ✓ under Configured once its settings are set. Then link a test account from the RelaySMS app.
 
-The five adapters in the [smswithoutborders](https://github.com/smswithoutborders) organization, such as [gmail-oauth2-adapter](https://github.com/smswithoutborders/gmail-oauth2-adapter), are complete examples.
+The adapters in the [provider guides](../platforms/manage.md#provider-guides), such as [gmail-oauth2-adapter](https://github.com/smswithoutborders/gmail-oauth2-adapter), are complete examples.

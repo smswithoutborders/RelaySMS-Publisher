@@ -1,6 +1,6 @@
 # Managing adapters
 
-Each platform (Gmail, Telegram, Mastodon, ...) is served by an adapter installed from its own GitHub repository. Its files live under `data/platforms/` (see [Files](#files)).
+Each platform, such as Gmail, is served by an adapter installed from its own GitHub repository.
 
 Run these commands from the install directory with [`publisher.sh`](../operating/services.md#publishersh), which runs them as the service user.
 
@@ -11,13 +11,13 @@ Run these commands from the install directory with [`publisher.sh`](../operating
 | `platforms add <GITHUB_URL> [--tag <TAG>]` | Installs the newest version tag, or `<TAG>` |
 | `platforms update [<NAME>] [--tag <TAG>]` | Moves one adapter, or all, to a version tag |
 | `platforms list` | Lists every adapter, disabled ones included |
-| `platforms disable <NAME>` | Hides it from users; it still revokes tokens |
+| `platforms disable <NAME>` | Hides it from users; linked accounts can still be unlinked |
 | `platforms enable <NAME>` | Offers it again |
 | `platforms remove <NAME> [--force]` | Uninstalls it ([details](#removing)) |
 | `platforms config show <NAME>` | Lists its settings, without secret values |
 | `platforms config set <NAME> <KEY>=<VALUE>\|<KEY>` | Changes settings; a bare `<KEY>` asks for its value |
 | `platforms setup <NAME> [--input <KEY>=<VALUE>]` | Runs the adapter's setup and saves its settings |
-| `platforms import` | Registers adapters installed before the database registry ([details](../operating/upgrading.md#adapters-moved-to-the-database)) |
+| `platforms import` | Registers adapter directories on disk that the database lacks, and moves their files out of the code ([details](../operating/upgrading.md#adapter-registry-import)) |
 | `platforms exec <NAME> -- <COMMAND>` | Runs a command the adapter installs |
 
 Prefix each with `sudo ./publisher.sh`, for example:
@@ -68,11 +68,9 @@ sudo ./publisher.sh platforms config set rmail --unset alias_prefix
 sudo ./publisher.sh platforms setup gmail --input client_file=@/tmp/client_secret.json
 ```
 
-Once an adapter is configured, link a test account from the RelaySMS app to check it end to end.
-
 ## Redirect URIs
 
-OAuth2 adapters (Gmail, Mastodon, Bluesky) send the user back to a redirect URI after they authorize. The client app chooses it and sends it to the Publisher when it links an account; the adapter uses the first of its `redirect_uris` setting when the app sends none.
+OAuth2 adapters, such as Gmail, send the user back to a redirect URI after they authorize. The client app chooses it and sends it to the Publisher when it links an account; the adapter uses the first of its `redirect_uris` setting when the app sends none.
 
 1. Run an HTTPS page that receives the authorization `code` and `state` and hands them back to the app.
 2. Configure the apps to send that page's URI.
@@ -97,6 +95,7 @@ An adapter may install admin commands. `exec` runs one from the adapter's virtua
 sudo ./publisher.sh platforms exec <NAME> -- <COMMAND> --help
 ```
 
-## Writing an adapter
+## Next steps
 
-See [Writing an adapter](../developers/writing-an-adapter.md).
+- Follow the [provider guide](#provider-guides) for each platform you offer, then link a test account from the RelaySMS app.
+- To support another platform, see [Writing an adapter](../developers/writing-an-adapter.md).

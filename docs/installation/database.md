@@ -6,11 +6,11 @@
 | MySQL 8.0.28+ or MariaDB | Heavier load, or a database on another host | The server's own (TDE) |
 | PostgreSQL 12+ | Heavier load, or a database on another host | The disk's |
 
-Sensitive fields are also encrypted in every dialect; see [Encryption keys](../configuration/encryption-keys.md).
+In every dialect, the server's private keys are encrypted, and so are platform tokens while field encryption is on; see [Encryption keys](../configuration/encryption-keys.md).
 
-## MySQL, MariaDB or PostgreSQL
+## Database servers
 
-A setup script installs the server, creates the database and user, and writes the connection details to `.env`. Running it again without `--db-password` gives the user a new password. The MySQL script installs `mysql-server`, which only Ubuntu ships; on Debian, set up MariaDB yourself and pass `--db-existing`.
+A setup script installs the server, creates the database and user, and writes the connection details to `.env`. Running it again without `--db-password` gives the user a new password. On Debian, install MariaDB yourself and pass `--db-existing`.
 
 During install:
 

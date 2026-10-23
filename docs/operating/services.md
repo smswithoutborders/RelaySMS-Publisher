@@ -1,6 +1,6 @@
 # Services
 
-The Publisher runs as five systemd services, grouped under `relaysms-publisher.target`:
+The Publisher runs as systemd services, grouped under `relaysms-publisher.target`:
 
 | Service | Runs |
 | --- | --- |
@@ -40,11 +40,11 @@ Run it from the install directory with `sudo`:
 | `update [--migrate]` | Pulls the latest code, rebuilds and restarts the services ([details](upgrading.md)) |
 | `migrate` | Applies database migrations |
 | `check` | Reports every missing or invalid setting |
-| `nginx [DOMAIN]` | Renders the nginx site again and reattaches or obtains its certificate ([details](../installation/reverse-proxy.md#on-an-existing-install)) |
-| `docs [DOMAIN]` | Builds this manual and serves it on its own domain ([details](../installation/server.md#serving-the-manual)) |
+| `nginx [<DOMAIN>]` | Renders the nginx site again and reattaches or obtains its certificate ([details](../installation/reverse-proxy.md#on-an-existing-install)) |
+| `docs [<DOMAIN>]` | Builds this manual and serves it on its own domain ([details](../installation/server.md#serving-the-manual)) |
 | `uninstall` | Removes the services and the install directory, with `.env` and `data/` |
 
-`uninstall` leaves the nginx sites, certificates, database and broker servers, and the service user.
+`uninstall` keeps the database and broker servers and the service user.
 
 `logs` takes:
 
@@ -58,8 +58,6 @@ For example:
 ```bash
 sudo ./manage.sh logs --unit rest --unit grpc --since "1 hour ago" --lines 200
 ```
-
-When `.env` has an invalid setting, `update` still restarts every service, then exits with an error; services that use that setting fail to start ([fix](troubleshooting.md#update-ends-with-env-has-errors)). See [Upgrading](upgrading.md).
 
 ## publisher.sh
 
@@ -78,7 +76,7 @@ Use it instead of `python3 -m publisher`: run as another user, the CLI can leave
 | Path | Holds |
 | --- | --- |
 | `/opt/relaysms/relaysms-publisher/` | The install |
-| `.env` | Settings (`root:<service user>`, mode 640) |
+| `.env` | Settings (`root:<SERVICE_USER>`, mode 640) |
 | `data/` | SQLite database, Celery files and adapters (owned by the service user, mode 750) |
 | `/etc/systemd/system/relaysms-publisher*` | Service units |
-| `/etc/nginx/sites-available/<domain>.conf` | nginx sites |
+| `/etc/nginx/sites-available/<DOMAIN>.conf` | nginx sites |

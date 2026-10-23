@@ -12,7 +12,7 @@ The REST API and the email listener queue publications for the Celery worker thr
 
 ## RabbitMQ
 
-A setup script installs RabbitMQ, creates a vhost and user, and writes the broker settings to `.env`:
+A setup script installs RabbitMQ, creates a vhost and user, and writes the broker settings to `.env`.
 
 During install:
 

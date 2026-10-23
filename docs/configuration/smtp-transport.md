@@ -33,8 +33,6 @@ You should see `Connected to mailbox <SMTP_IMAP_SERVER>`.
 4. Queues the payload for publication, tagged with protocol `smtp`. Whether offline payloads from email publish depends on [offline publishing](offline-publishing.md).
 5. Deletes each handled email. An email that hits an unexpected error stays in the folder and is retried on the next cycle.
 
-The `relaysms-publisher-smtp` service exits at once while `SMTP_TRANSPORT_ENABLED` is off.
-
 ### Allowlist
 
 `SMTP_ALLOWED_SENDERS` lists exact addresses and domains, comma-separated. Empty allows nothing.
@@ -44,7 +42,7 @@ The `relaysms-publisher-smtp` service exits at once while `SMTP_TRANSPORT_ENABLE
 
 ### Authentication
 
-The listener can't re-check SPF, which needs the sender's IP. It reads the `Authentication-Results` header ([RFC 8601](https://www.rfc-editor.org/rfc/rfc8601)) that the mailbox's own server added, and only from the `authserv-id` in `SMTP_TRUSTED_AUTHSERV_ID`, since a sender can forge such a header from anyone else. `SMTP_REQUIRE_DKIM` and `SMTP_REQUIRE_SPF` choose the verdicts required. `SMTP_VERIFY_DKIM_INDEPENDENTLY=true` also re-verifies the DKIM signature against DNS.
+The listener can't re-check SPF, which needs the sender's IP. It reads the `Authentication-Results` header ([RFC 8601](https://www.rfc-editor.org/rfc/rfc8601)) that the mailbox's own server added, and only from the `authserv-id` in `SMTP_TRUSTED_AUTHSERV_ID`, since a sender can forge such a header from anyone else.
 
 ## Message format
 
@@ -64,4 +62,6 @@ The body of each email must be a JSON object:
 | `dialing_code` | string | No | Sender's country calling code, for publication stats |
 | `text` | string | Yes | Base64-encoded serialized payload |
 
-Next: [Offline publishing](offline-publishing.md).
+## Next steps
+
+To publish offline payloads that arrive by email, allow `smtp` in [Offline publishing](offline-publishing.md).

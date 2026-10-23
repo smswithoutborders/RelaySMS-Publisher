@@ -6,7 +6,7 @@ Start with the logs of the service involved:
 sudo ./manage.sh logs --unit <SERVICE> --since "1 hour ago"
 ```
 
-`<SERVICE>` is `rest`, `grpc`, `worker`, `beat` or `smtp`.
+`<SERVICE>` is one of the [units `logs` takes](services.md#managesh).
 
 ## Services
 
@@ -40,7 +40,7 @@ The container applies migrations before the services start. Wait, or follow `doc
 | --- | --- |
 | `Published via '<PLATFORM>'.` | It worked |
 | `Failed to process payload: ...` | The payload didn't decrypt or validate, its keys are unknown or used up, or offline publishing refused it ([Offline publishing](../configuration/offline-publishing.md)) |
-| `Failed to publish message: Adapter error: ...` | The platform refused it; the rest of the line is the adapter's reason |
+| `Failed to publish message: Adapter error: ...` | The platform refused it; the rest of the line is the adapter's reason. Fix it with the platform's [provider guide](../platforms/manage.md#provider-guides), then the user sends the same SMS again. |
 | `Session <ID> can't be assembled from <N> segment(s): ...` | A multi-part payload's segments don't fit together |
 | `An unexpected error occurred during task processing.` | A bug; the traceback follows. [Report it](https://github.com/smswithoutborders/RelaySMS-Publisher/issues). |
 | No line at all | The worker isn't running (`sudo ./manage.sh status`), or a multi-part payload is still waiting for its other segments, for up to `PAYLOAD_SESSION_MAX_AGE_HOURS` |
@@ -50,6 +50,23 @@ The container applies migrations before the services start. Wait, or follow `doc
 ### Linking an account fails
 
 Check the adapter shows ✓ under Configured in `sudo ./publisher.sh platforms list`, then see its [provider guide](../platforms/manage.md#provider-guides)'s troubleshooting.
+
+## Relay
+
+### An SMS was sent, but the worker logs nothing
+
+Check that the relay received it:
+
+- With Deku SMS, the phone is online and Deku SMS is its default SMS app.
+- With Twilio, follow the relay's log (`sudo journalctl -u relaysms-gatewayclient-twilio`) and Twilio's error log, under Monitor > Logs > Errors in the Twilio console.
+
+### The Twilio relay answers `403` `Invalid Twilio signature.`
+
+The webhook URL in the Twilio console doesn't match the URL the relay sees, scheme and host included. Set it to the relay's exact `https://` URL.
+
+### The Twilio relay answers `502` `Forwarding failed.`
+
+A `FORWARD_URLS_JSON` URL refused the payload or couldn't be reached; the relay's log names it. Check that `https://<HOST>/v1/publications` answers from the relay's host.
 
 ## REST API
 
@@ -71,7 +88,7 @@ The web client's origin is neither the API's own nor listed in `AUTH_WEB_ORIGINS
 
 ### `Too many requests. Please try again shortly.`
 
-nginx allows 5 logins a minute per IP address, and 30 HTTP Basic requests a minute per IP address to `/v1/stats`, `/v1/auth` and `/v1/creds`. Wait a minute and try again.
+nginx rate-limits logins and HTTP Basic requests ([limits](credentials.md#logging-in)). Wait a minute and try again.
 
 ## nginx
 

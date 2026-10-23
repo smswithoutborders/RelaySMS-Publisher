@@ -1,15 +1,13 @@
 # REST API
 
-The REST API serves platform, gateway client and server key metadata, accepts encrypted payloads for publishing, and lets credentials read stats, manage credentials and read the audit log.
+The REST API accepts payloads from gateway clients, serves public lists, and has the admin endpoints.
 
 The endpoint reference is [openapi.json](../openapi.json), generated from the app. Open it in any OpenAPI viewer, or set `API_DOCS_ENABLED=true` on a development server and browse `/docs`.
-
-This page covers what the reference doesn't show well.
 
 ## Base URL
 
 ```
-https://<host>/v1
+https://<HOST>/v1
 ```
 
 `/health` is the only endpoint outside `/v1`.
@@ -48,13 +46,13 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 ## Publishing
 
-`POST /v1/publications` takes JSON and tags payloads with protocol `https`. It needs no credentials: a payload publishes only if it decrypts with the keys of a linked account or, for an offline payload, passes the [offline publishing](../configuration/offline-publishing.md) rules. See [offline publishing](../configuration/offline-publishing.md) for how the protocol and `tag` decide whether offline payloads publish.
+`POST /v1/publications` takes JSON and tags payloads with protocol `https`. It needs no credentials: a payload publishes only if it decrypts with the keys of a linked account or, for an offline payload, passes the [offline publishing](../configuration/offline-publishing.md) rules.
 
 It only checks the payload's structure before queueing it. Decryption, payload type and adapter errors happen later, so they're logged on the server, not returned.
 
 ## Errors
 
-Error bodies are `{"error": "<message>"}`. The message is meant to be shown to users; the server logs more detail.
+Error bodies are `{"error": "<MESSAGE>"}`. The message is meant to be shown to users; the server logs more detail.
 
 | Status | Meaning |
 | :--- | :--- |
@@ -66,5 +64,5 @@ Error bodies are `{"error": "<message>"}`. The message is meant to be shown to u
 | `412 Precondition Failed` | `If-Match` doesn't match the current `ETag`; reload and retry |
 | `422 Unprocessable Entity` | Validation error |
 | `428 Precondition Required` | `If-Match` header missing |
-| `429 Too Many Requests` | Rate limited (login and Basic auth) |
+| `429 Too Many Requests` | Rate limited by nginx ([limits](../operating/credentials.md#logging-in)) |
 | `500 Internal Server Error` | Unexpected server error |

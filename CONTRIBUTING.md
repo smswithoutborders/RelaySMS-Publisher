@@ -176,7 +176,7 @@ Common types are `feat`, `fix`, `refactor`, `test`, `docs`, `build`, `ci` and `c
 - [ ] The PR targets `staging` and does one thing.
 - [ ] `make check` and `make test` pass locally.
 - [ ] New behavior and bug fixes come with tests. A bug fix has a test that fails without it.
-- [ ] Docs, `template.env` and the README are updated if behavior, settings or commands changed.
+- [ ] The manual in `docs/` and `template.env` are updated if behavior, settings or commands changed.
 - [ ] Schema changes include a migration, and a commit message with `[migrate]`.
 - [ ] The description says what changed, why, and how it was tested. Link the issue with `Closes #123`.
 - [ ] Anything operators must do on deploy is called out.
@@ -293,7 +293,7 @@ make build test PYTHON=.venv312/bin/python
 ### Add a setting
 
 1. Add the field to its section in `publisher/config.py` and read it in that section's `load`.
-2. Add it, commented, to `template.env` and to the Configuration section of the README.
+2. Add it, commented, to `template.env` and to [docs/configuration/settings.md](docs/configuration/settings.md); a test fails until both list it.
 3. Check validation with `python -m publisher config check`, and add a test in `tests/test_config.py`.
 
 ### Change the database schema
@@ -340,7 +340,8 @@ The manual in `docs/` is an [mdBook](https://rust-lang.github.io/mdBook/) that r
 - List a new page in `docs/SUMMARY.md`, or the book leaves it out.
 - Link pages in `docs/` relatively, and files outside it by their full GitHub URL, since the book only has `docs/`.
 - Draw diagrams as `mermaid` code blocks.
-- Start a task page with its requirements, and end it with a link to the next step when that isn't the following page.
+- Say "web client" and "public", and use `publisher.example.com`, `example.com` and `+237600000000` in examples. Keep GitHub alerts for what readers must not miss.
+- Start a task page with its requirements. End a page that points onward with a `## Next steps` section of one or two linked sentences or a short list; skip it when the book's next page is the only next step.
 - Use tables for reference data, numbered steps for procedures, and one heading per symptom for troubleshooting.
 - Write plainly and briefly in US English, one paragraph per line, with sentence-case headings and `<UPPER_SNAKE>` placeholders.
 

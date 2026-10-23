@@ -1,4 +1,4 @@
-# Reference Client
+# Reference client
 
 `tools/client.py` drives the gRPC and REST flows by hand, the way a phone app would. It keeps tokens and key pools in `tools/db.json` between runs.
 
@@ -14,7 +14,7 @@ python -m tools.client <COMMAND> [ARGS]
 | `--host`, `--port` | `127.0.0.1`, `6000` | gRPC server |
 | `--tls` | off | Use TLS for gRPC |
 | `--rest-api` | `http://localhost:16000` | REST API base URL |
-| `--platform`, `-p` | None | Platform name, such as `gmail` or `telegram` |
+| `--platform`, `-p` | None | Platform name, such as `gmail` |
 | `--phone-number` | None | Phone number, for phone number-based authentication (PNBA), such as for Telegram |
 | `--request-identifier` | None | Optional request identifier |
 
@@ -33,24 +33,24 @@ python -m tools.client <COMMAND> [ARGS]
 ```bash
 python -m tools.client get-oauth2-url --platform gmail
 python -m tools.client exchange-oauth2-code --platform gmail --code <AUTH_CODE>
-python -m tools.client get-pnba-code --platform telegram --phone-number +237123456789
-python -m tools.client exchange-pnba-code --platform telegram --phone-number +237123456789 --code <OTP>
+python -m tools.client get-pnba-code --platform telegram --phone-number +237600000000
+python -m tools.client exchange-pnba-code --platform telegram --phone-number +237600000000 --code <OTP>
 ```
 
 With several stored tokens, `sync-keys` and the revoke commands ask which one to use. Pass `--token` to choose up front.
 
 ## Publishing
 
-`send` encrypts a message and posts it to `POST /v1/publications` with `--address` as the sender. Without an attachment it's one request; with one, the payload is split into SMS-sized segments sent `--interval` seconds apart.
+`send` encrypts a message and posts it to `POST /v1/publications` with `--address` as the sender. With an attachment, the payload is split into SMS-sized segments sent `--interval` seconds apart.
 
 ```bash
-python -m tools.client send --platform gmail --address +237123456789 \
+python -m tools.client send --platform gmail --address +237600000000 \
     --to friend@example.com --subject "Hello" --body "Test message"
 
-python -m tools.client send --platform gmail --address +237123456789 \
+python -m tools.client send --platform gmail --address +237600000000 \
     --to friend@example.com --subject "Hello" --body "See attached" --attachment ./file.pdf --interval 2.5 --shuffle
 
-python -m tools.client send --offline --platform rmail --address +237123456789 \
+python -m tools.client send --offline --platform rmail --address +237600000000 \
     --to friend@example.com --subject "Hello" --body "No token needed" --tag <SECRET>
 ```
 

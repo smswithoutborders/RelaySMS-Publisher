@@ -7,7 +7,9 @@ A backup is:
 - **A dump of the database**, with MySQL or PostgreSQL.
 - **Any file `.env` points to outside `data/`**, such as `GRPC_TLS_CERT_FILE` or `SMTP_TLS_CLIENT_KEY`.
 
-The installer recreates the nginx sites, certificates and service units, so `/etc` needs no backup.
+The installer recreates the service units, and the nginx sites and certificates for the domains you pass it, so `/etc` needs no backup. If you run the [Twilio relay](../gateway-clients/connect-a-relay.md#twilio), back up its `.env` too: its `SENDER_HASH_KEY` keeps senders' hashes the same.
+
+Copy the archives off the host, and test a restore on a spare machine now and then.
 
 > [!CAUTION]
 > Store the `.env` archive apart from the data. Anyone with both can read the linked accounts' tokens.
@@ -86,4 +88,4 @@ For a database on another host, or named differently in `.env`, connect with the
 
 ## Next steps
 
-[Check that the services are up](services.md#is-it-working).
+After a restore, [check that the services are up](services.md#is-it-working).

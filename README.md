@@ -1,148 +1,33 @@
 # RelaySMS Publisher
 
-Publishes to online platforms (Gmail, X, Telegram and more) from content sent by SMS, so people can post without an internet connection.
+Publishes to online platforms, such as Gmail, from content people send by SMS, so they can post without an internet connection. See [how it works](docs/README.md#how-it-works).
 
-## Contents
+## Install
 
-- [How it works](#how-it-works)
-- [Requirements](#requirements)
-- [Install on a server](#install-on-a-server)
-- [Manage the services](#manage-the-services)
-- [Run with Docker](#run-with-docker)
-- [Development](#development)
-- [Configuration](#configuration)
-- [Platform adapters](#platform-adapters)
-- [Gateway clients](#gateway-clients)
-- [Credentials](#credentials)
-- [Documentation](#documentation)
-- [License](#license)
+On Ubuntu 24.04 or Debian 13:
 
-## How it works
+```bash
+curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh \
+  | sudo bash
+```
 
-1. A user links an account (Gmail, X, ...) through the gRPC API, which stores its token encrypted.
-2. Offline, the user's app encrypts the content and sends it by SMS to a gateway client: a phone number that relays SMS to this server.
-3. The payload arrives over REST or SMTP and is queued.
-4. A Celery worker decrypts it and publishes it through the platform's adapter.
+[Install on a server](docs/installation/server.md) covers the installer's options and the steps after it. To try it on your machine with Docker first, follow the [quick start](docs/getting-started/quick-start.md).
 
-## Requirements
+## Documentation
 
-- Ubuntu 24.04 or Debian 13
-- Python 3.12 or newer
-- A database: SQLite (the default), MySQL 8.0.28 or newer, MariaDB, or PostgreSQL 12 or newer
+The [manual](docs/README.md) starts with:
 
-The installer sets up everything else, including the system packages and Rust.
+- [Quick start](docs/getting-started/quick-start.md)
+- [Settings reference](docs/configuration/settings.md)
+- [Managing adapters](docs/platforms/manage.md) and the [provider guides](docs/platforms/manage.md#provider-guides)
+- [Connecting a relay](docs/gateway-clients/connect-a-relay.md)
+- [Troubleshooting](docs/operating/troubleshooting.md)
 
-## Install on a server
+`sudo ./manage.sh docs <DOMAIN>` serves the manual from your own server.
 
-1. Run the installer. It installs to `/opt/relaysms/relaysms-publisher`, generates the encryption keys and starts the services under systemd:
+## Contributing
 
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | sudo bash
-   ```
-
-   It asks about each option you don't pass as a flag. To choose up front, pass flags after `bash -s --`:
-
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publisher/main/install.sh | \
-     sudo bash -s -- --site-name publisher.example.com --setup-db postgres
-   ```
-
-   | Flag | Does |
-   | --- | --- |
-   | `--site-name DOMAIN` | Puts nginx with a Let's Encrypt certificate in front; `--skip-nginx` skips it |
-   | `--setup-db mysql\|postgres` | Installs the database server and writes its details to `.env` ([details](docs/installation/database.md)) |
-   | `--setup-broker rabbitmq` | Uses RabbitMQ instead of SQLite as the Celery broker, for heavier load ([details](docs/installation/celery-broker.md)) |
-   | `--docs-site-name DOMAIN` | Serves the manual in `docs/` on its own domain, rebuilt by every `manage.sh update` |
-   | `--setup-observability` | Adds SigNoz and Uptime Kuma ([details](docs/operating/observability.md)) |
-   | `--install-dir PATH`, `--instance-name NAME` | Installs elsewhere, or a second copy on the same host ([details](docs/installation/multiple-instances.md)) |
-
-   `install.sh --help` lists every flag.
-
-2. Go to the install directory and check the configuration:
-
-   ```bash
-   cd /opt/relaysms/relaysms-publisher
-   sudo ./manage.sh check
-   ```
-
-3. Create an administrator credential for the REST API:
-
-   ```bash
-   sudo ./publisher.sh creds create --username ops --administrator
-   ```
-
-   > [!IMPORTANT]
-   > The password is printed only once.
-
-4. Add the platform adapters you want to offer, then configure each with its [provider guide](docs/platforms/manage.md#provider-guides):
-
-   ```bash
-   sudo ./publisher.sh platforms add https://github.com/smswithoutborders/gmail-oauth2-adapter
-   ```
-
-5. Register the gateway clients that relay SMS to this server:
-
-   ```bash
-   sudo ./publisher.sh gateway-clients create --msisdn +237123456789 --protocols https
-   ```
-
-6. Check that the services are up:
-
-   ```bash
-   sudo ./manage.sh status
-   curl http://127.0.0.1:16000/health
-   ```
-
-[Installation](docs/installation/server.md) covers the installer, installing by hand, databases and nginx.
-
-## Manage the services
-
-From the install directory:
-
-| Command | Does |
-| --- | --- |
-| `sudo ./manage.sh status` | Show each service's state |
-| `sudo ./manage.sh logs` | Follow the service logs |
-| `sudo ./manage.sh start`, `stop`, `restart` | Control every service together |
-| `sudo ./manage.sh enable`, `disable` | Start the services on boot, or stop doing so |
-| `sudo ./manage.sh update` | Pull the latest code, rebuild and restart; add `--migrate` when the release has migrations |
-| `sudo ./manage.sh migrate` | Apply database migrations |
-| `sudo ./manage.sh check` | Report every missing or invalid setting |
-| `sudo ./manage.sh nginx [DOMAIN]` | Re-render the nginx site and reattach or obtain its certificate |
-| `sudo ./manage.sh docs [DOMAIN]` | Build the manual and serve it on its own domain |
-| `sudo ./manage.sh uninstall` | Remove the services and the install directory |
-
-See [Services](docs/operating/services.md) for log filters and what `update` and `nginx` do.
-
-## Run with Docker
-
-1. Clone the repository with its submodule:
-
-   ```bash
-   git clone --recurse-submodules https://github.com/smswithoutborders/RelaySMS-Publisher.git
-   cd RelaySMS-Publisher
-   ```
-
-2. Create `.env` with fresh encryption keys:
-
-   ```bash
-   make .env
-   ```
-
-3. Build and start:
-
-   ```bash
-   docker compose up -d --build
-   ```
-
-The container applies pending migrations, then starts every service. It listens on `PORT` (16000) and `GRPC_PORT` (6000) from `.env`, and keeps its data in `./data`.
-
-> [!CAUTION]
-> Back up `.env` with `./data`: its [encryption keys](docs/configuration/encryption-keys.md) are the only way to read the data.
-
-## Development
-
-[CONTRIBUTING.md](CONTRIBUTING.md) walks through setting up, running the services locally, testing and making common changes. In short:
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup, running the services locally, testing and the workflow. To start:
 
 ```bash
 git clone --recurse-submodules https://github.com/smswithoutborders/RelaySMS-Publisher.git
@@ -150,53 +35,12 @@ cd RelaySMS-Publisher
 make setup
 ```
 
-Then follow [Run locally](CONTRIBUTING.md#run-locally). To fill a local database with sample data:
+Adapters are built with the [adapter SDK](sdk/README.md).
 
-```bash
-source venv/bin/activate
-python -m publisher seed stats --count 5000 --days 90   # publication stats
-python -m publisher seed creds --count 5                # credentials; prints their passwords
-python -m publisher seed platforms                      # adapter rows, without their files
-python -m publisher seed gateway-clients --count 10     # gateway clients, some disabled
-```
+## Security
 
-## Configuration
-
-Settings live in `.env`. The [settings reference](docs/configuration/settings.md) lists each one, and `sudo ./manage.sh check` reports any that are missing or invalid.
-
-## Platform adapters
-
-Each platform is served by an adapter installed from its own repository. `GET /v1/platforms` lists the enabled ones.
-
-- [Gmail](https://github.com/smswithoutborders/gmail-oauth2-adapter)
-- [X (formerly Twitter)](https://github.com/smswithoutborders/twitter-oauth2-adapter)
-- [Telegram](https://github.com/smswithoutborders/telegram-pnba-adapter)
-- [Slack](https://github.com/smswithoutborders/slack-oauth2-adapter)
-- [Bluesky](https://github.com/smswithoutborders/bluesky-oauth2-adapter)
-- [Mastodon](https://github.com/smswithoutborders/mastodon-oauth2-adapter)
-
-[Managing adapters](docs/platforms/manage.md) covers adding, updating, disabling and removing adapters, and links a guide for each.
-
-## Gateway clients
-
-Gateway clients are the phone numbers that relay SMS to this server. `GET /v1/gateway-clients` lists the enabled ones, and [docs/gateway-clients/manage.md](docs/gateway-clients/manage.md) covers managing them.
-
-## Credentials
-
-Credentials log in to the REST API's admin endpoints, each with its own scopes. See [Credentials and access](docs/operating/credentials.md).
-
-## Documentation
-
-- [Manual](docs/README.md): installing, configuring and running the Publisher
-- [REST API](docs/reference/rest-api.md): publishing, authentication and the [OpenAPI reference](docs/openapi.json)
-- [gRPC API](docs/reference/grpc-api.md): linking accounts and syncing keys
-- [SMTP transport](docs/configuration/smtp-transport.md): publishing payloads sent by email
-- [Platform adapters](docs/platforms/manage.md): installing and managing adapters
-- [Gateway clients](docs/gateway-clients/manage.md): managing gateway clients
-- [Observability](docs/operating/observability.md): tracing, metrics, logs and uptime monitoring
-- [Reference client](docs/developers/reference-client.md): exercising the gRPC and REST flows by hand
-- [Contributing](CONTRIBUTING.md): setup, workflow, conventions and testing
+Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes.
 
 ## License
 
-Licensed under the GNU General Public License v3. See [LICENSE](LICENSE.md).
+Licensed under the GNU General Public License v3.0. See [LICENSE.md](LICENSE.md).

@@ -1,6 +1,6 @@
 # Architecture
 
-The Publisher is five services sharing one database and one Celery broker. Each platform is reached through an adapter that runs as its own process.
+The Publisher is a set of services sharing one database and one Celery broker. Each platform is reached through an adapter that runs as its own process.
 
 ```mermaid
 ---
@@ -11,33 +11,37 @@ config:
 flowchart TB
     app["RelaySMS app"]
     gateway["Gateway client"]
+    mailbox["Mailbox"]
+    platform["Online platforms"]
 
-    subgraph publisher[" "]
+    subgraph publisher["Publisher"]
         grpc["gRPC API"]
         rest["REST API"]
         smtp["Email listener"]
+        beat["Celery Beat"]
+        db[("Database")]
         broker[("Celery broker")]
         worker["Celery worker"]
-        beat["Celery Beat"]
         adapter["Adapter process"]
     end
 
-    platform["Gmail, Telegram, ..."]
-
     app -- "link an account" --> grpc
+    grpc --> adapter
     app -- "SMS" --> gateway
     gateway -- "HTTPS" --> rest
-    gateway -- "email" --> smtp
+    gateway -- "email" --> mailbox
+    mailbox -- "IMAP" --> smtp
     rest -- "queue" --> broker
     smtp -- "queue" --> broker
     beat -- "schedule cleanups" --> broker
     broker --> worker
-    grpc --> adapter
+    grpc -- "token, keys" --> db
+    db --> worker
     worker --> adapter
     adapter --> platform
 ```
 
-The shaded box is the Publisher. Every service in it also reads and writes the database.
+Every service in the Publisher also reads and writes the database.
 
 ## Services
 
@@ -53,7 +57,7 @@ The database holds linked accounts, keys, credentials, adapters, gateway clients
 
 ## Adapters
 
-Each adapter is a Python package installed from its own repository into its own virtualenv. The Publisher runs it as a separate process for each call, with a 60-second limit, and talks to it over JSON-RPC on standard input and output. It gets its own config and state directories under `data/platforms/` and a few environment variables, not the Publisher's settings, but it runs as the service user, so it can read `.env` and the database. See [Writing an adapter](../developers/writing-an-adapter.md).
+Each adapter is a Python package installed from its own repository into its own virtualenv. The Publisher runs it as a separate process for each call, with a 60-second limit, and talks to it over JSON-RPC on standard input and output. It gets its own config and state directories under `data/platforms/` and a few environment variables, not the Publisher's settings. It runs as the service user ([security model](security-model.md#adapters)). See [Writing an adapter](../developers/writing-an-adapter.md).
 
 ## A publication, step by step
 

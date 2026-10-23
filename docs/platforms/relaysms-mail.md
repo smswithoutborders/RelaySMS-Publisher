@@ -20,7 +20,7 @@ The `rmail` adapter gives each user an email alias tied to their phone number, a
 
 ## SMTP
 
-The adapter sends each message from your mailbox address over SMTP, and SimpleLogin relays it from the user's alias. Port 465 uses TLS; any other port uses STARTTLS when the server offers it.
+The adapter sends each message from your mailbox address over SMTP, and SimpleLogin relays it from the user's alias.
 
 For a Gmail mailbox, use `smtp.gmail.com`, port `465`, the Gmail address, and an [app password](https://myaccount.google.com/apppasswords), which needs 2-Step Verification on the account.
 

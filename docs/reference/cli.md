@@ -14,7 +14,7 @@ Run them with `sudo`; all but `install.sh` from the install directory. Each take
 
 ## manage.sh
 
-`status`, `logs`, `start`, `stop`, `restart`, `enable`, `disable`, `update`, `migrate`, `check`, `nginx`, `docs`, `uninstall`. See [Services](../operating/services.md#managesh).
+See [Services](../operating/services.md#managesh).
 
 ## publisher.sh
 

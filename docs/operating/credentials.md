@@ -49,6 +49,6 @@ Prefix each with `sudo ./publisher.sh`. Credentials with `creds:write` can do th
 - **Web session:** `POST /v1/auth/login`, then send the session cookie with every request (`credentials: "include"` in `fetch`). Logins and writes (`POST`, `PATCH`, `DELETE`) with the cookie must come from the API's own origin or one listed in `AUTH_WEB_ORIGINS`, on the same site as the API. A session ends after `AUTH_SESSION_IDLE_MINUTES` idle (30) or `AUTH_SESSION_MAX_HOURS` (12).
 - **HTTP Basic:** the username and password on every request, such as `curl -u analyst:<PASSWORD> https://<HOST>/v1/stats/publications`.
 
-Scope changes apply on the credential's next request. nginx allows 5 logins a minute per IP address, and 30 HTTP Basic requests a minute per IP address to `/v1/stats`, `/v1/auth` and `/v1/creds`.
+Scope changes apply on the credential's next request. nginx allows 5 logins a minute per IP address, and 30 HTTP Basic requests a minute per IP address.
 
 Settings: [REST API access](../configuration/settings.md#rest-api-access).

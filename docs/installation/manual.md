@@ -81,4 +81,6 @@ These are the steps the [installer](server.md) runs, for when you need to change
    systemctl enable --now relaysms-publisher.target
    ```
 
-Then set up [nginx and TLS](reverse-proxy.md) and continue with [After installing](server.md#after-installing).
+## Next steps
+
+Set up [nginx and TLS](reverse-proxy.md#by-hand), then continue with [After installing](server.md#after-installing).

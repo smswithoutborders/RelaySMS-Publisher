@@ -13,7 +13,7 @@ Settings live in `.env` in the install directory. `template.env` lists each one 
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | REST API address. Docker always binds `0.0.0.0`. |
 | `PORT` | `16000` | REST API port |
-| `WORKERS` | None | REST API worker processes: `1` by default under `scripts/run.sh`, `4` on Docker. The server install always runs `4`. |
+| `WORKERS` | None | REST API worker processes: `1` by default under `scripts/run.sh`, `4` on Docker and server installs |
 | `GRPC_HOST` | `127.0.0.1` | gRPC address. Docker always binds `0.0.0.0`. |
 | `GRPC_PORT` | `6000` | gRPC port |
 | `GRPC_MAX_WORKERS` | `10` | gRPC worker threads |
@@ -109,9 +109,7 @@ See [Managing adapters](../platforms/manage.md#files). Relative paths are from t
 | `PLATFORMS_ADAPTERS_VENV_DIR` | `data/platforms/venvs` | Directory for adapters' virtualenvs |
 | `PLATFORMS_ADAPTERS_CONFIG_DIR` | `data/platforms/config` | Directory for adapters' `credentials.json` files |
 | `PLATFORMS_ADAPTERS_STATE_DIR` | `data/platforms/state` | Directory for files adapters write, such as databases |
-| `PLATFORMS_GITHUB_ORGS` | None | Comma-separated GitHub orgs that administrators may install and update adapters from over the REST API |
-
-With `PLATFORMS_GITHUB_ORGS` empty, the REST API refuses to install or update adapters; `publisher.sh platforms` is unaffected.
+| `PLATFORMS_GITHUB_ORGS` | None | Comma-separated GitHub orgs that administrators may install and update adapters from over the REST API. Empty refuses REST installs; `publisher.sh platforms` is unaffected. |
 
 ## REST API access
 

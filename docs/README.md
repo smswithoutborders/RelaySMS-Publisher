@@ -1,6 +1,6 @@
 # RelaySMS Publisher
 
-The Publisher posts to online platforms (Gmail, Telegram, Mastodon and more) from content people send by SMS, so they can publish without an internet connection.
+Publishes to online platforms, such as Gmail, from content people send by SMS, so they can post without an internet connection.
 
 ## How it works
 
@@ -13,28 +13,36 @@ config:
 flowchart TB
     app["RelaySMS app"]
     gateway["Gateway client"]
-    platform["Gmail, Telegram, ..."]
+    mailbox["Mailbox"]
+    platform["Online platforms"]
 
-    subgraph publisher[" "]
+    subgraph publisher["Publisher"]
         grpc["gRPC API"]
         rest["REST API"]
         smtp["Email listener"]
+        db[("Database")]
         worker["Celery worker"]
         adapter["Platform adapter"]
+        %% Keeps the title clear of the arrows entering the box.
+        spacer[" "]:::hidden
+        spacer ~~~ worker
     end
 
     app -- "link an account, online" --> grpc
     app -- "encrypted SMS" --> gateway
     gateway -- "HTTPS" --> rest
-    gateway -- "email, via a mailbox" --> smtp
+    gateway -- "email" --> mailbox
+    mailbox -- "IMAP" --> smtp
+    grpc -- "token, keys" --> db
+    db --> worker
     rest --> worker
     smtp --> worker
     grpc --> adapter
     worker --> adapter
     adapter --> platform
-```
 
-The shaded box is the Publisher.
+    classDef hidden fill:none,stroke:none
+```
 
 1. While online, a user links an account through the gRPC API. The Publisher stores its token encrypted.
 2. Offline, the app encrypts the content and sends it by SMS to a gateway client, a phone number that relays SMS.
@@ -43,11 +51,11 @@ The shaded box is the Publisher.
 
 ## Key terms
 
-- **Gateway client**: a phone number that relays SMS to the Publisher, from an Android phone running Deku SMS or from Twilio. See [Connecting a relay](gateway-clients/connect-a-relay.md).
+- **Gateway client**: a phone number that relays SMS to the Publisher, such as an Android phone running Deku SMS. See [Connecting a relay](gateway-clients/connect-a-relay.md).
 - **Adapter** (platform adapter): the plugin that publishes to one platform, such as Gmail, installed from its own repository. See [Managing adapters](platforms/manage.md).
 - **Linked account**: a user's account on a platform, authorized once while online. The Publisher stores its token encrypted.
-- **OAuth2 and PNBA**: the two ways an account links. OAuth2 goes through the platform's consent page (Gmail, Mastodon, Bluesky). Phone number-based authentication (PNBA) uses a code sent to the user's phone (Telegram, RelaySMS Mail).
-- **Offline payload**: content sent without a linked account, published through [RelaySMS Mail](platforms/relaysms-mail.md).
+- **OAuth2 and PNBA**: how accounts link. OAuth2 goes through the platform's consent page, as for Gmail. Phone number-based authentication (PNBA) uses a code sent to the user's phone, as for Telegram. The [provider guides](platforms/manage.md#provider-guides) give each platform's protocol.
+- **Offline payload**: content sent without a linked account, published through [RelaySMS Mail](platforms/relaysms-mail.md). See [Offline publishing](configuration/offline-publishing.md).
 
 The [glossary](reference/glossary.md) defines the rest, and [Architecture](explanation/architecture.md) shows every component.
 

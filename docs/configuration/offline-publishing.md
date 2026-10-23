@@ -1,13 +1,11 @@
 # Offline publishing
 
-Use this to let people send email through [RelaySMS Mail](../platforms/relaysms-mail.md) without linking an account first. Payloads from linked accounts, such as Gmail ones, need none of these settings. An offline payload carries no linked account: the app encrypts it to the server's identity key, and the Publisher publishes it through the RelaySMS Mail adapter (`rmail`), which must be installed. Anyone who can reach an allowed protocol can send one.
+Offline payloads let people send email through [RelaySMS Mail](../platforms/relaysms-mail.md) without linking an account; linked accounts need none of this ([settings](settings.md#offline-publishing)). The app encrypts an offline payload to the server's identity key, and the Publisher publishes it through the `rmail` adapter, which must be installed. Anyone who can reach an allowed protocol can send one.
 
 Each payload is tagged with the protocol it arrived on:
 
 - `https`: [REST `POST /v1/publications`](../reference/rest-api.md#publishing)
 - `smtp`: the [SMTP transport](smtp-transport.md)
-
-Settings: [Offline publishing](settings.md#offline-publishing).
 
 - An offline payload from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is discarded.
 - An offline payload over `https` must carry `OFFLINE_PUBLISH_SHARED_SECRET` in the request's `tag` field, or it's discarded.
@@ -30,6 +28,6 @@ Settings: [Offline publishing](settings.md#offline-publishing).
    sudo ./manage.sh restart
    ```
 
-4. Give the secret to each gateway client that posts to `POST /v1/publications`, to send as `tag`.
+## Next steps
 
-For a Twilio number, [RelaySMS-GatewayClient-Twilio](https://github.com/smswithoutborders/RelaySMS-GatewayClient-Twilio) can post to this server: set its `FORWARD_URLS_JSON` to `https://<host>/v1/publications` and `FORWARD_TAG` to the secret.
+[Connect each relay](../gateway-clients/connect-a-relay.md) that posts over `https` with the secret as its `tag` (`FORWARD_TAG` for Twilio).
