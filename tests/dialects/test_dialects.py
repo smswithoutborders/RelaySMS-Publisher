@@ -4,16 +4,20 @@
 import datetime
 import hashlib
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import LargeBinary, select, text
+from sqlalchemy import LargeBinary, func, select, text
 from sqlalchemy.dialects import mysql
 from sqlalchemy.exc import IntegrityError
 
-from publisher import credentials, db, keys
+from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
+from publisher import credentials, db, keys, publications
 from publisher.credentials import CredentialConflictError, CredentialExistsError
 from publisher.db import Base, pagination
 from publisher.models import audit_event, publication_stats
@@ -23,6 +27,8 @@ from publisher.models import token as tokens
 from publisher.models import token_hash as token_hashes
 from publisher.models.audit_event import AuditAction
 from publisher.models.credential import ALL_SCOPES
+from publisher.models.payload_segment import PayloadSegment
+from publisher.models.payload_session import PayloadSession
 from publisher.models.platform_adapter import PlatformAdapter
 from publisher.models.publication_stats import PublicationStats, StatsFilters
 from publisher.models.server_identity_key import get_private_key, get_public_keys
@@ -293,3 +299,62 @@ def test_audit_details_keep_json_and_unicode():
         page = audit_event.list_events(session, scopes=ALL_SCOPES, limit=10)
 
     assert [event.details for event in page.items] == [details]
+
+
+def _segments() -> list[str]:
+    payload = rrs.V1Payloads(
+        contents=b"x" * 1000, k_id=5, len_att=600, t_id=7, sess_id=9
+    )
+    return [segment.decode() for segment in payload.split(rrs.Transports.SMS)]
+
+
+def _store_segment(session, sms: str):
+    payload_raw, raw_segment, _ = publications.validate(sms)
+    return publications._store_segment_and_try_join(
+        session, sender_id="sender", payload_raw=payload_raw, raw_segment=raw_segment
+    )
+
+
+def _store_both(first: str, second: str):
+    """Store two segments in overlapping transactions, as two workers would."""
+    first_stored = threading.Event()
+
+    def store_first():
+        with db.get_session() as session:
+            result = _store_segment(session, first)
+            first_stored.set()
+            time.sleep(0.2)  # Lets the second reach the lock before this commits.
+        return result
+
+    def store_second():
+        first_stored.wait(5)
+        with db.get_session() as session:
+            return _store_segment(session, second)
+
+    with ThreadPoolExecutor(2) as pool:
+        results = pool.submit(store_first), pool.submit(store_second)
+        return tuple(result.result() for result in results)
+
+
+def test_segments_arriving_together_share_one_session():
+    first, second, *_ = _segments()
+
+    assert _store_both(first, second) == (None, None)
+
+    with db.get_session() as session:
+        assert session.scalar(select(func.count(PayloadSession.id))) == 1
+        assert session.scalar(select(func.count(PayloadSegment.id))) == 2
+
+
+def test_the_last_segments_arriving_together_are_joined():
+    *earlier, second_last, last = _segments()
+    with db.get_session() as session:
+        for segment in earlier:
+            assert _store_segment(session, segment) is None
+
+    first, second = _store_both(second_last, last)
+
+    assert first is None
+    assert second is not None
+    with db.get_session() as session:
+        assert session.scalar(select(func.count(PayloadSession.id))) == 0

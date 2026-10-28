@@ -19,11 +19,10 @@ from publisher.config import DatabaseConfig, OfflinePublishConfig
 from publisher.errors import PublisherError
 from publisher.keys import pop_token_keys
 from publisher.models import platform_adapter as platform_adapters
-from publisher.models.payload_segment import create_if_not_exists as create_segment
+from publisher.models.payload_segment import create as create_segment
 from publisher.models.payload_segment import get_all_data
-from publisher.models.payload_session import create as create_session
 from publisher.models.payload_session import delete as delete_session
-from publisher.models.payload_session import get_by_sender_and_session
+from publisher.models.payload_session import get_or_create_locked
 from publisher.models.platform_adapter import PNBA, PlatformAdapter
 from publisher.models.server_identity_key import get_private_key, mark_key_used
 from publisher.models.token import Token, update_token_data
@@ -411,12 +410,11 @@ def _store_segment_and_try_join(
 ) -> rrs.V1Payloads | None:
     sess_id = rrs.v1_get_payload_session_id(payload_raw)
 
-    payload_session = get_by_sender_and_session(session, sender_id, sess_id)
-    if payload_session is None:
-        payload_session = create_session(session, sender_id, sess_id)
-
+    payload_session = get_or_create_locked(session, sender_id, sess_id)
     create_segment(session, payload_session.id, raw_segment)
-    segment_data = get_all_data(session, payload_session.id)
+    # A segment delivered twice is stored twice, and join sizes its slots by how
+    # many segments it gets.
+    segment_data = list(dict.fromkeys(get_all_data(session, payload_session.id)))
 
     try:
         joined = rrs.V1Payloads.join(segment_data)

@@ -5,6 +5,7 @@ import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, UniqueConstraint, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from publisher.db import Base
@@ -36,19 +37,25 @@ class PayloadSession(Base):
     )
 
 
-def create(session: Session, sender_id: str, session_id: int) -> PayloadSession:
-    payload_session = PayloadSession(sender_id=sender_id, session_id=session_id)
-    session.add(payload_session)
-    session.flush()
-    return payload_session
-
-
-def get_by_sender_and_session(
+def get_or_create_locked(
     session: Session, sender_id: str, session_id: int
-) -> PayloadSession | None:
-    return session.scalar(
-        select(PayloadSession).filter_by(sender_id=sender_id, session_id=session_id)
-    )
+) -> PayloadSession:
+    """Return the payload session, locked until the transaction ends.
+
+    Segments of one payload arrive together, so their workers take turns on this
+    lock; otherwise each could miss the other's segment and none would join them.
+    It inserts before locking: on MySQL, two workers locking a missing row deadlock.
+    """
+    try:
+        with session.begin_nested():
+            session.add(PayloadSession(sender_id=sender_id, session_id=session_id))
+    except IntegrityError:
+        pass  # Another worker created it first.
+    return session.scalars(
+        select(PayloadSession)
+        .filter_by(sender_id=sender_id, session_id=session_id)
+        .with_for_update()
+    ).one()
 
 
 def delete(session: Session, payload_session: PayloadSession) -> None:

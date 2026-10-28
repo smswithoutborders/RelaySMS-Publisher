@@ -385,6 +385,16 @@ def test_attachment_is_published_once_all_segments_arrive(account, adapter, capl
     assert attached.data == PNG
 
 
+def test_a_segment_delivered_twice_is_joined_once(account, adapter):
+    contents = _encrypt(account, 5, _email(attachment=PNG))
+    texts = _sms(contents, slot=5, token_id=account.token_id, attachment=PNG, sess_id=3)
+
+    results = [_publish(text) for text in [texts[0], *texts]]
+
+    assert results[-1] == "gmail"
+    assert len(adapter.calls) == 1
+
+
 def test_offline_payload_goes_to_the_offline_adapter(test_db, adapter):
     with get_session() as s:
         keys.initialize_server_identity_keys(s)
