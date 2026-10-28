@@ -10,7 +10,7 @@ Each payload is tagged with the protocol it arrived on:
 - An offline payload from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is discarded.
 - An offline payload over `https` must carry `OFFLINE_PUBLISH_SHARED_SECRET` in the request's `tag` field, or it's discarded.
 - Leaving `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` empty, or listing `https`, without the secret fails `manage.sh check`, and the services refuse to start.
-- A discarded payload is logged and recorded as `failed` in the publication stats, with reason `protocol_not_allowed`, `offline_tag_missing` or `offline_tag_invalid`. `POST /v1/publications` still returns success, since the check runs in the queue.
+- A discarded payload is logged and recorded as `rejected` in the publication stats, with reason `protocol_not_allowed`, `offline_tag_missing` or `offline_tag_invalid`. `POST /v1/publications` still returns success, since the check runs in the queue.
 
 ## Allowing https
 

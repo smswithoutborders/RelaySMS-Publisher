@@ -25,7 +25,7 @@ You should see every service active, and `{"status":"ok"}`. To follow publicatio
 sudo ./manage.sh logs --unit worker
 ```
 
-Each published payload logs `Published via '<PLATFORM>'.`, and each failure a line starting `Failed to` ([what each means](troubleshooting.md#a-payload-is-accepted-but-never-published)). Credentials with `stats:publications:read` can also query the counts at `GET /v1/stats/publications`.
+Each published payload logs `Published via '<PLATFORM>'.`, each failure a line starting `Failed to`, and each offline refusal `Rejected payload:` ([what each means](troubleshooting.md#a-payload-is-accepted-but-never-published)). Credentials with `stats:publications:read` can also query the counts at `GET /v1/stats/publications`.
 
 ## manage.sh
 

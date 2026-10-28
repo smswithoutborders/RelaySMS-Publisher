@@ -5110,7 +5110,8 @@
           },
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "description": "published, failed, or rejected when the offline publishing settings refused it."
           },
           "country_code": {
             "anyOf": [
@@ -5133,7 +5134,7 @@
               }
             ],
             "title": "Failure Reason",
-            "description": "Why it failed, as a short code such as payload_malformed or adapter_rate_limited."
+            "description": "Why it failed or was rejected, as a short code such as payload_malformed or offline_tag_invalid."
           },
           "created_at": {
             "type": "string",

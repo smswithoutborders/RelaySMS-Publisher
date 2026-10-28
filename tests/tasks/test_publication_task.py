@@ -67,9 +67,6 @@ def _run_with_publish_error(monkeypatch, error):
     [
         (PayloadNotSupportedError("unsupported type"), "payload_not_supported"),
         (PayloadMalformedError("bad payload"), "payload_malformed"),
-        (ProtocolNotAllowedError("protocol not allowed"), "protocol_not_allowed"),
-        (OfflineTagMissingError("missing tag"), "offline_tag_missing"),
-        (OfflineTagInvalidError("invalid tag"), "offline_tag_invalid"),
         (KeyNotFoundError("Token not found"), "token_not_found"),
         (KeyUnavailableError("key used"), "key_unavailable"),
         (TokenVerificationError("unknown key"), "token_verification_failed"),
@@ -85,6 +82,23 @@ def test_pipeline_errors_are_caught_and_logged(monkeypatch, caplog, error, reaso
     kwargs = publication_task.record_publication.call_args.kwargs
     assert kwargs["status"] == "failed"
     assert kwargs["failure_reason"] == reason
+
+
+@pytest.mark.parametrize(
+    "error, reason",
+    [
+        (ProtocolNotAllowedError("protocol not allowed"), "protocol_not_allowed"),
+        (OfflineTagMissingError("missing tag"), "offline_tag_missing"),
+        (OfflineTagInvalidError("invalid tag"), "offline_tag_invalid"),
+    ],
+)
+def test_offline_refusals_are_rejected_not_failed(monkeypatch, caplog, error, reason):
+    stub = _run_with_publish_error(monkeypatch, error)
+
+    stub.send.assert_not_called()
+    assert "Rejected payload" in caplog.text
+    kwargs = publication_task.record_publication.call_args.kwargs
+    assert (kwargs["status"], kwargs["failure_reason"]) == ("rejected", reason)
 
 
 def test_a_subclass_of_a_mapped_error_keeps_its_code(monkeypatch):

@@ -81,6 +81,7 @@ def publish_message(
 ) -> None:
     """Validate and publish a payload, then record the outcome."""
     delivery = refreshed_token = None
+    status = "failed"
     try:
         # An online payload's keys are deleted and committed before the send, so a
         # crash, a redelivered task or a duplicate can't publish it twice. Clients
@@ -100,13 +101,12 @@ def publish_message(
             # Segments of a multi-part payload are still missing.
             return
         new_token = publications.send(delivery)
-    except (
-        PayloadMalformedError,
-        PayloadNotSupportedError,
-        ProtocolNotAllowedError,
-        OfflineTagError,
-        KeyManagementError,
-    ) as exc:
+    except (ProtocolNotAllowedError, OfflineTagError) as exc:
+        # The operator's offline settings refused it, so it isn't a failure.
+        logger.warning("Rejected payload: %s", exc)
+        status = "rejected"
+        platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
+    except (PayloadMalformedError, PayloadNotSupportedError, KeyManagementError) as exc:
         logger.error("Failed to process payload: %s", exc)
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
     except AdapterIntegrationError as exc:
@@ -141,7 +141,7 @@ def publish_message(
         record_publication(
             db,
             protocol=protocol,
-            status="failed",
+            status=status,
             platform_name=platform_name,
             country_code=country_code,
             failure_reason=failure_reason,

@@ -32,12 +32,12 @@ FAILURE_REASONS = (
     "token_not_found",
     "key_unavailable",
     "payload_malformed",
-    "offline_tag_invalid",
     "adapter_token_invalid",
     "adapter_rate_limited",
     "adapter_upstream",
     "unexpected_error",
 )
+REJECTION_REASONS = ("protocol_not_allowed", "offline_tag_invalid")
 FAILURE_RATE = 0.2
 DISABLED_RATE = 0.1
 BATCH_SIZE = 1000
@@ -53,16 +53,19 @@ ADAPTERS = (
 
 
 def _random_stat(now: datetime.datetime, days: int) -> dict:
-    failed = random.random() < FAILURE_RATE
+    status, reason = "published", None
+    if random.random() < FAILURE_RATE:
+        reason = random.choice(FAILURE_REASONS + REJECTION_REASONS)
+        status = "rejected" if reason in REJECTION_REASONS else "failed"
     return dict(
-        status="failed" if failed else "published",
+        status=status,
         protocol=random.choice(PROTOCOLS),
-        # Some failures happen before the platform is known.
+        # Some outcomes are decided before the platform is known.
         platform_name=(
-            None if failed and random.random() < 0.3 else random.choice(PLATFORMS)
+            None if reason and random.random() < 0.3 else random.choice(PLATFORMS)
         ),
         country_code=random.choice(COUNTRIES),
-        failure_reason=random.choice(FAILURE_REASONS) if failed else None,
+        failure_reason=reason,
         created_at=now - datetime.timedelta(seconds=random.uniform(0, days * 86400)),
     )
 

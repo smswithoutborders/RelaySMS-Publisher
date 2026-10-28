@@ -75,12 +75,16 @@ class PublicationStat(BaseModel):
     id: int
     platform_name: str | None = None
     protocol: str | None = None
-    status: str
+    status: str = Field(
+        ...,
+        description="published, failed, or rejected when the offline publishing "
+        "settings refused it.",
+    )
     country_code: str | None = None
     failure_reason: str | None = Field(
         None,
-        description="Why it failed, as a short code such as payload_malformed or "
-        "adapter_rate_limited.",
+        description="Why it failed or was rejected, as a short code such as "
+        "payload_malformed or offline_tag_invalid.",
     )
     created_at: datetime.datetime
 
