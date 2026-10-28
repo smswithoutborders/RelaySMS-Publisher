@@ -32,6 +32,7 @@ FAILURE_REASONS = (
     "token_not_found",
     "key_unavailable",
     "payload_malformed",
+    "segments_missing",
     "adapter_token_invalid",
     "adapter_rate_limited",
     "adapter_upstream",

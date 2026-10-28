@@ -2,6 +2,7 @@
 """Multi-part payloads waiting for all their segments."""
 
 import datetime
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, UniqueConstraint, select
@@ -64,12 +65,14 @@ def delete(session: Session, payload_session: PayloadSession) -> None:
     session.flush()
 
 
-def delete_stale(session: Session, older_than: datetime.datetime) -> int:
-    """Delete payload sessions created before the cutoff."""
+def delete_stale(
+    session: Session, older_than: datetime.datetime
+) -> Sequence[PayloadSession]:
+    """Delete and return payload sessions created before the cutoff."""
     stale_sessions = session.scalars(
         select(PayloadSession).where(PayloadSession.created_at < older_than)
     ).all()
     for payload_session in stale_sessions:
         session.delete(payload_session)
     session.flush()
-    return len(stale_sessions)
+    return stale_sessions

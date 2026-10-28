@@ -41,10 +41,10 @@ The container applies migrations before the services start. Wait, or follow `doc
 | `Published via '<PLATFORM>'.` | It worked |
 | `Failed to process payload: ...` | The payload didn't decrypt or validate, or its keys are unknown or used up |
 | `Rejected payload: ...` | Offline publishing refused it ([Offline publishing](../configuration/offline-publishing.md)) |
-| `Failed to publish message: Adapter error: ...` | The platform refused it; the rest of the line is the adapter's reason. Fix it with the platform's [provider guide](../platforms/manage.md#provider-guides), then the user sends the same SMS again. |
+| `Failed to publish message: Adapter error: ...` | The platform refused it; the rest of the line is the adapter's reason. Fix it with the platform's [provider guide](../platforms/manage.md#provider-guides), then the user sends the message again. |
 | `Session <ID> can't be assembled from <N> segment(s): ...` | A multi-part payload's segments don't fit together |
 | `An unexpected error occurred during task processing.` | A bug; the traceback follows. [Report it](https://github.com/smswithoutborders/RelaySMS-Publisher/issues). |
-| No line at all | The worker isn't running (`sudo ./manage.sh status`), or a multi-part payload is still waiting for its other segments, for up to `PAYLOAD_SESSION_MAX_AGE_HOURS` |
+| No line at all | The worker isn't running (`sudo ./manage.sh status`), or a multi-part payload is still waiting for its other segments, for up to `PAYLOAD_SESSION_MAX_AGE_HOURS`, then it's discarded and recorded as `failed` with reason `segments_missing` |
 
 `GET /v1/stats/publications` lists each failure and rejection with a reason code, for credentials with `stats:publications:reasons`.
 

@@ -71,6 +71,7 @@ def record(
     platform_name: str | None = None,
     country_code: str | None = None,
     failure_reason: str | None = None,
+    created_at: datetime.datetime | None = None,
 ) -> PublicationStats:
     """Record the outcome of a publish attempt."""
     stats = PublicationStats(
@@ -79,6 +80,7 @@ def record(
         platform_name=platform_name,
         country_code=country_code,
         failure_reason=failure_reason,
+        created_at=created_at,
     )
     session.add(stats)
     session.flush()

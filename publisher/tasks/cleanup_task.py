@@ -13,6 +13,7 @@ from publisher.models.credential_session import (
     delete_expired as delete_expired_credential_sessions,
 )
 from publisher.models.payload_session import delete_stale
+from publisher.models.publication_stats import record as record_publication
 from publisher.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -21,13 +22,20 @@ cleanup_config = CleanupConfig.get()
 
 @celery_app.task(name="tasks.cleanup_task.cleanup_stale_payload_sessions")
 def cleanup_stale_payload_sessions() -> None:
-    """Delete payload sessions left incomplete for longer than the max age."""
+    """Delete payload sessions incomplete past the max age, recording each as failed."""
     cutoff = utc_now() - cleanup_config.payload_session_max_age
     with get_session() as db:
-        deleted = delete_stale(db, cutoff)
+        stale = delete_stale(db, cutoff)
+        for payload_session in stale:
+            record_publication(
+                db,
+                status="failed",
+                failure_reason="segments_missing",
+                created_at=payload_session.created_at,
+            )
 
-    if deleted:
-        logger.info("Cleaned up %d stale payload session(s)", deleted)
+    if stale:
+        logger.info("Cleaned up %d stale payload session(s)", len(stale))
     else:
         logger.debug("No stale payload sessions to clean up")
 
