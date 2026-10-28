@@ -82,9 +82,9 @@ def publish_message(
     """Validate and publish a payload, then record the outcome."""
     delivery = refreshed_token = None
     try:
-        # Commits only after a successful send. A failure rolls back, so the payload's
-        # keys can be used again, and a duplicate that arrives during the send waits
-        # on their row lock.
+        # An online payload's keys are deleted and committed before the send, so a
+        # crash, a redelivered task or a duplicate can't publish it twice. Clients
+        # never reuse a key, so a failed send loses nothing they would retry with.
         with get_session() as db:
             payload_raw, raw_segment, payload_type = publications.validate(text_payload)
             delivery = publications.prepare(
@@ -96,19 +96,10 @@ def publish_message(
                 protocol=protocol,
                 tag=tag,
             )
-            if delivery is None:
-                # Segments of a multi-part payload are still missing.
-                return
-            new_token = publications.send(delivery)
-            publications.finish(db, delivery, new_token)
-            record_publication(
-                db,
-                protocol=protocol,
-                status="published",
-                platform_name=delivery.platform,
-                country_code=country_code,
-            )
+        if delivery is None:
+            # Segments of a multi-part payload are still missing.
             return
+        new_token = publications.send(delivery)
     except (
         PayloadMalformedError,
         PayloadNotSupportedError,
@@ -126,6 +117,23 @@ def publish_message(
         logger.exception("An unexpected error occurred during task processing.")
         platform_name = delivery.platform if delivery else None
         failure_reason = _failure_reason(exc)
+    else:
+        # The message is out, so failing to record it is not a failed publication.
+        try:
+            with get_session() as db:
+                publications.finish(db, delivery, new_token)
+                record_publication(
+                    db,
+                    protocol=protocol,
+                    status="published",
+                    platform_name=delivery.platform,
+                    country_code=country_code,
+                )
+        except Exception:
+            logger.exception(
+                "Published via %r but failed to record it.", delivery.platform
+            )
+        return
 
     with get_session() as db:
         if delivery and refreshed_token:

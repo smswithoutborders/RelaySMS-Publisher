@@ -7,10 +7,10 @@ The RelaySMS protocol is described in the [technical whitepaper](relaysms-whitep
 | Key | Where | Used for |
 | --- | --- | --- |
 | Server identity keys | 256 X25519 key pairs in the database | Every gRPC request and every payload; the only key for payloads sent without a linked account |
-| Ephemeral key pools | Up to 256 client public keys and 256 server key pairs per linked account | One use each, by a payload or a token check; a successful use deletes the pair |
+| Ephemeral key pools | Up to 256 client public keys and 256 server key pairs per linked account | One use each, by a payload or a token check; the pair is deleted once a payload goes to its platform or a token check passes |
 | [Encryption keys](../configuration/encryption-keys.md) | `.env` | Encrypting the private keys, the platform tokens and, with SQLite, the database file, and keying the sender hash |
 
-The app refills a linked account's pools with the gRPC `SyncKeys` call. A failed publication leaves its key pair usable, so the same SMS can publish when it's sent again. A client must never encrypt different content with a key pair it has already used.
+The app refills a linked account's pools with the gRPC `SyncKeys` call. A payload rejected before sending, for example one that fails to decrypt, leaves its key pair usable. Once a payload goes to its platform, its pair is gone even if the platform rejects it, so a payload never publishes twice. A client must never encrypt different content with a key pair it has already used.
 
 ## What travels encrypted
 

@@ -171,8 +171,7 @@ def prepare(
 ) -> Delivery | None:
     """Decrypt a payload, deleting its keys; None while segments are missing.
 
-    The deletion only sticks if the session commits, so commit it after a
-    successful send() and finish(), and roll it back otherwise.
+    Commit the session before send(), so the keys can't publish it twice.
     """
     payload = _assemble(
         session,

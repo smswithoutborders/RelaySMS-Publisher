@@ -24,6 +24,7 @@ from publisher.publications import (
     PayloadMalformedError,
     ProtocolNotAllowedError,
 )
+from publisher.tasks import publication_task
 from relaysms_adapter_sdk import Account, Message, UpstreamError
 from tests.helpers import add_adapter
 
@@ -251,21 +252,14 @@ def _prepare(text, protocol="sms"):
 
 
 def _publish(text, protocol="sms"):
-    """Publish in one transaction, as the task does; return the platform."""
-    payload_raw, raw_segment, payload_type = publications.validate(text)
+    """Prepare, send and finish, raising their errors; return the platform."""
+    delivery = _prepare(text, protocol)
+    if delivery is None:
+        return None
+    new_token = publications.send(delivery)
     with get_session() as s:
-        delivery = publications.prepare(
-            s,
-            payload_raw=payload_raw,
-            sender_id=SENDER,
-            raw_segment=raw_segment,
-            payload_type=payload_type,
-            protocol=protocol,
-        )
-        if delivery is None:
-            return None
-        publications.finish(s, delivery, publications.send(delivery))
-        return delivery.platform
+        publications.finish(s, delivery, new_token)
+    return delivery.platform
 
 
 def _slot_has_keys(account, slot):
@@ -333,18 +327,19 @@ def test_publish_saves_a_refreshed_token(account, adapter):
     assert _stored_token(account)[0]["token"] == refreshed
 
 
-def test_a_failed_send_keeps_the_keys_for_a_retry(account, adapter):
+def test_a_failed_send_uses_up_the_keys_so_the_payload_cant_publish_again(
+    account, adapter
+):
     adapter.results["send_message"] = UpstreamError("platform down")
     contents = _encrypt(account, account.slot, _email())
     [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
 
-    with pytest.raises(AdapterIntegrationError):
-        _publish(text)
-    assert _slot_has_keys(account, account.slot)
+    publication_task.publish_message(text, SENDER)
+    assert not _slot_has_keys(account, account.slot)
 
     adapter.results["send_message"] = {}
-    assert _publish(text) == "gmail"
-    assert not _slot_has_keys(account, account.slot)
+    publication_task.publish_message(text, SENDER)
+    assert len(adapter.calls) == 1
 
 
 def test_a_failed_send_still_saves_the_refreshed_token(account, adapter):
