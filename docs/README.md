@@ -5,11 +5,6 @@ Publishes to online platforms, such as Gmail, from content people send by SMS, s
 ## How it works
 
 ```mermaid
----
-config:
-  flowchart:
-    curve: linear
----
 flowchart TB
     app["RelaySMS app"]
     gateway["Gateway client"]

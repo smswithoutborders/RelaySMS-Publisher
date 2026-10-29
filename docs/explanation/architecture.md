@@ -3,11 +3,6 @@
 The Publisher is a set of services sharing one database and one Celery broker. Each platform is reached through an adapter that runs as its own process.
 
 ```mermaid
----
-config:
-  flowchart:
-    curve: linear
----
 flowchart TB
     app["RelaySMS app"]
     gateway["Gateway client"]
