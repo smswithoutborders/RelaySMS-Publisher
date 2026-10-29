@@ -7,11 +7,13 @@ import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from sqlalchemy import LargeBinary, func, select, text
 from sqlalchemy.dialects import mysql
 from sqlalchemy.exc import IntegrityError
@@ -315,25 +317,34 @@ def _store_segment(session, sms: str):
     )
 
 
-def _store_both(first: str, second: str):
-    """Store two segments in overlapping transactions, as two workers would."""
-    first_stored = threading.Event()
+def _in_overlapping_transactions(work_first, work_second):
+    """Run two functions in overlapping transactions, as two workers would."""
+    first_done, second_started = threading.Event(), threading.Event()
 
-    def store_first():
+    def run_first():
         with db.get_session() as session:
-            result = _store_segment(session, first)
-            first_stored.set()
+            result = work_first(session)
+            first_done.set()
+            assert second_started.wait(5), "the second worker never started"
             time.sleep(0.2)  # Lets the second reach the lock before this commits.
         return result
 
-    def store_second():
-        first_stored.wait(5)
+    def run_second():
+        first_done.wait(5)
+        second_started.set()
         with db.get_session() as session:
-            return _store_segment(session, second)
+            return work_second(session)
 
     with ThreadPoolExecutor(2) as pool:
-        results = pool.submit(store_first), pool.submit(store_second)
-        return tuple(result.result() for result in results)
+        return pool.submit(run_first), pool.submit(run_second)
+
+
+def _store_both(first: str, second: str):
+    futures = _in_overlapping_transactions(
+        lambda session: _store_segment(session, first),
+        lambda session: _store_segment(session, second),
+    )
+    return tuple(future.result() for future in futures)
 
 
 def test_segments_arriving_together_share_one_session():
@@ -358,3 +369,49 @@ def test_the_last_segments_arriving_together_are_joined():
     assert second is not None
     with db.get_session() as session:
         assert session.scalar(select(func.count(PayloadSession.id))) == 0
+
+
+SLOT = 20
+
+
+def _token_with_key_pools() -> tuple[int, tuple[bytes, bytes]]:
+    """Create a token with key pools, returning its hash id and SLOT's public keys."""
+    client_keys = [X25519PrivateKey.generate() for _ in range(256)]
+    client_public = [k.public_key().public_bytes_raw() for k in client_keys]
+    with db.get_session() as session:
+        keys.initialize_server_identity_keys(session)
+        token = tokens.create(session, "gmail", 0, 0, {"account_id": "a", "token": {}})
+        token_hash, _ = token_hashes.create(session, token.id)
+        server_public = keys.sync_token_pools(
+            session,
+            token_hash,
+            [
+                SimpleNamespace(key_id=i, public_key=pk)
+                for i, pk in enumerate(client_public)
+            ],
+        )
+        return token_hash.id, (server_public[SLOT], client_public[SLOT])
+
+
+def test_a_key_slot_can_be_used_once():
+    token_hash_id, public_keys = _token_with_key_pools()
+
+    with db.get_session() as session:
+        assert keys.pop_keys(session, token_hash_id, SLOT)[2:] == public_keys
+
+    with pytest.raises(keys.KeyUnavailableError), db.get_session() as session:
+        keys.pop_keys(session, token_hash_id, SLOT)
+
+
+def test_one_of_two_workers_using_a_key_slot_at_once_gets_it(caplog):
+    token_hash_id, public_keys = _token_with_key_pools()
+
+    def pop(session):
+        return keys.pop_keys(session, token_hash_id, SLOT)
+
+    first, second = _in_overlapping_transactions(pop, pop)
+
+    assert first.result()[2:] == public_keys
+    with pytest.raises(keys.KeyUnavailableError):
+        second.result()
+    assert "Server ephemeral key unavailable" in caplog.text
