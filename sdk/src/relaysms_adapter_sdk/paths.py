@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """The directories the Publisher keeps for an adapter, outside its code.
 
-Updates replace the code, so secrets go in the config directory and anything
-the adapter writes goes in the state directory.
+Secrets go in the config directory and anything the adapter writes goes in the
+state directory.
 """
 
 import json
@@ -40,9 +40,9 @@ def read_config(
 ) -> dict[str, Any]:
     """Read a JSON object from the config directory, with every key in lowercase.
 
-    So `SMTP_HOST` and `smtp_host` both read as `smtp_host`, in nested objects too.
-    Pass directory to read another adapter's file: the Publisher does, because
-    RELAYSMS_ADAPTER_CONFIG_DIR is only set inside an adapter process.
+    `SMTP_HOST` and `smtp_host` both read as `smtp_host`, in nested objects too.
+    Pass directory to read a file outside an adapter process, where
+    RELAYSMS_ADAPTER_CONFIG_DIR isn't set.
 
     Raises:
         FileNotFoundError: The file doesn't exist.
@@ -89,7 +89,7 @@ def lowercase_keys(pairs: Iterable[tuple[str, Any]]) -> dict[str, Any]:
     for key, value in pairs:
         key = key.lower()
         if key in lowered:
-            raise ValueError(f"{key!r} is set twice; keys ignore case.")
+            raise ValueError(f"{key!r} is set twice (keys ignore case).")
         lowered[key] = value
     return lowered
 

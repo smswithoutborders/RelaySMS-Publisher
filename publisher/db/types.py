@@ -26,7 +26,7 @@ def as_utc(value: datetime.datetime) -> datetime.datetime: ...
 @overload
 def as_utc(value: None) -> None: ...
 def as_utc(value: datetime.datetime | None) -> datetime.datetime | None:
-    """Naive values are assumed to be UTC."""
+    """Return value as aware UTC, treating a naive one as UTC."""
     if value is None:
         return None
     if value.tzinfo is None:
@@ -67,7 +67,7 @@ class date_bucket(FunctionElement):  # noqa: N801  (called like a SQL function)
 
 
 def _sql_string(value: str):
-    # Inlined, not bound: Postgres needs GROUP BY to match SELECT exactly.
+    # Renders the string inline so GROUP BY and SELECT match exactly on Postgres.
     return literal_column(f"'{value}'")
 
 
@@ -111,7 +111,7 @@ def _date_bucket_sqlite(element, compiler, **kw):
 
 
 def _field_encryption_key() -> bytes | None:
-    # Read on each use, so importing models does not need the database settings.
+    # Read on each use, not at import.
     database = DatabaseConfig.get()
     return database.field_encryption_key if database.field_encryption_enabled else None
 

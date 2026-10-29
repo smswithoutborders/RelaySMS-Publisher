@@ -20,7 +20,7 @@ select = [
   "D",
   "PLR6301",
 ]
-# Docstrings are only written where they add something, so none are required.
+# Docstrings are optional.
 ignore = ["D1"]
 
 [tool.ruff.lint.pydocstyle]
@@ -69,7 +69,7 @@ exclude = [
 root = "sdk"
 extraPaths = ["sdk/src", "sdk/examples/echo-adapter/src"]
 
-# A None where a test expects a value fails the test at runtime anyway.
+# Tests use Optional values without narrowing them first.
 [[tool.pyright.executionEnvironments]]
 root = "tests"
 extraPaths = ["."]
@@ -78,7 +78,7 @@ reportOperatorIssue = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Adds a results table to the GitHub Actions job summary; idle elsewhere.
+# Adds a results table to the GitHub Actions job summary when run there.
 addopts = ["-p", "tests.summary"]
 pythonpath = ["."]
 # make test-dialects and make test-e2e run these on their own.

@@ -203,7 +203,7 @@ main() {
 
   [ "$PRUNE" -eq 0 ] || prune_env_lines
   if [ "$added" -eq 0 ] && [ "$removed" -eq 0 ]; then
-    log "Nothing to change; $ENV_FILE matches the variables in $TEMPLATE_FILE."
+    log "Nothing to change: $ENV_FILE matches the variables in $TEMPLATE_FILE."
     return
   fi
   local name color=never changes="$added variable(s) added"
@@ -225,7 +225,7 @@ main() {
     case "$answer" in
     y | Y | yes | YES) ;;
     *)
-      log "Aborted; $ENV_FILE left unchanged."
+      log "Aborted: $ENV_FILE left unchanged."
       return
       ;;
     esac
@@ -234,7 +234,7 @@ main() {
   printf '%s\n' "${env_lines[@]}" >"$ENV_FILE"
   log "Updated $ENV_FILE ($changes)."
   [ "$current" = /dev/null ] ||
-    log "Previous file backed up to $ENV_FILE.bak; delete it once you've confirmed the sync looks right."
+    log "Previous file backed up to $ENV_FILE.bak. Delete it once you've confirmed the sync looks right."
 }
 
 main "$@"

@@ -5,8 +5,7 @@ set -Eeuo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/smswithoutborders/RelaySMS-Publisher.git}"
 
-# Piped through curl there is no checkout to source lib.sh from, so clone one
-# and run its install.sh with the same arguments.
+# Piped through curl: clone the repo and run its install.sh with the same arguments.
 if [ ! -f "${BASH_SOURCE[0]:-}" ]; then
   [ "$EUID" -eq 0 ] || {
     echo "Run with sudo" >&2
@@ -358,9 +357,6 @@ configure_install_dir() {
       error "--instance-name '$INSTANCE_NAME' must start with a letter/digit and contain only letters, digits, underscores, and hyphens (max 32 chars)"
   fi
 
-  # Blocks top-level dirs (so a later `rm -rf "$INSTALL_DIR"` can't wipe a
-  # system directory) and sed-special characters (which would corrupt the
-  # unit-file templating in render_units).
   [[ "$INSTALL_DIR" =~ ^(/[A-Za-z0-9_.-]+){2,}/?$ ]] ||
     error "$INSTALL_DIR is not a safe install location; use an absolute path with at least two segments, letters/digits/._- only (e.g. /opt/relaysms/relaysms-publisher)"
 
@@ -378,7 +374,7 @@ configure_install_dir() {
           error "$INSTALL_DIR is an existing install owned by service user '$existing_owner', but this run resolved to '$SERVICE_USER'. Re-run install.sh with sudo as '$existing_owner' (SERVICE_USER follows the invoking sudo user), or use --install-dir to target a different directory."
         fi
       fi
-      # manage.sh has no --instance-name flag, so persist it here for reuse.
+      # Reuses the instance name saved by an earlier install.
       local existing_instance
       existing_instance="$(read_instance_name)"
       if [ -n "$existing_instance" ]; then
@@ -402,7 +398,7 @@ configure_install_dir() {
 }
 
 # Same as prompt(), but a numbered menu instead of free text. Options are
-# "label:value" pairs; default_idx is 1-based.
+# "label:value" pairs, and default_idx is 1-based.
 # Usage: prompt_menu RESULTVAR "Question" default_idx "Label one:value1" "Label two:value2"
 prompt_menu() {
   local __resultvar="$1" question="$2" default_idx="$3"
@@ -478,7 +474,7 @@ setup_service_user() {
 
 clone_repository() {
   log "Cloning repository"
-  # -c scopes the SSH-to-HTTPS rewrite to this command, not global git config.
+  # Fetches the SSH submodule URLs over HTTPS.
   if [ -d "$INSTALL_DIR/.git" ]; then
     log "Repository exists, updating"
     cd "$INSTALL_DIR"
@@ -493,8 +489,6 @@ clone_repository() {
     git -c "url.https://github.com/.insteadOf=git@github.com:" \
       clone --recurse-submodules -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
   fi
-  # Git refuses to clone into a pre-existing non-empty dir, so this can't
-  # move earlier. $INSTALL_DIR is only guaranteed to exist past this point.
   echo "$INSTANCE_NAME" >"$INSTALL_DIR/.instance-name"
 }
 
@@ -539,7 +533,6 @@ create_app_directories() {
 
 run_config_check() {
   log "Checking configuration"
-  # config reads .env itself the same way systemd does, so it is not sourced here.
   (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
 }
 
@@ -600,7 +593,7 @@ configure_docs_site() {
 
   local site="$DOCS_SITE_NAME" interactive=0
   if [ -z "$site" ]; then
-    # Without --docs-site-name, ask only when the API has a site, since the manual's site needs nginx and certbot.
+    # Without --docs-site-name, ask only when the API has a site.
     [ -n "$SITE_NAME" ] || return 0
     interactive=1
     prompt site "Domain name to serve the manual on (e.g. docs.publisher.example.com, blank to skip): " ""
@@ -642,7 +635,7 @@ install_site() {
   fi
   case "$do_cert" in
   n | N | no | NO)
-    log "Skipping certificate issuance; run manually: certbot --nginx -d $site"
+    log "Skipping certificate issuance. Run it manually: certbot --nginx -d $site"
     return
     ;;
   esac
@@ -851,7 +844,6 @@ main() {
   configure_database
   configure_broker
   create_app_directories
-  # Only warn, since the operator may still be filling in .env.
   run_config_check || warn "Fix .env, then run: sudo $INSTALL_DIR/manage.sh check"
   run_migrations
   install_services
@@ -861,8 +853,8 @@ main() {
 
   log "Installation complete"
   log "  Config : $INSTALL_DIR/.env"
-  log "  Manage : $INSTALL_DIR/manage.sh {start|stop|restart|status|logs|check|update|nginx}"
-  log "  CLI    : $INSTALL_DIR/publisher.sh {creds|platforms|gateway-clients|config} ... (or env|shell)"
+  log "  Manage : $INSTALL_DIR/manage.sh COMMAND (run it without one to list them)"
+  log "  CLI    : $INSTALL_DIR/publisher.sh --help"
 }
 
 main "$@"

@@ -38,7 +38,7 @@ def create(session: Session, session_id: int, data: bytes) -> None:
 
 
 def get_all_data(session: Session, session_id: int) -> list[bytes]:
-    """Return all segment data bytes for a session as a flat list."""
+    """Return the data of every segment stored for a payload session."""
     return list(
         session.scalars(
             select(PayloadSegment.data).where(PayloadSegment.session_id == session_id)

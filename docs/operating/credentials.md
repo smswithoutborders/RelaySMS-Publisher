@@ -35,12 +35,12 @@ Usernames are 3 to 32 lowercase letters, digits, `.`, `_` or `-`, starting with 
 | Command | Does |
 | --- | --- |
 | `creds list` | Lists credentials |
-| `creds set-scopes --username <NAME> --scope <SCOPE>` | Replaces a credential's scopes; repeat `--scope`, or pass `--administrator` |
+| `creds set-scopes --username <NAME> --scope <SCOPE>` | Replaces a credential's scopes. Repeat `--scope`, or pass `--administrator` |
 | `creds reset-password --username <NAME>` | Prints a new password and ends the credential's web sessions |
 | `creds disable --username <NAME>` | Blocks it and ends its web sessions |
 | `creds enable --username <NAME>` | Lets it log in again |
-| `creds revoke-sessions --username <NAME>` | Logs it out of every web session; HTTP Basic still works |
-| `creds delete --username <NAME>` | Deletes it and its sessions, after asking; `--yes` skips the question |
+| `creds revoke-sessions --username <NAME>` | Logs it out of every web session. HTTP Basic still works. |
+| `creds delete --username <NAME>` | Deletes it and its sessions, after asking. `--yes` skips the question. |
 
 Prefix each with `sudo ./publisher.sh`. Credentials with `creds:write` can do the same over the [REST API](../reference/rest-api.md#managing-credentials), within their own scopes.
 

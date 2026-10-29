@@ -106,7 +106,6 @@ def test_setup_passes_file_inputs_as_text(client, admin, credentials, adapter_ca
         "settings": {"smtp_host": "h", "smtp_password": "p"}
     }
 
-    # A path is just text here: the server never reads files a client names.
     response = client.post(
         SETUP,
         json={"inputs": {"client_file": "@/etc/hostname"}},

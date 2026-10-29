@@ -52,10 +52,10 @@ class _Reader:
     def get_str(self, name: str, default: None = None) -> str | None: ...
     def get_str(self, name: str, default: str | None = None) -> str | None:
         value = self.env.get(name, "").strip()
-        # Drop one pair of surrounding quotes, since docker run --env-file keeps them.
+        # Drop one pair of surrounding quotes, e.g. from docker run --env-file.
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1].strip()
-        # An empty value counts as unset, since template.env leaves options blank.
+        # An empty value counts as unset.
         return value or default
 
     def get_required(self, name: str, required: bool) -> str | None:
@@ -133,7 +133,7 @@ class _Reader:
         return self.get_str(name) if self.get_key(name, required) else None
 
     def get_path(self, name: str, default: Path) -> Path:
-        """Read a path; a relative one is relative to the install directory."""
+        """Read a path, resolving a relative one against the install directory."""
         path = Path(self.get_str(name) or default).expanduser()
         return path if path.is_absolute() else ROOT / path
 
@@ -346,7 +346,6 @@ class OfflinePublishConfig(Section):
     @classmethod
     def load(cls, read: _Reader) -> Self:
         allowed = read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
-        # Without the secret, anyone can publish offline payloads over https.
         https_allowed = not allowed or "https" in allowed
         return cls(
             allowed_protocols=allowed,
@@ -463,7 +462,7 @@ class AuthConfig(Section):
         if "*" in web_origins:
             read.fail(
                 "AUTH_WEB_ORIGINS",
-                "must list exact origins; '*' can't carry credentials",
+                "must list exact origins, not '*'",
             )
         return cls(
             idle_timeout=datetime.timedelta(

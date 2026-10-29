@@ -9,7 +9,7 @@ import pytest
 
 @pytest.fixture
 def build(install, tmp_path):
-    """Run build-book.sh with stub curl and uname, so nothing is downloaded."""
+    """Run build-book.sh with stub curl and uname that download nothing."""
     stubs = tmp_path / "bin"
     stubs.mkdir()
     for name, body in {

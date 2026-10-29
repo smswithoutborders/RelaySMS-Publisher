@@ -24,7 +24,7 @@ BASES = {
 }
 D = "/opt/relaysms/relaysms-publisher"
 UNITS = "/etc/systemd/system/relaysms-publisher-*.service"
-# smtp exits cleanly while SMTP_TRANSPORT_ENABLED is off, so it isn't checked.
+# Every service but smtp, which exits while SMTP_TRANSPORT_ENABLED is off.
 SERVICES = " ".join(
     f"relaysms-publisher-{name}.service" for name in ("rest", "grpc", "worker", "beat")
 )
@@ -132,9 +132,8 @@ def container(request, source):
         image,
     )  # fmt: skip
     try:
-        # Just after the container starts, systemctl fails until systemd is ready,
-        # and boot later empties /tmp, where the install clones. So wait for boot to
-        # finish before any test runs.
+        # Wait for boot to finish. Before then systemctl fails, and boot empties
+        # /tmp, where the install clones.
         booted = "systemctl is-system-running --wait | grep -qxE 'running|degraded'"
         wait_until(name, booted)
         yield name

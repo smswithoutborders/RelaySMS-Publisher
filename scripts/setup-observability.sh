@@ -131,7 +131,7 @@ container_running() {
 }
 
 # Loops until the port named by $1 is free or the user opts out (returns
-# 1). Non-remappable ports just get re-checked after the user frees them.
+# 1). With $3=0 the port can't change and is re-checked after the user frees it.
 resolve_port() {
   local __resultvar="$1" label="$2" remappable="$3" port="${!1}" ack=""
   while ! port_is_free "$port"; do
@@ -177,7 +177,7 @@ setup_reverse_proxy() {
 main() {
   parse_args "$@"
   require_root
-  [ -d "$INSTALL_DIR/observability" ] || error "$INSTALL_DIR/observability not found, run install.sh first"
+  [ -d "$INSTALL_DIR/observability" ] || error "$INSTALL_DIR/observability not found. Run install.sh first."
   [ -z "$SITE_NAME" ] || validate_hostname "--site-name" "$SITE_NAME"
   [ -z "$KUMA_SITE_NAME" ] || validate_hostname "--kuma-site-name" "$KUMA_SITE_NAME"
   [ -n "$SITE_NAME" ] && [ -n "$KUMA_SITE_NAME" ] && [ "$SITE_NAME" = "$KUMA_SITE_NAME" ] &&
@@ -198,7 +198,7 @@ main() {
   systemctl enable docker &>/dev/null || true
   systemctl start docker
   docker compose version &>/dev/null ||
-    error "docker compose plugin not available; install docker-compose-plugin manually"
+    error "docker compose plugin not available. Install docker-compose-plugin manually."
 
   SIGNOZ_UI_RUNNING=0
   container_running relaysms-publisher-signoz-signoz-0 && SIGNOZ_UI_RUNNING=1
@@ -240,16 +240,13 @@ main() {
 
   if ! command -v foundryctl &>/dev/null; then
     log "Installing foundryctl"
-    # ~/.local/bin (foundryctl's default) isn't reliably on PATH for a
-    # non-interactive root shell.
     curl -fsSL https://signoz.io/foundry.sh | FOUNDRY_INSTALL_DIR=/usr/local/bin bash
   fi
 
   signoz_external_url="http://localhost:$SIGNOZ_PORT"
   [ -n "$SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && signoz_external_url="https://$SITE_NAME"
 
-  # Generated once; a rerun with a different --signoz-port after this file
-  # exists won't change it, same as the Postgres credentials.
+  # Generated on the first run only.
   if [ ! -f observability/signoz/casting.yaml ]; then
     log "Generating SigNoz configuration"
     pg_password=$(openssl rand -hex 24)
@@ -281,9 +278,8 @@ main() {
       up -d
   fi
 
-  # Until an org exists, SigNoz's opamp bug (casting.yaml.template) keeps
-  # the OTLP receiver closed. Safe to call every run: setupCompleted flips
-  # permanently once an org exists, and a second registration is rejected.
+  # SigNoz keeps the OTLP receiver closed until an org exists, which
+  # registering the admin account creates.
   log "Waiting for the SigNoz API"
   signoz_version=""
   for _ in $(seq 1 60); do
@@ -326,7 +322,7 @@ main() {
     log "Uptime Kuma already running, skipping"
   else
     log "Starting Uptime Kuma"
-    # Compose reads this .env, so a manual `up -d` later keeps the port.
+    # Compose reads KUMA_PORT from this .env.
     echo "KUMA_PORT=$KUMA_PORT" >observability/uptime-kuma/.env
     docker compose -f observability/uptime-kuma/docker-compose.yml up -d
   fi

@@ -1,11 +1,9 @@
 # Resource caps and hardening for Foundry's generated
-# pours/deployment/compose.yaml. Not hand-editing the generated file,
-# foundryctl cast overwrites it.
+# pours/deployment/compose.yaml, which foundryctl cast overwrites.
 #
-# Service names are derived from casting.yaml's metadata.name
-# (relaysms-publisher-signoz), but Foundry could rename its own scheme in
-# a future release. If `up -d` below errors about an unknown service,
-# re-check with:
+# Service names come from casting.yaml's metadata.name
+# (relaysms-publisher-signoz). If `docker compose up -d` errors about an
+# unknown service, list the generated names with:
 #   docker compose -f pours/deployment/compose.yaml config --services
 services:
   ingester:

@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
-# Export .env so the host, port and OTEL settings used below match the app's.
+# Exports .env for the host, port and OTEL settings below.
 ENV_FILE="$SCRIPT_DIR/../.env"
 if [ -f "$ENV_FILE" ]; then
   set -a
@@ -21,7 +21,7 @@ PORT="${PORT:-16000}"
 WORKERS="${WORKERS:-1}"
 OTEL_WRAP="$SCRIPT_DIR/otel-wrap.sh"
 
-log "Starting gRPC, FastAPI, Celery worker, Celery beat scheduler ..."
+log "Starting gRPC, REST, Celery worker and beat ..."
 
 OTEL_SERVICE_NAME="relaysms-publisher-grpc" "$OTEL_WRAP" "$PYTHON" -u -m publisher.api.grpc &
 GRPC_PID=$!

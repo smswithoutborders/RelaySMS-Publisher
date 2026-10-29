@@ -32,8 +32,8 @@ def upgrade():
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("last_used_at", sa.DateTime(), nullable=True),
     )
-    # MySQL can't index a BLOB/TEXT column without an explicit key length;
-    # mysql_length is ignored on other dialects.
+    # mysql_length sets the key length MySQL needs to index a BLOB column. Other
+    # dialects ignore it.
     op.create_index(
         "uq_token_hashes_token_hash",
         "token_hashes",

@@ -77,11 +77,10 @@ class AuditEvent(Base):
     occurred_at: Mapped[datetime.datetime] = mapped_column(UTCDateTime, default=utc_now)
     # NULL when no credential acted: the CLI, or a failed login.
     actor_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, default=None)
-    # The usernames are copied so events still read right after a deletion.
+    # Kept when the actor's credential is deleted.
     actor_username: Mapped[str | None] = mapped_column(
         String(MAX_USERNAME_LENGTH), default=None
     )
-    # Plain strings, so adding an action needs no migration and old ones still list.
     action: Mapped[str] = mapped_column(String(64))
     target_id: Mapped[str | None] = mapped_column(String(64), default=None)
     target_label: Mapped[str | None] = mapped_column(String(255), default=None)
@@ -126,7 +125,7 @@ def list_events(
     since: datetime.datetime | None = None,
     until: datetime.datetime | None = None,
 ) -> Page[AuditEvent]:
-    """Newest first, only from the areas whose scope is in scopes."""
+    """List events newest first, from the areas whose scope is in scopes."""
     areas = [area for area, scope in AREA_SCOPES.items() if scope in scopes]
     if not areas:
         return Page(items=[], next_cursor=None, prev_cursor=None)

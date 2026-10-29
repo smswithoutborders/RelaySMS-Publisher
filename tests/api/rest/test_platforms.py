@@ -56,7 +56,6 @@ def test_oauth_callback_is_404_for_unknown_platforms(client):
 def test_client_metadata_comes_from_the_config_dir(client, platforms_config):
     config = PlatformsConfig.get().adapters_config_dir / "bluesky-0"
     config.mkdir(parents=True)
-    # The adapter accepts uppercase keys, so this route must too.
     uppercase = {key.upper(): value for key, value in CLIENT_METADATA.items()}
     (config / "credentials.json").write_text(json.dumps(uppercase))
 

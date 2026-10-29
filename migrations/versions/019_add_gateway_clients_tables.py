@@ -29,7 +29,6 @@ _FIELDS = ("msisdn", "country", "operator", "operator_code", "protocols")
 
 
 def _registry_file() -> Path:
-    # Only .env files from before this migration set it.
     return ROOT / os.environ.get(
         "GATEWAY_CLIENTS_REGISTRY_FILE", "data/gateway_clients/registry.json"
     )
@@ -69,7 +68,7 @@ def _import(clients: sa.Table) -> None:
     )
     overrides = registry.parent / "mcc_mnc_overrides.json"
     for record in _read(overrides):
-        logger.warning("MCC/MNC overrides are no longer used; not imported: %s", record)
+        logger.warning("Not importing an unused MCC/MNC override: %s", record)
 
 
 def upgrade() -> None:

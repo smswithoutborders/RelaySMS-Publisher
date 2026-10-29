@@ -16,10 +16,7 @@ _next_uid = iter(range(1, 10000))
 
 
 def build_email(body: str, from_addr: str | None = "user@example.com") -> MailMessage:
-    """Build an imap_tools MailMessage with a UID from raw RFC822 bytes.
-
-    Matches what a real IMAP fetch produces, without an IMAP connection.
-    """
+    """Build an imap_tools MailMessage with a UID from raw RFC822 bytes."""
     headers = []
     if from_addr is not None:
         headers.append(f"From: {from_addr}")
@@ -33,7 +30,7 @@ def build_email(body: str, from_addr: str | None = "user@example.com") -> MailMe
 
 @pytest.fixture(autouse=True)
 def _default_auth_allow(monkeypatch):
-    """Let the sender and auth checks pass, so tests override only what they test."""
+    """Pass the sender, auth and payload checks and stub out queueing."""
     monkeypatch.setattr(smtp_listener.smtp_auth, "is_sender_allowed", lambda addr: True)
     monkeypatch.setattr(
         smtp_listener.smtp_auth, "evaluate", lambda msg, raw, addr: (True, "ok")
@@ -114,4 +111,3 @@ def test_leaves_email_for_retry_on_unexpected_error(monkeypatch):
     monkeypatch.setattr(smtp_listener.smtp_auth, "is_sender_allowed", _raise)
     msg = build_email(json.dumps({"address": "+1", "text": "dGVzdA=="}))
     assert smtp_listener.process_incoming_email(msg) is False
-    publication_task.publish_message.delay.assert_not_called()

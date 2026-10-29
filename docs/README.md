@@ -72,5 +72,5 @@ The [glossary](reference/glossary.md) defines the rest, and [Architecture](expla
 
 ## Getting help
 
-- Ask questions and report bugs in the [issue tracker](https://github.com/smswithoutborders/RelaySMS-Publisher/issues); [CONTRIBUTING.md](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/CONTRIBUTING.md#ways-to-contribute) says what a useful report has.
+- Ask questions and report bugs in the [issue tracker](https://github.com/smswithoutborders/RelaySMS-Publisher/issues). [CONTRIBUTING.md](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/CONTRIBUTING.md#where-to-start) says what a useful report has.
 - Report vulnerabilities privately, as [SECURITY.md](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/SECURITY.md) describes.

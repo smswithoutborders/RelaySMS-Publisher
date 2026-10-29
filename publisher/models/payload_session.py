@@ -41,17 +41,12 @@ class PayloadSession(Base):
 def get_or_create_locked(
     session: Session, sender_id: str, session_id: int
 ) -> PayloadSession:
-    """Return the payload session, locked until the transaction ends.
-
-    Segments of one payload arrive together, so their workers take turns on this
-    lock; otherwise each could miss the other's segment and none would join them.
-    It inserts before locking: on MySQL, two workers locking a missing row deadlock.
-    """
+    """Return the payload session, inserting it if missing, locked until commit."""
     try:
         with session.begin_nested():
             session.add(PayloadSession(sender_id=sender_id, session_id=session_id))
     except IntegrityError:
-        pass  # Another worker created it first.
+        pass  # It already exists.
     return session.scalars(
         select(PayloadSession)
         .filter_by(sender_id=sender_id, session_id=session_id)

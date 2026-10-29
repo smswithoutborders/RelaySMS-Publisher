@@ -173,7 +173,7 @@ def test_from_text_refuses_bad_files(tmp_path, text, error):
         manifest.from_text(CLIENT_FILE, text.format(tmp=tmp_path))
 
 
-def test_parse_inputs():
+def test_parse_inputs_converts_known_keys_and_keeps_unknown_ones():
     fields = (Field("port", FieldType.INTEGER),)
     assert manifest.parse_inputs(fields, ["PORT=465", "colour=red"]) == {
         "port": 465,
@@ -197,7 +197,7 @@ def test_parse_inputs_refuses(texts, error):
         (Field("tls", FieldType.BOOLEAN), "yes"),
     ],
 )
-def test_from_text_rejects_other_types(field, text):
+def test_from_text_rejects_text_of_the_wrong_type(field, text):
     with pytest.raises(ConfigError, match=field.name):
         manifest.from_text(field, text)
 

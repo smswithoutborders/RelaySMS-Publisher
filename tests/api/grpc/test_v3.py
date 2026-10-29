@@ -60,7 +60,7 @@ def server_keys(monkeypatch):
         keys.initialize_server_identity_keys(s)
     add_adapter("gmail", proto_id=0, cat_id=1)
     add_adapter("telegram", proto_id=1, cat_id=2)
-    # The client helpers fetch server public keys over REST; read them from the db.
+    # Read server public keys from the db instead of over REST.
     monkeypatch.setattr(
         client_helpers,
         "fetch_server_identity_public_key",
@@ -142,10 +142,7 @@ def decrypt_token(response, keypairs):
 
 
 def encrypt_token(response, keypairs, token, key_id=1):
-    """Encrypt a token with a key pair the server still holds, as revoke does.
-
-    Exchange puts the token in a slot from 16-255, so lower slots stay held.
-    """
+    """Encrypt a token as revoke does, with a slot (0-15) the server still holds."""
     ciphertext = rrs.v1_token_encrypt_client(
         ec_kid=keypairs[key_id].private_bytes_raw(),
         ss_kid_pk=client_helpers.fetch_server_identity_public_key("", key_id),
@@ -308,7 +305,9 @@ def test_other_services_skip_request_auth():
     assert result == "served"
 
 
-def test_get_oauth2_authorization_url(stub, adapter):
+def test_authorization_url_comes_from_the_adapter_with_a_generated_verifier(
+    stub, adapter
+):
     adapter.results["create_authorization_url"] = {
         "url": "https://auth.example.org/authorize",
         "state": "state-1",
@@ -400,7 +399,7 @@ def test_exchange_oauth2_code_needs_client_key_ids_0_to_255(stub, adapter, key_i
     assert "each key_id 0-255 exactly once" in error.details()
 
 
-def test_revoke_oauth2_token(stub, adapter):
+def test_revoke_oauth2_token_deletes_it_and_revokes_upstream(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
     payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
     request = publisher_pb2.RevokeOAuth2TokenRequest(
@@ -479,7 +478,7 @@ def test_revoke_deletes_the_token_even_if_the_platform_fails(stub, adapter):
     assert stored_token(exchanged.token_id) is None
 
 
-def test_get_pnba_code(stub, adapter):
+def test_get_pnba_code_returns_the_adapter_message_and_expiry(stub, adapter):
     adapter.results["send_code"] = {
         "message": "Code sent",
         "expires_at": "2026-10-01T12:00:00+00:00",
@@ -583,7 +582,7 @@ def test_exchange_pnba_code_stores_session(stub, adapter):
     assert hashlib.sha256(raw_token).digest() == token.hash
 
 
-def test_revoke_pnba_token(stub, adapter):
+def test_revoke_pnba_token_deletes_it_and_revokes_upstream(stub, adapter):
     exchanged, keypairs = exchange_pnba(stub, adapter)
     payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
     request = publisher_pb2.RevokePNBATokenRequest(

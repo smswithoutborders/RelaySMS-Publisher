@@ -6,11 +6,11 @@ The RelaySMS protocol is described in the [technical whitepaper](relaysms-whitep
 
 | Key | Where | Used for |
 | --- | --- | --- |
-| Server identity keys | 256 X25519 key pairs in the database | Every gRPC request and every payload; the only key for payloads sent without a linked account |
-| Ephemeral key pools | Up to 256 client public keys and 256 server key pairs per linked account | One use each, by a payload or a token check; the pair is deleted once a payload goes to its platform or a token check passes |
+| Server identity keys | 256 X25519 key pairs in the database | Every gRPC request and every payload, and the only key for payloads sent without a linked account |
+| Ephemeral key pools | Up to 256 client public keys and 256 server key pairs per linked account | One use each, by a payload or a token check |
 | [Encryption keys](../configuration/encryption-keys.md) | `.env` | Encrypting the private keys, the platform tokens and, with SQLite, the database file, and keying the sender hash |
 
-The app refills a linked account's pools with the gRPC `SyncKeys` call. A payload rejected before sending, for example one that fails to decrypt, leaves its key pair usable. Once a payload goes to its platform, its pair is gone even if the platform rejects it, so a payload never publishes twice. A client must never encrypt different content with a key pair it has already used.
+The app refills a linked account's pools with the gRPC `SyncKeys` call. A failed token check, or a payload that fails before sending (for example one that doesn't decrypt), leaves its key pair usable. Once a payload is ready to send, its pair is gone even if the platform then refuses it, so a payload never publishes twice. A client must never encrypt different content with a key pair it has already used.
 
 ## What travels encrypted
 
@@ -26,7 +26,7 @@ The app refills a linked account's pools with the gRPC `SyncKeys` call. A payloa
 | Platform tokens | Encrypted with `DATABASE_FIELD_ENCRYPTION_KEY` while `DATABASE_FIELD_ENCRYPTION_ENABLED` is on, as `template.env` sets it |
 | Private keys | Encrypted with `DATA_ENCRYPTION_KEY` |
 | Sender phone numbers | Replaced with a keyed hash before anything is stored |
-| Message content | Ciphertext while queued, and while a multi-part payload waits for its segments; decrypted only in memory, in the worker and the adapter process it hands it to |
+| Message content | Ciphertext while queued, and while a multi-part payload waits for its segments. Decrypted only in memory, in the worker and the adapter process it hands it to |
 | Publication stats | Platform, protocol, status, country code, failure reason and time |
 
 ## Adapters

@@ -13,8 +13,6 @@ The container applies pending migrations, then starts every service. It publishe
 
 Run the admin CLI with `docker compose exec publisher python -m publisher <COMMAND>`.
 
-[Back up](../operating/backup-restore.md) `.env` and `./data`: its [encryption keys](../configuration/encryption-keys.md) are the only way to read the data.
-
 To update, see [Upgrading](../operating/upgrading.md#update-with-docker).
 
 ## Next steps

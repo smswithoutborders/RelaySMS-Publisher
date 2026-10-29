@@ -83,14 +83,14 @@ class AdapterIntegrationError(PublicationError):
     ):
         super().__init__(message, platform_name=platform_name)
         self.code = code
-        # A token the adapter refreshed before the send failed; it replaces the
-        # stored one.
+        # A token the adapter refreshed before the send failed, stored in place of
+        # the old one.
         self.token = token
 
 
 @dataclass(frozen=True)
 class Delivery:
-    """A decrypted payload ready to send; token_id is None for offline content."""
+    """A decrypted payload ready to send, with no token_id for offline content."""
 
     adapter: PlatformAdapter
     request: SendRequest
@@ -168,9 +168,9 @@ def prepare(
     protocol: str | None = None,
     tag: str | None = None,
 ) -> Delivery | None:
-    """Decrypt a payload, deleting its keys; None while segments are missing.
+    """Decrypt a payload and delete its keys, or return None while segments are missing.
 
-    Commit the session before send(), so the keys can't publish it twice.
+    Commit the session before calling send().
     """
     payload = _assemble(
         session,
@@ -334,7 +334,7 @@ def _publish_online_content(
 
 
 def send(delivery: Delivery) -> dict | None:
-    """Send through the adapter; return the token it refreshed, if any.
+    """Send through the adapter and return the token it refreshed, if any.
 
     Raises:
         AdapterIntegrationError: The adapter failed.
@@ -412,15 +412,16 @@ def _store_segment_and_try_join(
 
     payload_session = get_or_create_locked(session, sender_id, sess_id)
     create_segment(session, payload_session.id, raw_segment)
-    # A segment delivered twice is stored twice, and join sizes its slots by how
-    # many segments it gets.
+    # Drops segments delivered more than once.
     segment_data = list(dict.fromkeys(get_all_data(session, payload_session.id)))
 
     try:
         joined = rrs.V1Payloads.join(segment_data)
     except (rrs.V1PayloadsError.NoLastSegments, rrs.V1PayloadsError.MissingSegments):
         logger.debug(
-            "Session %s waiting for segments, %d stored.", sess_id, len(segment_data)
+            "Payload session %s waiting for segments, %d stored.",
+            sess_id,
+            len(segment_data),
         )
         return None
     except Exception as exc:
@@ -433,7 +434,9 @@ def _store_segment_and_try_join(
         return None
 
     delete_session(session, payload_session)
-    logger.info("Session %s assembled from %d segments.", sess_id, len(segment_data))
+    logger.info(
+        "Payload session %s assembled from %d segments.", sess_id, len(segment_data)
+    )
     return joined
 
 

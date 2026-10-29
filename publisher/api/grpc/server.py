@@ -105,8 +105,6 @@ def serve() -> None:
     grpc_server = _build_server(grpc_config.max_workers)
     _bind_port(grpc_server)
 
-    # The handler only sets this flag: stopping inside it would hang if a second
-    # signal arrived while the server was stopping.
     stop_requested = threading.Event()
 
     def request_stop(signum: int, _frame) -> None:

@@ -27,7 +27,7 @@ class PublicationStats(Base):
     failure_reason: Mapped[str | None] = mapped_column(String(255), default=None)
     created_at: Mapped[datetime.datetime] = mapped_column(UTCDateTime, default=utc_now)
 
-    # (created_at, id) serves keyset pagination; id breaks timestamp ties.
+    # (created_at, id) serves keyset pagination, with id breaking timestamp ties.
     __table_args__ = (
         Index("ix_publication_stats_created_at_id", "created_at", "id"),
         Index("ix_publication_stats_status_created_at", "status", "created_at"),

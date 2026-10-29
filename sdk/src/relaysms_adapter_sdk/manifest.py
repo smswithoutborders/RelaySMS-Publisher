@@ -132,8 +132,7 @@ def check_values(
 
     Raises:
         ConfigError: A key isn't a field, is given twice in different case, has a
-            value of the wrong type, or is required and missing. The message names
-            the key, never the value, which may be a secret.
+            value of the wrong type, or is required and missing.
     """
     fields = tuple(fields)
     try:
@@ -177,14 +176,14 @@ def parse_inputs(
 ) -> dict[str, Any]:
     """Turn KEY=VALUE command-line inputs into values, with lowercase keys.
 
-    A bare KEY has ask return its value as text; for a file, the file's path.
+    A bare KEY's value comes from ask: its text, or for a file, the file's path.
     With ask_required, ask is also called for each required field not given.
-    An unknown KEY=VALUE keeps its text, so check_values reports it with others.
+    An unknown KEY=VALUE is returned as text for check_values to report.
     Every input is checked before anything is asked.
 
     Raises:
-        ConfigError: A key is bare without ask or unknown, is given twice, or its
-            value can't be converted (see from_text).
+        ConfigError: A bare key has no ask or isn't a field, a key is given twice,
+            or a value can't be converted (see from_text).
     """
     by_name = {field.name: field for field in fields}
     pairs, asked = [], []
@@ -216,7 +215,7 @@ def parse_inputs(
 
 
 def merge_values(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
-    """Apply checked changes to settings; a None value removes the setting."""
+    """Apply checked changes to settings, removing those set to None."""
     merged = current | changes
     return {key: value for key, value in merged.items() if value is not None}
 
@@ -244,7 +243,7 @@ def from_text(field: Field, text: str) -> Any:
             return [item.strip() for item in text.split(",") if item.strip()]
         case FieldType.FILE:
             if not text.startswith("@"):
-                raise ConfigError(f"{field.name} is a file; give it as @path.")
+                raise ConfigError(f"{field.name} is a file: give it as @path.")
             return _read_file(field.name, Path(text[1:]).expanduser())
     return text
 
@@ -252,7 +251,6 @@ def from_text(field: Field, text: str) -> Any:
 def _read_file(name: str, path: Path) -> str:
     try:
         with path.open("rb") as file:
-            # One byte over the limit is enough to know it's too big.
             data = file.read(MAX_FILE_SIZE + 1)
         text = data.decode("utf-8")
     except (OSError, UnicodeDecodeError) as e:
@@ -277,7 +275,7 @@ def _fields(data: dict[str, Any], section: str, *, files: bool) -> tuple[Field, 
             raise ManifestError(f"{label} must be a table.")
         kind = _enum(FieldType, table, "type", FieldType.STRING, label)
         if kind is FieldType.FILE and not files:
-            raise ManifestError(f"{label}.type can't be file; only setup inputs can.")
+            raise ManifestError(f"{label}.type can't be file. Only setup inputs can.")
         fields.append(
             Field(
                 name=name,

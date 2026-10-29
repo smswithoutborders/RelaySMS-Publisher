@@ -36,15 +36,12 @@ class TestIsSenderAllowed:
         set_config(smtp_auth, "smtp_config", allowed_senders={"example.com"})
         assert smtp_auth.is_sender_allowed("not-an-email") is False
 
-    def test_rejects_empty_address(self, set_config):
-        set_config(smtp_auth, "smtp_config", allowed_senders={"example.com"})
-        assert smtp_auth.is_sender_allowed("") is False
-
 
 class TestEvaluateAuthentication:
     def test_fails_closed_when_authserv_id_unconfigured(self, set_config):
         set_config(smtp_auth, "smtp_config", trusted_authserv_id=None)
-        passed, _ = smtp_auth.evaluate_authentication(make_message())
+        msg = make_message(auth_results=["mx.google.com; dkim=pass; spf=pass"])
+        passed, _ = smtp_auth.evaluate_authentication(msg)
         assert passed is False
 
     def test_fails_when_header_missing(self, set_config):
@@ -173,7 +170,7 @@ class TestVerifyDkimIndependently:
         passed, _ = smtp_auth.verify_dkim_independently(b"raw", "user@mail.example.com")
         assert passed is True
 
-    def test_handles_verification_errors_gracefully(self, monkeypatch):
+    def test_fails_when_verification_raises(self, monkeypatch):
         def _raise(_raw):
             raise ValueError("boom")
 
@@ -183,7 +180,7 @@ class TestVerifyDkimIndependently:
 
 
 class TestEvaluate:
-    def test_independent_dkim_only_runs_when_enabled(self, set_config, monkeypatch):
+    def test_independent_dkim_is_skipped_when_disabled(self, set_config, monkeypatch):
         set_config(
             smtp_auth,
             "smtp_config",

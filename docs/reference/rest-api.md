@@ -14,7 +14,7 @@ https://<HOST>/v1
 
 ## Authentication
 
-Admin endpoints take a web session cookie or HTTP Basic credentials; see [Logging in](../operating/credentials.md#logging-in). Each endpoint's description names the scopes it needs.
+Admin endpoints take a web session cookie or HTTP Basic credentials ([Logging in](../operating/credentials.md#logging-in)). Each endpoint's description names the scopes it needs.
 
 ## Managing credentials
 
@@ -24,15 +24,15 @@ A credential can only grant scopes it holds, can't change itself, and can't chan
 
 ## Managing platform adapters
 
-`/v1/platforms/adapters` lists every installed adapter, with its source, version tag, commit and who last changed it, and takes the same `ETag` and `If-Match` rules as credentials. A disabled adapter disappears from `/v1/platforms` and can't publish or link accounts, but still revokes tokens so users can unlink. Uninstalling is refused with `409` while accounts are linked through the adapter; see [Removing](../platforms/manage.md#removing).
+`/v1/platforms/adapters` lists every installed adapter, with its source, version tag, commit and who last changed it, and takes the same `ETag` and `If-Match` rules as credentials. A disabled adapter disappears from `/v1/platforms` and can't publish or link accounts, but still revokes tokens so users can unlink. Uninstalling is refused with `409` while accounts are linked through the adapter. See [Removing](../platforms/manage.md#removing).
 
-Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/adapters/{id}/update`) run code from the repository on the server, so they need an administrator and a repository from an org in `PLATFORMS_GITHUB_ORGS`. Both take an optional `tag`, defaulting to the newest version tag, and return `202` with the job's URL in `Location`. Poll the job until its `state` is `succeeded` or `failed`; its `log` has the end of the git and pip output. An adapter has one job at a time; another gets `409`.
+Installing (`POST /v1/platforms/adapters`) and updating (`POST /v1/platforms/adapters/{id}/update`) run code from the repository on the server, so they need an administrator and a repository from an org in `PLATFORMS_GITHUB_ORGS`. Both take an optional `tag`, defaulting to the newest version tag, and return `202` with the job's URL in `Location`. Poll the job until its `state` is `succeeded` or `failed`. Its `log` has the end of the git and pip output. An adapter has one job at a time; another gets `409`.
 
-An adapter's settings are at `/v1/platforms/adapters/{id}/config`, for administrators only. `GET` lists each setting, with secrets only marked `is_set`, and the inputs its setup takes. `PATCH` changes the settings sent and keeps the rest; `POST .../setup` runs the adapter's setup and replaces them all, with a file input sent as the file's text. `configured` in the adapter list says whether every required setting has a value.
+An adapter's settings are at `/v1/platforms/adapters/{id}/config`, for administrators only. `GET` lists each setting, with secrets only marked `is_set`, and the inputs its setup takes. `PATCH` changes the settings sent and keeps the rest, and `POST .../setup` runs the adapter's setup and replaces them all, with a file input sent as the file's text. `configured` in the adapter list says whether every required setting has a value.
 
 ## Managing gateway clients
 
-`/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm; see [how suggest works](../gateway-clients/manage.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.
+`/v1/gateway-clients/registry` lists every gateway client, with who last changed it, and takes the same `ETag` and `If-Match` rules as credentials (scopes `gc:read` and `gc:write`). `GET /v1/gateway-clients/registry/suggest?msisdn=` returns the details and PLMN candidates a create would use, to prefill a form for the administrator to confirm. See [how suggest works](../gateway-clients/manage.md#how-suggest-works). A disabled client disappears from the public `/v1/gateway-clients`.
 
 ## Pagination
 
@@ -46,13 +46,13 @@ List endpoints return `{"data": [...], "next": ..., "prev": ...}`, newest first.
 
 ## Publishing
 
-`POST /v1/publications` takes JSON and tags payloads with protocol `https`. It needs no credentials: a payload publishes only if it decrypts with the keys of a linked account or, for an offline payload, passes the [offline publishing](../configuration/offline-publishing.md) rules.
+`POST /v1/publications` takes JSON and tags payloads with protocol `https`. It needs no credentials ([what guards it](../explanation/security-model.md#what-travels-encrypted)).
 
 It only checks the payload's structure before queueing it. Decryption, payload type and adapter errors happen later, so they're logged on the server, not returned.
 
 ## Errors
 
-Error bodies are `{"error": "<MESSAGE>"}`. The message is meant to be shown to users; the server logs more detail.
+Error bodies are `{"error": "<MESSAGE>"}`. The message is meant to be shown to users. The server logs more detail.
 
 | Status | Meaning |
 | :--- | :--- |
@@ -60,8 +60,8 @@ Error bodies are `{"error": "<MESSAGE>"}`. The message is meant to be shown to u
 | `401 Unauthorized` | Missing or invalid credentials |
 | `403 Forbidden` | Origin not allowed, missing scope, or a credential change beyond your scopes |
 | `404 Not Found` | The resource doesn't exist |
-| `409 Conflict` | Already exists, in use, or changed by another request at the same moment; retry |
-| `412 Precondition Failed` | `If-Match` doesn't match the current `ETag`; reload and retry |
+| `409 Conflict` | Already exists, in use, or changed by another request at the same moment. Retry. |
+| `412 Precondition Failed` | `If-Match` doesn't match the current `ETag`. Reload and retry. |
 | `422 Unprocessable Entity` | Validation error |
 | `428 Precondition Required` | `If-Match` header missing |
 | `429 Too Many Requests` | Rate limited by nginx ([limits](../operating/credentials.md#logging-in)) |

@@ -3,7 +3,7 @@
 
 
 class PublisherError(Exception):
-    """Base for domain errors; platform_name is set when the platform is known."""
+    """Base for domain errors, with platform_name set when the platform is known."""
 
     def __init__(self, message: str, *, platform_name: str | None = None):
         super().__init__(message)

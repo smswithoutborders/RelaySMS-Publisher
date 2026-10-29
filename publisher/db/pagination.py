@@ -71,7 +71,7 @@ def paginate[T](
     """Run stmt for the page after cursor. Rows need the two columns as attributes."""
     backward = cursor is not None and cursor.direction == "prev"
     if cursor is not None:
-        # OR form: row-value comparisons aren't consistent across databases.
+        # Compares (time, id) with OR and AND, not a row-value comparison.
         beyond = operator.gt if backward else operator.lt
         stmt = stmt.where(
             or_(

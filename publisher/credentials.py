@@ -123,7 +123,7 @@ def _claim(session: Session, credential: Credential) -> None:
     )
     if result.rowcount != 1:
         raise CredentialConflictError(
-            f"Credential {credential.username!r} was changed concurrently; retry"
+            f"Credential {credential.username!r} was changed concurrently. Retry."
         )
     set_committed_value(credential, "version", credential.version + 1)
 
@@ -301,7 +301,6 @@ def delete(
 def authenticate(session: Session, username: str, password: str) -> Credential | None:
     credential = get_by_username(session, username)
     if credential is None:
-        # Hash anyway so response timing doesn't reveal which usernames exist.
         with contextlib.suppress(VerificationError):
             password_hasher.verify(_dummy_hash(), password)
         return None

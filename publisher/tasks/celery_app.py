@@ -80,7 +80,6 @@ def make_celery() -> Celery:
         },
     }
     if celery.worker_heartbeat_url:
-        # Uptime Kuma push-monitor heartbeat, see docs/operating/observability.md
         beat_schedule["worker-heartbeat"] = {
             "task": "tasks.heartbeat_task.ping_worker_heartbeat",
             "schedule": 60.0,

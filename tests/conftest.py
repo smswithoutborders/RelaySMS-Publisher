@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-# Set before config is imported, so tests ignore the local .env and use fixed values.
+# Fixed test settings, with the local .env ignored. Set before config is imported.
 os.environ.update(
     LOAD_DOTENV="false",
     DATABASE_DIALECT="sqlite",

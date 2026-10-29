@@ -24,7 +24,7 @@ sudo ./manage.sh restart
 
 1. `update --migrate` stops the services, pulls the code, reinstalls the dependencies, rebuilds, applies pending migrations and starts the services again. When the install serves this manual, it rebuilds it too.
 2. `sync-env.sh` adds the settings the new `template.env` has and `.env` lacks, showing the change before writing it.
-3. `check` reports any setting still missing or invalid; fill it in `.env`.
+3. `check` reports any setting still missing or invalid. Fill it in `.env`.
 4. `restart` loads the new settings.
 
 When `.env` has an invalid setting, `update` still restarts every service, then exits with an error ([fix](troubleshooting.md#update-ends-with-env-has-errors)).
@@ -40,7 +40,7 @@ If you edited tracked files that the update changes, `update` refuses to pull. D
 ## Roll back
 
 1. Take the commit you noted [before upgrading](#before-you-upgrade).
-2. If the update applied migrations, [restore the backup](backup-restore.md#restore) taken before it; older code can't use the migrated database.
+2. If the update applied migrations, [restore the backup](backup-restore.md#restore) taken before it.
 3. Check out that commit and rebuild. `--pulled` skips the pull that would undo the checkout:
 
    ```bash

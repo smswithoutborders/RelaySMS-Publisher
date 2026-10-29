@@ -64,7 +64,7 @@ def test_check_reports_every_section_together():
 
 
 @pytest.mark.parametrize("value", ["zz" * 32, "ab" * 16])
-def test_invalid_key_is_rejected(value):
+def test_invalid_data_encryption_key_is_rejected(value):
     assert "DATA_ENCRYPTION_KEY" in errors(DATA_ENCRYPTION_KEY=value)
 
 
@@ -227,8 +227,6 @@ def test_template_env_paths_match_defaults():
 
 
 def test_template_env_lists_every_variable_config_reads():
-    # sync-env.sh --prune drops what the template lacks, so a variable config
-    # reads must be in it, if only commented out.
     template = template_env_names()
     # An empty environment that records every name config asks for.
     env = Mock()
@@ -249,7 +247,7 @@ def test_template_env_lists_every_variable_config_reads():
 def test_settings_reference_matches_template_env():
     template = template_env_names()
     reference = (config.ROOT / "docs" / "configuration" / "settings.md").read_text()
-    # Only the first column, so a name mentioned in a description doesn't count.
+    # Names in the first column only, not ones a description mentions.
     documented = {
         name
         for row in re.findall(r"^\|\s*(`[A-Z].*?)\s*\|", reference, re.M)

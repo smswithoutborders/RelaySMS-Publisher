@@ -68,8 +68,8 @@ rewrite_venv_scripts() {
   done < <(moved_paths)
 }
 
-# Migration 019 logs the overrides it finds in data/gateway_clients/, since they
-# are no longer used, so copy any local entries there.
+# Copies non-empty local MCC/MNC overrides to data/gateway_clients/, where
+# migration 019 logs them.
 move_overrides() {
   local old="$INSTALL_DIR/gateway_clients/mcc_mnc_overrides.json"
   local new="$INSTALL_DIR/data/gateway_clients/mcc_mnc_overrides.json"
@@ -77,7 +77,7 @@ move_overrides() {
   if [ "$(tr -d '[:space:]' <"$old")" != "[]" ]; then
     mkdir -p "$(dirname "$new")"
     cp -p "$old" "$new"
-    log "Moved MCC/MNC overrides to data/gateway_clients/"
+    log "Copied MCC/MNC overrides to data/gateway_clients/"
   fi
 }
 

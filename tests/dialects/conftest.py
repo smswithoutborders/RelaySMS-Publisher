@@ -38,8 +38,7 @@ class Server:
 
 POSTGRES_FLAGS = ("fsync=off", "synchronous_commit=off", "full_page_writes=off")
 MYSQL_FLAGS = ("--innodb-flush-log-at-trx-commit=0", "--innodb-doublewrite=0")
-# What Ubuntu 24.04 installs. The data is thrown away, so it lives in memory and
-# nothing waits for the disk.
+# The versions Ubuntu 24.04 installs, with data on tmpfs and disk syncs off.
 SERVERS = {
     "postgres": Server(
         "docker.io/library/postgres:16",

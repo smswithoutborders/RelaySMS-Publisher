@@ -24,15 +24,14 @@ run_migrations() {
   require_installed
   log "Running database migrations"
   (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
-  # Registers adapters installed before the registry moved to the database, and
-  # moves their files out of their code directories.
+  # Registers adapter directories with no database row, and moves their files
+  # out of their code directories.
   (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher platforms import)
 }
 
 run_config_check() {
   require_installed
   log "Checking configuration"
-  # config reads .env itself the same way systemd does, so it is not sourced here.
   (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
 }
 
@@ -96,7 +95,7 @@ logs_usage() {
   cat <<'EOF'
 Usage: manage.sh logs [OPTIONS]
 
-  -u, --unit NAME      Service to show (rest|grpc|worker|beat|smtp), repeatable (default: all)
+  -u, --unit NAME       Service to show (rest|grpc|worker|beat|smtp), repeatable (default: all)
   -n, --lines N         Number of lines to show before following/exiting
   -s, --since DATE      Only show entries at or after DATE (journalctl --since syntax)
   --no-follow           Print the selected range and exit instead of tailing
@@ -209,7 +208,7 @@ cmd_update() {
   cd "$INSTALL_DIR"
   local svc
   if [ "$pulled" = "0" ]; then
-    # Fetch first so a network failure leaves the services running.
+    # A failed fetch leaves the services running.
     git fetch
     for svc in "${SERVICE_UNITS[@]}"; do
       systemctl stop "$svc"
@@ -217,7 +216,7 @@ cmd_update() {
     # Follows a force-pushed branch, and fails rather than overwrite local edits.
     git reset --keep "@{upstream}"
     git submodule update --init --recursive
-    # Finish with the manage.sh just checked out, so changed update steps apply now.
+    # Runs the rest of the update with the manage.sh just checked out.
     local args=(--pulled)
     [ "$migrate" = "1" ] && args+=(--migrate)
     exec "$INSTALL_DIR/manage.sh" update "${args[@]}"
@@ -241,7 +240,7 @@ cmd_update() {
   ensure_app_directories "$SERVICE_USER"
   render_units "$SERVICE_USER"
 
-  # Each service fails only on the settings it uses, so restart all and report after.
+  # A config error is reported after every service restarts.
   local config_ok=1
   run_config_check || config_ok=0
 
@@ -252,7 +251,7 @@ cmd_update() {
     systemctl restart "$svc"
   done
   systemctl start "$TARGET_UNIT"
-  # book/ exists only when install.sh set up a site for the manual, so other installs skip the rebuild.
+  # book/ exists only when install.sh set up a site for the manual.
   if [ -d book ]; then
     ./scripts/build-book.sh
   fi
@@ -394,8 +393,6 @@ cmd_uninstall() {
   done
   systemctl daemon-reload
 
-  # Belt-and-suspenders against a top-level directory, even though
-  # INSTALL_DIR is always self-derived from this script's own location.
   [[ "$INSTALL_DIR" =~ ^(/[^/]+){2,}/?$ ]] || error "Refusing to remove '$INSTALL_DIR': not a safe path"
   rm -rf "$INSTALL_DIR"
   log "Uninstall complete"

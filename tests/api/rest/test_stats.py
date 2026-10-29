@@ -237,7 +237,7 @@ def test_filters_and_time_range(authed_client, seeded):
         ({"since": "2026-09-02T00:00:00Z", "until": "2026-09-01T00:00:00Z"}, 400),
     ],
 )
-def test_invalid_params(authed_client, seeded, params, status):
+def test_bad_cursor_or_reversed_range_is_400(authed_client, seeded, params, status):
     assert (
         authed_client.get("/v1/stats/publications", params=params).status_code == status
     )
@@ -325,7 +325,7 @@ def test_summary_interval_buckets_by_week(authed_client):
     ]
 
 
-def test_summary_interval_with_multiple_group_by(authed_client):
+def test_summary_interval_combines_with_group_by(authed_client):
     _seed(
         [
             dict(

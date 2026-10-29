@@ -105,7 +105,7 @@ def _adapter_errors(context: AuthContext):
     except (AdapterInUseError, AdapterConflictError) as e:
         raise ApiError(409, str(e), log=f"{by}: {e}") from None
     except AdapterFaultError as e:
-        message = "The adapter or its files are broken; see the server log."
+        message = "The adapter or its files are broken. See the server log."
         raise ApiError(502, message, log=f"{by}: {e}") from None
     except AdapterError as e:
         raise ApiError(400, str(e), log=f"{by}: {e}") from None
@@ -184,7 +184,7 @@ def delete_adapter(
 ) -> Response:
     """Needs If-Match. Scope: platforms:write.
 
-    Refused while accounts are linked through it; disable it instead.
+    Refused while accounts are linked through it. Disable it instead.
     """
     adapter = _load(db, adapter_id)
     check_if_match(request, _etag(adapter), "adapter")
@@ -320,8 +320,7 @@ def _queue(
     try:
         run_adapter_job.delay(str(job.id))
     except Exception as e:
-        # Fail the job now. Otherwise it stays active and blocks every other job for
-        # the adapter until cleanup fails it as abandoned.
+        # Fail the job now, freeing the adapter for other jobs.
         jobs.finish(db, job.id, state="failed", log=[f"Queueing failed: {e}"])
         db.commit()
         raise ApiError(
@@ -353,7 +352,7 @@ def install_adapter(
     context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
     db: Session = Depends(get_db),
 ) -> AdapterJobInfo:
-    """Queues an install; poll the job at Location. Administrators only."""
+    """Queues an install. Poll the job at Location. Administrators only."""
     _require_administrator(context, "Installing and updating adapters")
     _require_allowed(body.source_url)
     adapter_id = manager.adapter_id(body.source_url)
@@ -395,7 +394,7 @@ def update_adapter_version(
     context: AuthContext = Security(authorize, scopes=[Scope.PLATFORMS_WRITE]),
     db: Session = Depends(get_db),
 ) -> AdapterJobInfo:
-    """Queues a move to a version tag; poll the job at Location. Administrators only."""
+    """Queues a move to a version tag. Poll the job at Location. Administrators only."""
     _require_administrator(context, "Installing and updating adapters")
     adapter = _load(db, adapter_id)
     _require_allowed(adapter.source_url)

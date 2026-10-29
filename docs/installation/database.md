@@ -6,7 +6,7 @@
 | MySQL 8.0.28+ or MariaDB | Heavier load, or a database on another host | The server's own (TDE) |
 | PostgreSQL 12+ | Heavier load, or a database on another host | The disk's |
 
-In every dialect, the server's private keys are encrypted, and so are platform tokens while field encryption is on; see [Encryption keys](../configuration/encryption-keys.md).
+In every dialect, the server's private keys are encrypted, and so are platform tokens while field encryption is on. See [Encryption keys](../configuration/encryption-keys.md).
 
 ## Database servers
 
@@ -28,7 +28,7 @@ For MySQL or MariaDB, use `--setup-db mysql` or `scripts/setup-mysql.sh` the sam
 
 `--db-password <PASSWORD>` sets the password instead of generating one.
 
-To use a server you already have, pass its details. The script only checks the connection and writes `.env`; it never changes the server:
+To use a server you already have, pass its details. The script only checks the connection and writes `.env`, and never changes the server:
 
 ```bash
 sudo ./install.sh --setup-db postgres --db-existing \

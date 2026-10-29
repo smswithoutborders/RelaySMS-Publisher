@@ -1,6 +1,6 @@
 # Encryption keys
 
-Three keys in `.env` protect the data. The installer and `make .env` generate them. Each is 64 hex characters; `openssl rand -hex 32` makes one, and `manage.sh check` reports a missing or malformed key.
+Three keys in `.env` protect the data. The installer and `make .env` generate them. Each is 64 hex characters, which `openssl rand -hex 32` generates. `manage.sh check` reports a missing or malformed key.
 
 | Setting | Protects | Used |
 | --- | --- | --- |

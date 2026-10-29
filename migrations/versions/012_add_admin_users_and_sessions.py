@@ -55,6 +55,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Dropping the FK-backing index before its table fails on MySQL.
     op.drop_table("admin_sessions")
     op.drop_table("admin_users")

@@ -44,8 +44,7 @@ def check_if_match(request: Request, current: str, what: str) -> None:
     if_match = request.headers.get("If-Match")
     if if_match is None:
         raise ApiError(428, "If-Match header required.")
-    # nginx gzip marks the ETag weak (W/"..."). Ours come from the row version, not
-    # the body, so a weak one still matches.
+    # A weak ETag (W/"...", e.g. from nginx gzip) matches too.
     if if_match.strip().removeprefix("W/") != current:
         raise ApiError(
             412,

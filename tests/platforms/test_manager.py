@@ -289,7 +289,7 @@ def test_import_registers_unregistered_clones_only(tmp_path):
     for name, proto_id in (("gmail", OAUTH2), ("telegram", PNBA), ("twin", OAUTH2)):
         source = adapter_repo(tmp_path / "src" / name, name, proto_id)
         Repo.clone_from(str(source.working_tree_dir), adapters_dir / f"{name}-id")
-    # Same platform and protocol as gmail, so it's skipped.
+    # twin now declares the same platform and protocol as gmail.
     twin = Repo(adapters_dir / "twin-id")
     commit_manifest(twin, "gmail", OAUTH2)
     (adapters_dir / "not-an-adapter").mkdir()
@@ -305,7 +305,7 @@ def test_import_registers_unregistered_clones_only(tmp_path):
 
 
 @pytest.mark.usefixtures("test_db")
-def test_moves_credentials_and_state_out_of_the_code(tmp_path):
+def test_copies_credentials_and_moves_state_out_of_the_code(tmp_path):
     add_adapter("gmail", OAUTH2)
     add_adapter("telegram", PNBA)
     (tmp_path / "adapters/gmail-0").mkdir(parents=True)

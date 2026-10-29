@@ -28,14 +28,12 @@ You should see `Connected to mailbox <SMTP_IMAP_SERVER>`.
 ## How it works
 
 1. Waits for unseen mail in `SMTP_IMAP_MAIL_FOLDER` with IMAP IDLE.
-2. Rejects each email unless the sender is allowlisted and authenticated.
+2. Drops each email unless the sender is allowlisted and authenticated.
 3. Parses the body as JSON and validates the payload.
-4. Queues the payload for publication, tagged with protocol `smtp`. Whether offline payloads from email publish depends on [offline publishing](offline-publishing.md).
+4. Queues the payload for publication, tagged with protocol `smtp`.
 5. Deletes each handled email. An email that hits an unexpected error stays in the folder and is retried on the next cycle.
 
 ### Allowlist
-
-`SMTP_ALLOWED_SENDERS` lists exact addresses and domains, comma-separated. Empty allows nothing.
 
 > [!WARNING]
 > A domain entry trusts every authenticated sender on that domain, since DKIM vouches for the domain, not the mailbox. List an exact address when only one sender should be trusted.

@@ -44,7 +44,10 @@ def find(
     operator: str | None = None,
     include_disabled: bool = False,
 ) -> list[GatewayClient]:
-    """Enabled only, unless include_disabled. Country and operator ignore case."""
+    """Return matching clients, enabled only unless include_disabled.
+
+    Country and operator ignore case.
+    """
     stmt = select(GatewayClient).order_by(
         GatewayClient.country, GatewayClient.operator, GatewayClient.msisdn
     )
@@ -52,7 +55,7 @@ def find(
         stmt = stmt.where(GatewayClient.msisdn == msisdn.strip())
     if not include_disabled:
         stmt = stmt.where(GatewayClient.is_enabled)
-    # Filtered here: SQLite's lower() only folds ASCII.
+    # Matched in Python, which also folds non-ASCII case.
     country, operator = (
         term.strip().casefold() if term else None for term in (country, operator)
     )

@@ -34,8 +34,7 @@ from relaysms_adapter_sdk.errors import (
 
 logger = logging.getLogger(__name__)
 
-# Stats keep fixed codes so they group cleanly. Error messages stay in the logs:
-# adapters pass on upstream text that can name recipients or echo responses.
+# Fixed failure codes for the stats. Error messages go only to the logs.
 _FAILURE_REASONS = {
     PayloadMalformedError: "payload_malformed",
     PayloadNotSupportedError: "payload_not_supported",
@@ -59,7 +58,7 @@ _ADAPTER_FAILURE_REASONS = {
 def _failure_reason(exc: Exception) -> str:
     if isinstance(exc, AdapterIntegrationError):
         return _ADAPTER_FAILURE_REASONS.get(exc.code, "adapter_error")
-    # The class hierarchy, so a subclass of a mapped error keeps its code.
+    # A subclass of a mapped error gets its base class's code.
     for cls in type(exc).__mro__:
         if cls in _FAILURE_REASONS:
             return _FAILURE_REASONS[cls]
@@ -83,9 +82,6 @@ def publish_message(
     delivery = refreshed_token = None
     status = "failed"
     try:
-        # An online payload's keys are deleted and committed before the send, so a
-        # crash, a redelivered task or a duplicate can't publish it twice. Clients
-        # never reuse a key, so a failed send loses nothing they would retry with.
         with get_session() as db:
             payload_raw, raw_segment, payload_type = publications.validate(text_payload)
             delivery = publications.prepare(
@@ -102,7 +98,6 @@ def publish_message(
             return
         new_token = publications.send(delivery)
     except (ProtocolNotAllowedError, OfflineTagError) as exc:
-        # The operator's offline settings refused it, so it isn't a failure.
         logger.warning("Rejected payload: %s", exc)
         status = "rejected"
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
@@ -118,7 +113,6 @@ def publish_message(
         platform_name = delivery.platform if delivery else None
         failure_reason = _failure_reason(exc)
     else:
-        # The message is out, so failing to record it is not a failed publication.
         try:
             with get_session() as db:
                 publications.finish(db, delivery, new_token)
@@ -131,7 +125,7 @@ def publish_message(
                 )
         except Exception:
             logger.exception(
-                "Published via %r but failed to record it.", delivery.platform
+                "Sent via %r, but couldn't record the result.", delivery.platform
             )
         return
 

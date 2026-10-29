@@ -165,12 +165,12 @@ def flush(session: Session, adapter: PlatformAdapter) -> None:
         ) from None
     except StaleDataError:
         raise AdapterConflictError(
-            f"Adapter {name!r} was changed concurrently; retry"
+            f"Adapter {name!r} was changed concurrently. Retry."
         ) from None
 
 
 def adapter_id(url: str) -> str:
-    """Stable per URL, so a reinstall finds the same directories."""
+    """The adapter's id: a UUID derived from its source URL."""
     return str(uuid.uuid5(uuid.NAMESPACE_URL, url.strip().lower()))
 
 
@@ -242,12 +242,7 @@ def _register(session: Session, adapter: PlatformAdapter, manifest: Manifest) ->
 
 
 def activate(adapter: PlatformAdapter) -> None:
-    """Move a built version into place. Call it after the install or update commits.
-
-    If it ran first and the commit failed, the new files would be in place while the
-    database still names the old version.
-    """
-    # Renames are atomic, so an adapter call sees the old version or the new.
+    """Move a built version into place. Call it after the install or update commits."""
     for current in (Path(adapter.path), Path(adapter.venv_path)):
         new, old = _beside(current, "new"), _beside(current, "old")
         if not new.exists():
@@ -312,8 +307,7 @@ def update(
     """Register tag, or the newest version tag, for an adapter."""
     tag = tag or latest_tag(adapter.source_url)
     commit, manifest = _build(adapter, tag, log)
-    # Refused: the installed tag now points to other code, so it was moved after
-    # its release.
+    # Refuse the installed tag when it now points to a different commit.
     if tag == adapter.tag and commit != adapter.commit:
         _discard_build(adapter)
         raise AdapterError(
@@ -356,17 +350,15 @@ def remove(
     *,
     force: bool = False,
 ) -> None:
-    """Unregister an adapter; call delete_files after the commit.
+    """Unregister an adapter. Call delete_files after the commit.
 
     Raises:
         AdapterInUseError: When accounts are linked through it and force is off.
     """
-    # The id names its directories; reject one that could point elsewhere.
+    # Reject an id that could make its directory paths point elsewhere.
     if adapter.id in ("", ".", "..") or "/" in adapter.id:
         raise AdapterError(f"Unsafe adapter id {adapter.id!r}")
     linked = tokens.count_for_platform(session, adapter.name, adapter.proto_id)
-    # Refused while accounts are linked: without the adapter, their tokens can't
-    # be revoked at the platform.
     if linked and not force:
         raise AdapterInUseError(
             f"{linked} linked account(s) use {adapter.name!r}. Disable it instead, "
@@ -388,12 +380,11 @@ def remove(
 
 
 def import_from_disk(session: Session) -> list[PlatformAdapter]:
-    """Register adapter directories with no row, e.g. from the old JSON registry."""
+    """Register adapter directories that have no row."""
     adapters_dir = PlatformsConfig.get().adapters_dir
     if not adapters_dir.is_dir():
         return []
 
-    # Checked up front: one clash at flush would fail the whole import.
     taken = {
         (a.name, a.proto_id)
         for a in platform_adapters.find(session, include_disabled=True)

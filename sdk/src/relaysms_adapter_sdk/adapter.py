@@ -47,12 +47,9 @@ class Adapter(ABC):
 
     @classmethod
     def setup(cls, request: SetupRequest) -> MaybeAwaitable[SetupResult]:
-        """Turn the [setup] inputs into settings, e.g. by registering an app.
-
-        A classmethod, since an adapter's __init__ may read the settings setup creates.
-        """
+        """Turn the [setup] inputs into settings, e.g. by registering an app."""
         raise AdapterError(
-            f"{cls.__name__} has no setup; set its config instead.",
+            f"{cls.__name__} has no setup. Set its config instead.",
             code=METHOD_NOT_FOUND,
         )
 

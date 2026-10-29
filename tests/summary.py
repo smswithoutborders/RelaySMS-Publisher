@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Writes a results table to the GitHub Actions job summary.
 
-pyproject.toml loads it into every pytest run; it does nothing outside GitHub
-Actions. It only imports pytest, since the e2e job installs nothing else.
+pyproject.toml loads it into every pytest run. It does nothing outside GitHub
+Actions and must import only pytest, the one package the e2e job installs.
 
 Rows group by test directory, or by what a test module names in SUMMARY_BY:
 "test" for the test function, or a parametrized fixture such as "dialect".

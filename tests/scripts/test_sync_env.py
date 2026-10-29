@@ -103,7 +103,7 @@ class TestSyncEnv:
         (install / "template.env").write_text(TEMPLATE)
         env = install / ".env"
         env.write_text("# Server\nHOST=0.0.0.0\n")
-        # setsid drops the controlling terminal, so the prompt gets no answer.
+        # setsid runs the prompt without a controlling terminal.
         run = 'setsid -w bash "{}/sync-env.sh" {} template.env </dev/null'
 
         result = bash(run.format(REPO, ".env"))

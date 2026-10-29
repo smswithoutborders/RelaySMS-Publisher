@@ -26,19 +26,18 @@ type Revocation = tuple[PlatformAdapter, RevokeRequest]
 
 
 def revocation(session: Session, token: Token) -> Revocation | None:
-    """Return the adapter and request that revoke a token; call it before deleting it.
+    """Return the adapter and request that revoke a token. Call it before deleting it.
 
     None when no adapter serves its platform. Pass the result to revoke_upstream
     after the deletion commits.
     """
     try:
-        # Disabled adapters still revoke, so users can always unlink.
         adapter = platform_adapters.get_for_protocol(
             session, token.platform, token.proto_id, include_disabled=True
         )
     except NotImplementedError:
         logger.warning(
-            "No adapter for %r; token %d can't be revoked upstream.",
+            "No adapter for %r: token %d can't be revoked upstream.",
             token.platform,
             token.token_id,
         )
@@ -47,7 +46,7 @@ def revocation(session: Session, token: Token) -> Revocation | None:
 
 
 def revoke_upstream(revocation: Revocation | None) -> None:
-    """Revoke a token at the platform once its deletion commits; failures are logged."""
+    """Revoke a token at the platform after its deletion commits, logging failures."""
     if revocation is None:
         return
     adapter, request = revocation
@@ -62,7 +61,7 @@ def revoke_upstream(revocation: Revocation | None) -> None:
 def delete_idle(
     session: Session, older_than: datetime.datetime
 ) -> list[tuple[str, Revocation | None]]:
-    """Delete tokens unused since older_than; return their platforms and revocations."""
+    """Delete tokens unused since older_than, returning platforms and revocations."""
     deleted = []
     for token in get_idle(session, older_than):
         deleted.append((token.platform, revocation(session, token)))

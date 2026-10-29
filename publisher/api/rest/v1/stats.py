@@ -120,11 +120,10 @@ def summarize_publication_stats(
     ),
     db: Session = Depends(get_db),
 ) -> PublicationStatsSummary:
-    """Counts per group; last 30 days by default. Scope: stats:publications:read.
+    """Counts per group (last 30 days by default). Scope: stats:publications:read.
 
     Grouping by `failure_reason` also needs stats:publications:reasons. Groups sort by
-    period, then count, highest first. Periods with no rows are left out; chart them
-    as 0.
+    period, then count, highest first. Periods with no rows are left out.
     """
     columns = list(dict.fromkeys(item.value for item in group_by))
     if "failure_reason" in columns:

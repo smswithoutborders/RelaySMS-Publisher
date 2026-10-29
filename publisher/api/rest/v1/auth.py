@@ -29,7 +29,7 @@ SESSION_COOKIE_NAME = "relaysms_session"
 SESSION_COOKIE_PATH = "/v1"
 SESSION_COOKIE_SAMESITE = "strict"
 BASIC_REALM = "relaysms"
-# Basic auth runs on every request, so last_login_at writes are throttled.
+# Basic auth records last_login_at at most this often.
 BASIC_LOGIN_RECORD_INTERVAL_SECONDS = 300
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 PRIVATE_CACHE_CONTROL = "private, no-store"
@@ -105,8 +105,7 @@ def _request_origin(request: Request) -> str | None:
 
 
 def _record_failed_login(db: Session, username: str, method: str) -> None:
-    # Recorded only for existing usernames: anyone can send unknown ones, which
-    # would fill the audit table.
+    # Recorded only for existing usernames.
     target = get_by_username(db, username)
     if target is None:
         return
@@ -123,7 +122,7 @@ def _record_failed_login(db: Session, username: str, method: str) -> None:
 
 def check_origin(request: Request) -> None:
     origin = _request_origin(request)
-    # Browsers send Origin on cross-origin POSTs; none means a non-browser client.
+    # No Origin or Referer means a non-browser client.
     if origin is None:
         return
     own_origin = f"{request.url.scheme}://{request.url.netloc}"
@@ -163,7 +162,7 @@ def authenticate_request(
         )
         return AuthContext(credential=credential)
 
-    # No Basic challenge, because browsers would show their own login dialog.
+    # No WWW-Authenticate header: browsers would show their own login dialog.
     raise HTTPException(status_code=401, detail="Authentication required.")
 
 
@@ -215,7 +214,7 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> CurrentCredential:
-    """Sets an HttpOnly session cookie for the web client; scripts use HTTP Basic."""
+    """Sets an HttpOnly session cookie for the web client. Scripts use HTTP Basic."""
     check_origin(request)
 
     credential = authenticate(db, body.username, body.password)

@@ -39,7 +39,7 @@ FAILURE_REASONS = (
     "unexpected_error",
 )
 REJECTION_REASONS = ("protocol_not_allowed", "offline_tag_invalid")
-FAILURE_RATE = 0.2
+UNPUBLISHED_RATE = 0.2
 DISABLED_RATE = 0.1
 BATCH_SIZE = 1000
 # name, display name, protocol, category (0 email, 1 message, 2 text).
@@ -55,13 +55,13 @@ ADAPTERS = (
 
 def _random_stat(now: datetime.datetime, days: int) -> dict:
     status, reason = "published", None
-    if random.random() < FAILURE_RATE:
+    if random.random() < UNPUBLISHED_RATE:
         reason = random.choice(FAILURE_REASONS + REJECTION_REASONS)
         status = "rejected" if reason in REJECTION_REASONS else "failed"
     return dict(
         status=status,
         protocol=random.choice(PROTOCOLS),
-        # Some outcomes are decided before the platform is known.
+        # Failures and rejections can happen before the platform is known.
         platform_name=(
             None if reason and random.random() < 0.3 else random.choice(PLATFORMS)
         ),
@@ -140,7 +140,7 @@ def platforms():
                 PlatformAdapter(
                     id=adapter_id(url),
                     source_url=url,
-                    # No tag, so platforms update installs the newest release.
+                    # With no tag, platforms update installs the newest release.
                     commit=secrets.token_hex(20),
                     name=name,
                     display_name=display_name,
@@ -177,8 +177,7 @@ def gateway_clients_command(count):
         while added < count:
             msisdn = _random_mobile(random.choice(COUNTRIES))
             suggestion = gateway_clients.suggest(msisdn)
-            # Takes the first candidate when the operator is ambiguous, as an
-            # administrator would.
+            # Takes the first candidate when the operator is ambiguous.
             candidate = suggestion.candidates[0]
             try:
                 client = gateway_clients.create(

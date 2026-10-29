@@ -7,9 +7,7 @@ services:
     container_name: relaysms-publisher
     volumes:
       - ./data:/publisher/data
-    # HOST/GRPC_HOST default to 127.0.0.1 in .env, which would make the
-    # container unreachable from outside. Override regardless of what .env
-    # has, since inside a container 0.0.0.0 is the only sensible bind.
+    # Listens on every interface in the container, whatever .env sets.
     environment:
       HOST: 0.0.0.0
       GRPC_HOST: 0.0.0.0

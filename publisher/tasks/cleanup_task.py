@@ -42,7 +42,7 @@ def cleanup_stale_payload_sessions() -> None:
 
 @celery_app.task(name="tasks.cleanup_task.cleanup_idle_tokens")
 def cleanup_idle_tokens() -> None:
-    """Delete tokens (and their keys) idle past the configured max age."""
+    """Delete idle tokens and their keys, and revoke them upstream."""
     cutoff = utc_now() - cleanup_config.token_idle_max_age
     with get_session() as db:
         deleted = tokens.delete_idle(db, cutoff)

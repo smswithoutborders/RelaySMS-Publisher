@@ -3,13 +3,12 @@
 # Installed to /etc/nginx/sites-available/<domain>.conf by install.sh, with
 # __SERVER_NAME__, __REST_PORT__ and __GRPC_PORT__ substituted from .env.
 #
-# Upstream, map and zone names are global in nginx, so they carry the REST
-# port to keep instances on one host apart.
+# Upstream, map and zone names end in the REST port, one set per instance on
+# a host.
 #
-# Defines only the plain-HTTP (port 80) block. Run `certbot --nginx -d
-# <domain>` afterwards (install.sh offers to do this) to add the HTTPS block
-# and redirect; certbot copies every directive here into it, so add
-# hardening here rather than to the generated 443 block.
+# Defines only the port 80 block. `certbot --nginx -d <domain>` adds the HTTPS
+# block and redirect, copying every directive here into it. Add hardening here,
+# not to the generated 443 block.
 
 # Rate-limit logins and requests carrying Basic credentials.
 limit_req_zone $binary_remote_addr zone=publisher_login___REST_PORT__:10m rate=5r/m;
@@ -178,8 +177,8 @@ server {
         return 494 '{"error": "Request headers are too large."}';
     }
 
-    # proxy_set_header above doesn't apply to grpc_pass; repeated here via
-    # grpc_set_header so the gRPC backend also gets the real client IP, etc.
+    # grpc_pass ignores proxy_set_header: the gRPC locations set the client IP
+    # headers with grpc_set_header.
     location /publisher.v3.Publisher {
         grpc_pass            grpc://publisher_grpc___REST_PORT__;
         grpc_set_header      Host              $host;

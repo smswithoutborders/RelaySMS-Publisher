@@ -74,7 +74,9 @@ def test_login_rejects_bad_credentials_generically(
         ({"Origin": "null"}, 403),
     ],
 )
-def test_login_origin_check(client, password, set_config, headers, status):
+def test_login_accepts_only_its_own_or_configured_origins(
+    client, password, set_config, headers, status
+):
     set_config(auth, "auth_config", web_origins=[WEB_ORIGIN])
 
     response = client.post(
@@ -99,7 +101,6 @@ def test_me_unauthenticated_is_401_without_basic_prompt(client):
     response = client.get("/v1/auth/me")
 
     assert response.status_code == 401
-    # A Basic challenge would make browsers show a login dialog.
     assert "www-authenticate" not in response.headers
 
 
@@ -123,7 +124,7 @@ def test_origin_check_applies_to_any_session_write(app, client, password, set_co
     set_config(auth, "auth_config", web_origins=[WEB_ORIGIN])
     login(client, password)
 
-    # A sibling subdomain is same-site, so SameSite alone would let it through.
+    # A same-site sibling of the web origin.
     sibling = {"Origin": "https://other.example.net"}
     assert client.post("/v1/session-write", headers=sibling).status_code == 403
     ok = client.post("/v1/session-write", headers={"Origin": WEB_ORIGIN})

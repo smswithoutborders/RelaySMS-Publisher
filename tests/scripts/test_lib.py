@@ -44,7 +44,7 @@ class TestReadEnvVar:
 class TestPrompt:
     @pytest.mark.parametrize("name", ["reply", "question", "default"])
     def test_without_a_terminal_sets_the_default(self, bash, name):
-        # setsid drops the controlling terminal, so nothing can answer.
+        # setsid runs the prompt without a controlling terminal.
         code = 'source scripts/lib.sh; prompt "$0" "Q? " fallback; echo "${!0}"'
 
         result = bash(f"setsid -w bash -c '{code}' {name} </dev/null")
@@ -177,6 +177,6 @@ class TestValidators:
             ("validate_secret", "a/b", False),
         ],
     )
-    def test_rejects_unsafe_values(self, bash, validator, value, valid):
+    def test_accepts_only_safe_values(self, bash, validator, value, valid):
         result = bash(f'{validator} NAME "$VALUE"', VALUE=value)
         assert (result.returncode == 0) is valid, result.stderr

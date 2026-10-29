@@ -43,7 +43,7 @@ class TokenVerificationError(KeyManagementError):
 
 
 def initialize_server_identity_keys(session: Session, count: int = 256) -> None:
-    """Create database identity keys if they don't exist yet."""
+    """Create the server identity keys if none exist."""
     existing = session.execute(select(func.count(ServerIdentityKey.id))).scalar_one()
     if existing > 0:
         logger.info("Server identity keys exist (%d found), skipping", existing)
@@ -76,7 +76,7 @@ def create_token_pools_and_encrypt(
 ) -> tuple[bytes, int, list[bytes]]:
     """Create the token's hash and key pools, and encrypt the token to one slot.
 
-    Slots 0-15 are reserved, so the token's slot is picked from 16-255.
+    The token's slot is picked from 16-255 (0-15 are reserved).
     """
     token_hash, raw_token = create_token_hash(session, token_pk_id)
     kid_index = secrets.randbelow(240) + 16
@@ -100,7 +100,7 @@ def create_token_pools_and_encrypt(
 def sync_token_pools(
     session: Session, token_hash: TokenHash, client_public_keys: list
 ) -> list[bytes]:
-    """Replace the token's key pools; return the server public keys by slot."""
+    """Replace the token's key pools and return the server public keys by slot."""
     session.execute(
         delete(ServerEphemeralKey).where(
             ServerEphemeralKey.token_hash_id == token_hash.id

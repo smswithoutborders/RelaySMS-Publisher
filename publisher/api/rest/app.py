@@ -36,7 +36,7 @@ API_DOCS_CSP = (
     "connect-src 'self'"
 )
 VALIDATION_ERROR = (
-    "A parameter or body field is missing or invalid; the message names it."
+    "A parameter or body field is missing or invalid. The message names it."
 )
 UNAUTHENTICATED = (
     "No session cookie or Basic credentials, an expired session, or a wrong "
@@ -88,7 +88,6 @@ def _validation_message(error: dict) -> str:
         value = str(error["input"])
         if len(value) > MAX_ECHOED_INPUT_LENGTH:
             value = value[:MAX_ECHOED_INPUT_LENGTH] + "..."
-        # repr quotes and escapes control characters, so logs stay one line.
         message += f", got {value!r}"
     return message
 

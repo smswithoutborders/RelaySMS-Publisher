@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Local files and anchors only, so an external site being down can't fail a PR.
+      # Checks local files and anchors, not external sites.
       - name: Check Markdown links
         uses: lycheeverse/lychee-action@v2
         with:

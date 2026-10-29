@@ -63,7 +63,7 @@ Raise these so the Publisher can act on the failure. Any other exception is logg
 |---|---|
 | `InvalidParamsError` | The request is missing something the adapter needs |
 | `AuthenticationError` | The user's code, password or authorization was rejected |
-| `TokenInvalidError` | The stored token no longer works; the user must link again |
+| `TokenInvalidError` | The stored token no longer works and the user must link the account again |
 | `RateLimitedError` | The platform is throttling, optionally with `retry_after` seconds |
 | `UpstreamError` | The platform failed or couldn't be reached |
 
@@ -130,11 +130,11 @@ venv/bin/relaysms-adapter revoke
 
 | Command | Does |
 |---|---|
-| `link` | OAuth2: opens the authorization URL and catches the redirect on a local `http://localhost` redirect URL, or asks you to paste it. PNBA: asks for the phone number, code and two-step password. |
-| `send` | Sends from the linked account, asking for what the category needs. `--to`, `--subject`, `--body` and `--attach` skip the questions; `--offline` sends without an account. |
+| `link` | OAuth2: opens the authorization URL, then catches the redirect when the redirect URL is `http://localhost`, or asks you to paste it. PNBA: asks for the phone number, code and two-step password. |
+| `send` | Sends from the linked account, asking for what the category needs. `--to`, `--subject`, `--body` and `--attach` skip the questions. `--offline` sends without an account. |
 | `revoke` | Unlinks the account. |
 | `setup` | Runs `setup` and saves `credentials.json`. `--input key=value`, or `key=@path` for a file, skips the questions. |
-| `config show`, `config set` | Lists the settings, or changes them; `set` asks for a bare `KEY`'s value and takes `--unset KEY`. |
+| `config show`, `config set` | Lists or changes the settings. `set` asks for a bare `KEY`'s value and takes `--unset KEY`. |
 | `call <method> [json]` | Calls any method with raw params. |
 
 ## Change the SDK
@@ -142,7 +142,7 @@ venv/bin/relaysms-adapter revoke
 Adapters pin SDK releases, so the Publisher talks to older ones.
 
 - Keep requests, results, errors and `adapter.toml` backward compatible.
-- Bump `version` in `pyproject.toml` with every change to `src/`; CI checks.
+- Bump `version` in `pyproject.toml` with every change to `src/`. CI fails without it.
 - Release by pushing `sdk-v` plus the version, such as `sdk-v1.1.0`.
 
 ## Release an adapter
@@ -165,7 +165,7 @@ permissions:
 
 jobs:
   adapter:
-    uses: smswithoutborders/RelaySMS-Publisher/.github/workflows/adapter.yml@sdk-v1.0.0
+    uses: smswithoutborders/RelaySMS-Publisher/.github/workflows/adapter.yml@sdk-v1.1.0
 ```
 
-Set `version` in `pyproject.toml` and push the matching tag, such as `v1.2.0`; the release fails if they differ. The Publisher installs and updates adapters by tag.
+Set `version` in `pyproject.toml` and push the matching tag, such as `v1.2.0`. The release fails if they differ. The Publisher installs and updates adapters by tag.

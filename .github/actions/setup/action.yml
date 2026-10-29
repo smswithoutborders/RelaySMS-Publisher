@@ -20,8 +20,6 @@ runs:
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends libsqlcipher-dev libmagic1
 
-    # A hit skips pip entirely. The venv links to its interpreter, so the key
-    # has the exact Python version.
     - uses: actions/cache@v6
       id: venv-cache
       with:
@@ -40,7 +38,6 @@ runs:
       shell: bash
       run: echo "sha=$(git rev-parse HEAD:lib_relaysms_payload_specs)" >> "$GITHUB_OUTPUT"
 
-    # The bindings don't depend on the Python version, so every job shares them.
     - uses: actions/cache@v6
       id: specs-cache
       with:

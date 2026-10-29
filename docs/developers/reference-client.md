@@ -26,7 +26,7 @@ python -m tools.client <COMMAND> [ARGS]
 | `exchange-oauth2-code --code <CODE>` | Exchanges the code and stores the token |
 | `revoke-oauth2-token` | Revokes a stored OAuth2 token |
 | `get-pnba-code [--auth-channel signal]` | Requests a PNBA one-time code |
-| `exchange-pnba-code --code <CODE> [--password <PASSWORD>]` | Exchanges the code and stores the token; `--password` for two-step verification |
+| `exchange-pnba-code --code <CODE> [--password <PASSWORD>]` | Exchanges the code and stores the token. `--password` is for two-step verification. |
 | `revoke-pnba-token` | Revokes a stored PNBA token |
 | `sync-keys` | Replaces the token's 256 client and 256 server ephemeral keys |
 

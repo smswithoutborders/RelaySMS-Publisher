@@ -152,7 +152,7 @@ curl -X POST http://127.0.0.1:8090/api/v1/register \
   -d '{"name":"Admin","orgId":"","orgName":"RelaySMS","email":"admin@example.com","password":"<PASSWORD>"}'
 ```
 
-The template stores SigNoz's metadata in Postgres (`metastore.kind: postgres`); set `sqlite` for a single node.
+The template stores SigNoz's metadata in Postgres (`metastore.kind: postgres`). Set `sqlite` for a single node.
 
 ### Uptime Kuma
 
