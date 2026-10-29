@@ -134,7 +134,6 @@ def _insert_pools(
                 "key_index": i,
                 "private_key": kp.private_bytes_raw(),
                 "public_key": server_public_keys[i],
-                "used": False,
             }
             for i, kp in enumerate(server_keypairs)
             if i != skip
@@ -147,7 +146,6 @@ def _insert_pools(
                 "token_hash_id": token_hash_id,
                 "key_index": k.key_id,
                 "public_key": k.public_key,
-                "used": False,
             }
             for k in client_public_keys
             if k.key_id != skip
