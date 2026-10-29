@@ -13,8 +13,5 @@ export WORKERS="${WORKERS:-4}"
 export GRPC_HOST="${GRPC_HOST:-0.0.0.0}"
 
 python3 -m alembic upgrade head
-# Registers adapter directories with no database row, and moves their files out
-# of their code directories.
-python3 -m publisher platforms import
 
 exec "$SCRIPT_DIR/scripts/run.sh"

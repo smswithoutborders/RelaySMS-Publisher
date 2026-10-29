@@ -20,14 +20,12 @@ from tqdm import tqdm
 from publisher.config import PlatformsConfig
 from publisher.errors import PublisherError
 from publisher.models import audit_event
-from publisher.models import platform_adapter as platform_adapters
 from publisher.models import token as tokens
 from publisher.models.audit_event import AuditAction
 from publisher.models.credential import Credential
 from publisher.models.platform_adapter import PROTOCOL_NAMES, PlatformAdapter
 from relaysms_adapter_sdk.manifest import Category, Manifest, ManifestError, Protocol
 from relaysms_adapter_sdk.manifest import load as load_manifest
-from relaysms_adapter_sdk.paths import CREDENTIALS_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -377,65 +375,3 @@ def remove(
     )
     session.delete(adapter)
     flush(session, adapter)
-
-
-def import_from_disk(session: Session) -> list[PlatformAdapter]:
-    """Register adapter directories that have no row."""
-    adapters_dir = PlatformsConfig.get().adapters_dir
-    if not adapters_dir.is_dir():
-        return []
-
-    taken = {
-        (a.name, a.proto_id)
-        for a in platform_adapters.find(session, include_disabled=True)
-    }
-    imported = []
-    for path in sorted(adapters_dir.iterdir()):
-        if not path.is_dir() or session.get(PlatformAdapter, path.name):
-            continue
-        try:
-            manifest = _read_manifest(path)
-            repo = Repo(path)
-            adapter = PlatformAdapter(
-                id=path.name,
-                source_url=repo.remotes.origin.url,
-                commit=repo.head.commit.hexsha,
-            )
-            _apply_manifest(adapter, manifest)
-        except Exception as e:
-            logger.warning("Skipping adapter directory %s: %s", path, e)
-            continue
-        if (adapter.name, adapter.proto_id) in taken:
-            logger.warning("Skipping %s: %r is already installed", path, adapter.name)
-            continue
-        taken.add((adapter.name, adapter.proto_id))
-        session.add(adapter)
-        imported.append(adapter)
-    session.flush()
-    return imported
-
-
-def move_files_out_of_code(session: Session) -> list[PlatformAdapter]:
-    """Copy credentials.json to config dirs and move assets dirs to state dirs.
-
-    Leaves an adapter alone where its new location already exists.
-    """
-    legacy_state_dir = PlatformsConfig.get().adapters_state_dir.parent / "assets"
-    changed = []
-    for adapter in platform_adapters.find(session, include_disabled=True):
-        credentials = Path(adapter.path) / CREDENTIALS_FILE
-        config = Path(adapter.config_path) / CREDENTIALS_FILE
-        legacy_state = legacy_state_dir / adapter.id
-        state = Path(adapter.state_path)
-        moved = False
-        if credentials.is_file() and not config.exists():
-            config.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(credentials, config)
-            moved = True
-        if legacy_state.is_dir() and not state.exists():
-            state.parent.mkdir(parents=True, exist_ok=True)
-            legacy_state.rename(state)
-            moved = True
-        if moved:
-            changed.append(adapter)
-    return changed

@@ -531,16 +531,6 @@ create_app_directories() {
   ensure_app_directories "$SERVICE_USER"
 }
 
-run_config_check() {
-  log "Checking configuration"
-  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
-}
-
-run_migrations() {
-  log "Running database migrations"
-  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
-}
-
 install_services() {
   log "Installing systemd services"
   cd "$INSTALL_DIR"

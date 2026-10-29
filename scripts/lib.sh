@@ -217,6 +217,16 @@ ensure_app_directories() {
   done < <(app_directories)
 }
 
+run_config_check() {
+  log "Checking configuration"
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
+}
+
+run_migrations() {
+  log "Running database migrations"
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
+}
+
 # Prints nothing when the services aren't installed. Expects INSTANCE_NAME to
 # already be set by the caller.
 installed_service_user() {

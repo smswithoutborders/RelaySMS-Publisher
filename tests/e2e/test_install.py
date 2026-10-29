@@ -36,15 +36,6 @@ DATA_DIRS = [
     "data/platforms/state",
 ]
 DATA_RW_PATHS = "ReadWritePaths=" + " ".join(f"{D}/{path}" for path in DATA_DIRS)
-# Env var, then the path before and after scripts/migrate-runtime-data.sh.
-LEGACY = {
-    "PLATFORMS_ADAPTERS_DIR": ("platforms/adapters", "data/platforms/adapters"),
-    "PLATFORMS_ADAPTERS_VENV_DIR": ("platforms/adapters_venv", "data/platforms/venvs"),
-    "PLATFORMS_ADAPTERS_STATE_DIR": (
-        "platforms/adapters_assets",
-        "data/platforms/state",
-    ),
-}
 
 
 def run(*args: str) -> str:
@@ -169,12 +160,7 @@ def test_cli_credential_signs_in_to_api(container):
     ok(container, f"curl -fsS -u 'ops:{password[1]}' 127.0.0.1:16000/v1/auth/me")
 
 
-def test_update_moves_legacy_layout_and_refreshes_units(container):
-    moves = "\n".join(
-        f"mv {new} {old} && sed -i 's#^{var}=.*#{var}={old}#' .env"
-        for var, (old, new) in LEGACY.items()
-    )
-    legacy_paths = " ".join(f"{D}/{old}" for old, _ in LEGACY.values())
+def test_update_refreshes_units_after_a_rewritten_branch(container):
     ok(
         container,
         f"""set -e
@@ -183,20 +169,12 @@ def test_update_moves_legacy_layout_and_refreshes_units(container):
         # Diverges from upstream, as a force-pushed branch leaves the checkout.
         git -c user.name=e2e -c user.email=e2e@localhost -c commit.gpgsign=false \
           commit -q --amend -m rewritten
-        mkdir platforms && chown --reference=. platforms
-        {moves}
-        sed -i 's#^PLATFORMS_ADAPTERS_STATE_DIR=#PLATFORMS_ADAPTERS_ASSETS_DIR=#' .env
-        mkdir platforms/adapters/demo
-        touch platforms/adapters/demo/main.py
-        sed -i 's#^ReadWritePaths=.*#ReadWritePaths={D}/data {legacy_paths}#' {UNITS}
+        sed -i 's#^ReadWritePaths=.*#ReadWritePaths={D}/data {D}/stale#' {UNITS}
         systemctl daemon-reload""",
     )
 
     ok(container, f"{D}/manage.sh update", timeout=1800)
 
-    ok(container, f"test -f {D}/data/platforms/adapters/demo/main.py")
-    for var, (_, new) in LEGACY.items():
-        assert ok(container, f"grep ^{var}= {D}/.env") == f"{var}={new}\n"
     assert read_write_paths(container) == {DATA_RW_PATHS}
     assert_serving(container)
 

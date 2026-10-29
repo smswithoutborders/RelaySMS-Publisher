@@ -20,28 +20,15 @@ require_installed() {
     error "No installed service found. Run install.sh first, or for a local check: venv/bin/python -m publisher config check"
 }
 
-run_migrations() {
-  require_installed
-  log "Running database migrations"
-  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
-  # Registers adapter directories with no database row, and moves their files
-  # out of their code directories.
-  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher platforms import)
-}
-
-run_config_check() {
-  require_installed
-  log "Checking configuration"
-  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
-}
-
 cmd_check() {
   require_root
+  require_installed
   run_config_check
 }
 
 cmd_migrate() {
   require_root
+  require_installed
   run_migrations
 }
 
@@ -234,8 +221,6 @@ cmd_update() {
   export PATH="$CARGO_BIN:$PATH"
   make build
 
-  # Directories and units follow .env, which the migration may have just changed.
-  "$INSTALL_DIR/scripts/migrate-runtime-data.sh"
   require_installed
   ensure_app_directories "$SERVICE_USER"
   render_units "$SERVICE_USER"

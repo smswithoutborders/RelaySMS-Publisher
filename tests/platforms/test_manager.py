@@ -3,7 +3,6 @@
 import subprocess
 
 import pytest
-from git import Repo
 from sqlalchemy import select
 
 from publisher import db
@@ -281,60 +280,6 @@ def test_a_failed_dependency_install_rolls_back(tmp_path, monkeypatch):
         _install(adapter_repo(tmp_path / "src").working_tree_dir)
     assert list((tmp_path / "adapters").iterdir()) == []
     assert _rows() == []
-
-
-@pytest.mark.usefixtures("test_db")
-def test_import_registers_unregistered_clones_only(tmp_path):
-    adapters_dir = tmp_path / "adapters"
-    for name, proto_id in (("gmail", OAUTH2), ("telegram", PNBA), ("twin", OAUTH2)):
-        source = adapter_repo(tmp_path / "src" / name, name, proto_id)
-        Repo.clone_from(str(source.working_tree_dir), adapters_dir / f"{name}-id")
-    # twin now declares the same platform and protocol as gmail.
-    twin = Repo(adapters_dir / "twin-id")
-    commit_manifest(twin, "gmail", OAUTH2)
-    (adapters_dir / "not-an-adapter").mkdir()
-    add_adapter("telegram", PNBA)
-
-    with db.get_session() as session:
-        imported = manager.import_from_disk(session)
-        assert [a.name for a in imported] == ["gmail"]
-        assert imported[0].source_url.endswith("src/gmail")
-        assert imported[0].commit
-
-    assert _rows() == [("gmail", OAUTH2), ("telegram", PNBA)]
-
-
-@pytest.mark.usefixtures("test_db")
-def test_copies_credentials_and_moves_state_out_of_the_code(tmp_path):
-    add_adapter("gmail", OAUTH2)
-    add_adapter("telegram", PNBA)
-    (tmp_path / "adapters/gmail-0").mkdir(parents=True)
-    (tmp_path / "adapters/gmail-0/credentials.json").write_text("secret")
-    (tmp_path / "assets/telegram-1").mkdir(parents=True)
-    (tmp_path / "assets/telegram-1/pending.db").write_text("db")
-
-    with db.get_session() as session:
-        moved = manager.move_files_out_of_code(session)
-        assert [a.name for a in moved] == ["gmail", "telegram"]
-        assert manager.move_files_out_of_code(session) == []
-
-    assert (tmp_path / "config/gmail-0/credentials.json").read_text() == "secret"
-    assert (tmp_path / "adapters/gmail-0/credentials.json").is_file()
-    assert (tmp_path / "state/telegram-1/pending.db").read_text() == "db"
-    assert not (tmp_path / "assets/telegram-1").exists()
-
-
-@pytest.mark.usefixtures("test_db")
-def test_keeps_files_already_out_of_the_code(tmp_path):
-    add_adapter("gmail", OAUTH2)
-    for path, text in (("adapters", "old"), ("config", "new")):
-        (tmp_path / path / "gmail-0").mkdir(parents=True)
-        (tmp_path / path / "gmail-0/credentials.json").write_text(text)
-
-    with db.get_session() as session:
-        assert manager.move_files_out_of_code(session) == []
-
-    assert (tmp_path / "config/gmail-0/credentials.json").read_text() == "new"
 
 
 @pytest.mark.usefixtures("test_db")

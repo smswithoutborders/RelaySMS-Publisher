@@ -309,14 +309,3 @@ def _shown_value(setting: adapter_config.Setting) -> str:
         return "-"
     value = setting.value
     return ", ".join(value) if isinstance(value, list) else str(value)
-
-
-@cli.command(name="import")
-def import_command():
-    """Register adapter directories on disk and move their files out of the code."""
-    with session() as db:
-        imported = [adapter.name for adapter in manager.import_from_disk(db)]
-        moved = [adapter.name for adapter in manager.move_files_out_of_code(db)]
-    click.echo(f"Imported {len(imported)} adapter(s). {' '.join(imported)}".rstrip())
-    if moved:
-        click.echo(f"Moved the files of {len(moved)} adapter(s). {' '.join(moved)}")

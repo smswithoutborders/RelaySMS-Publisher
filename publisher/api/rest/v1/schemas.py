@@ -199,7 +199,9 @@ class PlatformAdapterInfo(PlatformManifest):
     id: str
     source_url: str
     tag: str | None = Field(
-        None, description="Null for an adapter registered by `platforms import`."
+        None,
+        description="Null for an adapter registered before tags were recorded, "
+        "until its first update.",
     )
     commit: str
     enabled: bool

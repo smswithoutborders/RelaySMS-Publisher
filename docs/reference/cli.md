@@ -23,7 +23,7 @@ Runs `python3 -m publisher` as the service user. `sudo ./publisher.sh <GROUP> <C
 | Group | Commands | Documented in |
 | --- | --- | --- |
 | `creds` | `create`, `list`, `scopes`, `set-scopes`, `reset-password`, `disable`, `enable`, `revoke-sessions`, `delete` | [Credentials and access](../operating/credentials.md) |
-| `platforms` | `add`, `update`, `list`, `disable`, `enable`, `remove`, `config show`, `config set`, `setup`, `import`, `exec` | [Managing adapters](../platforms/manage.md) |
+| `platforms` | `add`, `update`, `list`, `disable`, `enable`, `remove`, `config show`, `config set`, `setup`, `exec` | [Managing adapters](../platforms/manage.md) |
 | `gateway-clients` | `suggest`, `create`, `list`, `update`, `disable`, `enable`, `delete`, `countries`, `operators`, `mcc-mnc list` | [Managing gateway clients](../gateway-clients/manage.md) |
 | `config` | `check` | [Settings reference](../configuration/settings.md) |
 | `seed` | `stats`, `creds`, `platforms`, `gateway-clients` | None. Fills a development database with sample data. |

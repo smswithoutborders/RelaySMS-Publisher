@@ -23,7 +23,6 @@ class PlatformAdapter(Base):
     # uuid5 of the source URL, which also names the adapter's directories.
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     source_url: Mapped[str] = mapped_column(String(255))
-    # NULL for an adapter registered by `platforms import`.
     tag: Mapped[str | None] = mapped_column(String(100), default=None)
     commit: Mapped[str] = mapped_column(String(40))
     name: Mapped[str] = mapped_column(String(100))

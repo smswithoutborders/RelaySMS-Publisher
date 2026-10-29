@@ -15,7 +15,6 @@ Each platform, such as Gmail, is served by an adapter installed from its own Git
 | `platforms config show <NAME>` | Lists its settings, without secret values |
 | `platforms config set <NAME> <KEY>=<VALUE>\|<KEY>` | Changes settings. A bare `<KEY>` asks for its value, and `--unset <KEY>` removes one. |
 | `platforms setup <NAME> [--input <KEY>=<VALUE>]` | Runs the adapter's setup and saves its settings |
-| `platforms import` | Registers adapter directories on disk that the database lacks, and moves their files out of the code ([details](../operating/upgrading.md#adapter-registry-import)) |
 | `platforms exec <NAME> -- <COMMAND>` | Runs a command the adapter installs |
 
 Prefix each with [`sudo ./publisher.sh`](../operating/services.md#publishersh), from the install directory, for example:

@@ -57,7 +57,7 @@ git pull --recurse-submodules
 docker compose up -d --build
 ```
 
-The container applies new migrations and runs `platforms import` when it starts.
+The container applies new migrations when it starts.
 
 ## Update adapters
 
@@ -68,19 +68,3 @@ sudo ./publisher.sh platforms update
 ```
 
 See [Versions](../platforms/manage.md#versions).
-
-## Upgrade notes
-
-Steps a particular upgrade needs once, newest first.
-
-### Gateway client registry import (migration 019)
-
-For installs from before 2026-10-07.
-
-`update --migrate` applies migration 019, which imports `data/gateway_clients/registry.json` (or `GATEWAY_CLIENTS_REGISTRY_FILE`, if `.env` sets it). It logs the entries in `mcc_mnc_overrides.json` without importing them. Delete both files afterwards.
-
-### Adapter registry import
-
-For installs from before 2026-10-06.
-
-`update --migrate` and `manage.sh migrate` register adapter directories on disk that the database lacks, and move their settings and files out of the code. The Docker container does it at every start.

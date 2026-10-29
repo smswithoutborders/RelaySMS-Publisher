@@ -4926,7 +4926,7 @@
               }
             ],
             "title": "Tag",
-            "description": "Null for an adapter registered by `platforms import`."
+            "description": "Null for an adapter registered before tags were recorded, until its first update."
           },
           "commit": {
             "type": "string",
