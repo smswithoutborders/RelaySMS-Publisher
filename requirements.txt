@@ -1,18 +1,18 @@
 -e ./sdk
-alembic==1.20.0
+alembic==1.20.1
 argon2-cffi==25.1.0
 authres==1.2.0
-cachetools==7.2.3
+cachetools==7.2.5
 celery[sqlalchemy,redis]==5.6.3
 cryptography==50.0.2
 dkimpy==1.1.8
-fastapi==0.149.0
+fastapi==0.162.0
 GitPython==3.2.1
 grpc-interceptor==0.15.4
-grpcio==1.84.0
-grpcio-health-checking==1.84.0
-grpcio-testing==1.84.0
-grpcio-tools==1.84.0
+grpcio==1.85.0
+grpcio-health-checking==1.85.0
+grpcio-testing==1.85.0
+grpcio-tools==1.85.0
 imap-tools==1.16.0
 msgspec==0.22.0
 opentelemetry-api==1.45.1
