@@ -31,7 +31,7 @@ def upgrade() -> None:
         batch_op.alter_column(
             "platform_name", existing_type=sa.String(length=100), nullable=True
         )
-        # Without existing_nullable, MySQL's MODIFY makes the column nullable.
+        # existing_nullable keeps the column NOT NULL through MySQL's MODIFY.
         batch_op.alter_column(
             "status",
             existing_type=sa.String(length=50),
@@ -70,8 +70,7 @@ def downgrade() -> None:
         )
         batch_op.add_column(sa.Column("source", sa.String(length=255), nullable=True))
 
-    # Re-adding these columns as NOT NULL directly would fail on a non-empty
-    # table (no default to satisfy existing rows), so backfill first.
+    # Backfills the re-added columns before making them NOT NULL.
     publication_stats = sa.table(
         "publication_stats",
         sa.column("platform_name", sa.String),

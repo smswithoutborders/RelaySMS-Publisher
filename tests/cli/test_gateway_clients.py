@@ -38,7 +38,7 @@ def test_create_update_disable_and_delete():
     assert _clients() == []
 
 
-def test_errors_exit_non_zero():
+def test_deleting_an_unknown_client_exits_1():
     result = run("delete", MSISDN)
 
     assert result.exit_code == 1

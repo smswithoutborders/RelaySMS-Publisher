@@ -37,7 +37,7 @@ def _make_sqlcipher3_creator(db_path: str, key: bytes):
             conn.execute("SELECT count(*) FROM sqlite_master;")
         except sqlcipher3.DatabaseError:  # pyright: ignore[reportAttributeAccessIssue]
             conn.close()
-            raise ValueError("Invalid hex key or database file is corrupted.") from None
+            raise ValueError("Wrong key, or the database file is corrupted.") from None
 
         return conn
 
@@ -126,11 +126,11 @@ def _ensure_postgres_database(server: ServerDatabaseConfig) -> None:
 
 
 def _create_engine() -> Engine:
-    # Read when the engine is built, since many processes import db but never use it.
+    # Read when the engine is first built, not at import.
     database = DatabaseConfig.get()
 
     if database.dialect == "sqlite" and database.sqlite_path == ":memory:":
-        # One shared connection, so every session sees the same in-memory database.
+        # Every session shares one connection to the same in-memory database.
         return create_engine(
             "sqlite:///:memory:",
             connect_args={"check_same_thread": False},
@@ -142,15 +142,15 @@ def _create_engine() -> Engine:
     if database.dialect == "mysql":
         if database.encryption_enabled:
             logger.debug(
-                "Database encryption enabled - ensure TDE is configured on "
+                "Database encryption enabled: ensure TDE is configured on the "
                 "MySQL/MariaDB server"
             )
         _ensure_mysql_database(database.mysql)
     elif database.dialect == "postgres":
         if database.encryption_enabled:
             logger.debug(
-                "Database encryption enabled - Postgres has no built-in TDE, "
-                "use disk-level encryption on the server"
+                "Database encryption enabled: Postgres has no built-in TDE. "
+                "Use disk-level encryption on the server"
             )
         _ensure_postgres_database(database.postgres)
 
@@ -171,8 +171,7 @@ def _create_engine() -> Engine:
                 creator=_make_sqlcipher3_creator(
                     database.sqlite_path, database.encryption_key
                 ),
-                # Otherwise SQLAlchemy wraps only sqlite3's errors, and sqlcipher3's
-                # escape unwrapped, e.g. past `except IntegrityError`.
+                # Makes SQLAlchemy wrap sqlcipher3's errors, e.g. as IntegrityError.
                 module=sqlcipher3_dbapi,
                 echo=sql_echo,
                 poolclass=QueuePool,

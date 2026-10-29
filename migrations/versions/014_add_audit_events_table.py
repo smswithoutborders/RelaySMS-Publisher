@@ -16,7 +16,8 @@ down_revision: str | None = "013"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Every scope before audit:read; holders were administrators and should stay so.
+# Every scope that existed before audit:read. Credentials holding all of them
+# are administrators and get audit:read.
 _PREVIOUS_SCOPES = (
     "stats:publications:read",
     "stats:publications:reasons",

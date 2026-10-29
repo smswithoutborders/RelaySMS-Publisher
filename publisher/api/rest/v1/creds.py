@@ -250,7 +250,7 @@ def reset_credential_password(
     context: AuthContext = Security(authorize, scopes=[Scope.CREDS_WRITE]),
     db: Session = Depends(get_db),
 ) -> CredentialWithPassword:
-    """New password shown once; sessions end. Needs If-Match. Scope: creds:write."""
+    """New password shown once, and sessions end. Needs If-Match. Scope: creds:write."""
     credential = _load(db, username)
     check_if_match(request, _etag(credential), "credential")
     with _model_errors(
@@ -279,7 +279,7 @@ def revoke_credential_sessions(
     context: AuthContext = Security(authorize, scopes=[Scope.CREDS_WRITE]),
     db: Session = Depends(get_db),
 ) -> Response:
-    """Logs it out everywhere; Basic auth still works. Scope: creds:write."""
+    """Logs it out everywhere. Basic auth still works. Scope: creds:write."""
     credential = _load(db, username)
     with _model_errors(
         db, context.credential, AuditAction.CREDS_REVOKE_SESSIONS, credential

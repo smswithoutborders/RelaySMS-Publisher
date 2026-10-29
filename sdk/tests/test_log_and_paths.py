@@ -114,7 +114,7 @@ class TestPaths:
         assert (tmp_path / "config").stat().st_mode & 0o777 == 0o700
         assert [p.name for p in (tmp_path / "config").iterdir()] == ["credentials.json"]
 
-    def test_unset(self, monkeypatch):
+    def test_config_dir_needs_its_env_var(self, monkeypatch):
         monkeypatch.delenv(CONFIG_DIR_ENV, raising=False)
         with pytest.raises(RuntimeError, match=CONFIG_DIR_ENV):
             config_dir()

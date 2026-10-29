@@ -162,7 +162,7 @@ class V1AuthInterceptor(ServerInterceptor):
         except rrs.V1CryptographicError.FailedToDecrypt:
             raise _rejected("decryption failed") from None
 
-        # The signed method name stops a request being replayed against another RPC.
+        # Rejects a request replayed against another RPC.
         if request.method_name.decode() != method_name:
             raise _rejected("method name in payload does not match gRPC method")
 

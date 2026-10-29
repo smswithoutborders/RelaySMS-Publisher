@@ -4,7 +4,7 @@ The services listen on `127.0.0.1`. nginx serves them on port 443 with a Let's E
 
 ## With the installer
 
-Pass `--site-name <DOMAIN>` to the [installer](server.md#run-the-installer). Running it again leaves an existing site file alone, and skips Certbot when the domain already has a certificate; use [`manage.sh nginx`](#on-an-existing-install) to render the site again.
+Pass `--site-name <DOMAIN>` to the [installer](server.md#run-the-installer). Running it again leaves an existing site file alone, and skips Certbot when the domain already has a certificate. Use [`manage.sh nginx`](#on-an-existing-install) to render the site again.
 
 ## On an existing install
 

@@ -21,7 +21,7 @@ class JSONFormatter(logging.Formatter):
 
 
 def parse(line: str) -> dict[str, str] | None:
-    """Read back a line JSONFormatter wrote; None for anything else."""
+    """Read back a line JSONFormatter wrote, or return None for any other line."""
     try:
         entry = json.loads(line)
     except json.JSONDecodeError:

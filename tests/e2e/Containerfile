@@ -1,8 +1,7 @@
 ARG BASE=docker.io/library/ubuntu:24.04
 FROM ${BASE}
 
-# systemd runs as PID 1. install.sh's packages and Rust are baked in so each
-# run only spends time on the publisher itself.
+# systemd runs as PID 1. The image has install.sh's packages and Rust preinstalled.
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     systemd systemd-sysv dbus sudo ca-certificates curl git openssl make \

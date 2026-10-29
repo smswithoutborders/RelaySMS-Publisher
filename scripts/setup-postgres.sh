@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# Re-runnable: an existing install or database/role is left as-is.
+# Re-runnable: keeps an existing server, database and role, and sets the role's
+# password and the database owner to this run's.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,7 +77,7 @@ parse_args() {
 main() {
   parse_args "$@"
   require_root
-  [ -f "$INSTALL_DIR/.env" ] || error "$INSTALL_DIR/.env not found, run install.sh first"
+  [ -f "$INSTALL_DIR/.env" ] || error "$INSTALL_DIR/.env not found. Run install.sh first."
   validate_identifier "--db-name" "$DB_NAME"
   validate_identifier "--db-user" "$DB_USER"
   if [ "$DB_EXISTING" != "1" ] && { [ "$DB_HOST" != "127.0.0.1" ] || [ "$DB_PORT" != "5432" ]; }; then
@@ -123,8 +124,7 @@ END
       sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"$DB_NAME\" OWNER TO \"$DB_USER\";"
     fi
 
-    # Needed on Postgres < 15: owner doesn't get public-schema CREATE by
-    # default there, and migrations fail with "permission denied for schema public".
+    # Lets the role create tables in the public schema.
     sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO \"$DB_USER\";"
   fi
 

@@ -100,7 +100,7 @@ def test_denied_change_is_recorded_and_rolled_back(client, admin):
     assert "gc:read" in event["details"]["reason"]
 
 
-def test_logins_and_logouts(client, admin, password):
+def test_logins_and_logouts_are_recorded(client, admin, password):
     assert login(client, "wrong", username=USERNAME).status_code == 401
     assert login(client, "wrong", username="nobody").status_code == 401
     assert (
@@ -200,7 +200,7 @@ def test_rejects_bad_query(client, admin, params, status):
     assert response.status_code == status
 
 
-def test_delete_older_than():
+def test_delete_older_than_removes_old_events():
     create_credential("analyst", ["gc:read"])
     with db.get_session() as session:
         old = session.query(AuditEvent).filter_by(target_label="analyst").one()

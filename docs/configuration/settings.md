@@ -2,7 +2,7 @@
 
 Settings live in `.env` in the install directory. `template.env` lists each one with its default.
 
-- `sudo ./manage.sh check` reports missing or invalid settings; each service refuses to start on an error in the settings it uses.
+- `sudo ./manage.sh check` reports missing or invalid settings. Each service refuses to start on an error in the settings it uses.
 - Restart the services after a change: `sudo ./manage.sh restart`.
 - After an update, `sudo ./sync-env.sh` adds the settings from `template.env` that `.env` is missing, and shows the change before writing it.
 - On Docker, check with `docker compose exec publisher python -m publisher config check` and apply a change with `docker compose up -d`.
@@ -17,9 +17,9 @@ Settings live in `.env` in the install directory. `template.env` lists each one 
 | `GRPC_HOST` | `127.0.0.1` | gRPC address. Docker always binds `0.0.0.0`. |
 | `GRPC_PORT` | `6000` | gRPC port |
 | `GRPC_MAX_WORKERS` | `10` | gRPC worker threads |
-| `GRPC_TLS_ENABLED` | `false` | Serves TLS on `GRPC_PORT` itself; leave off behind nginx ([details](../installation/reverse-proxy.md#grpc-tls-without-nginx)) |
+| `GRPC_TLS_ENABLED` | `false` | Serves TLS on `GRPC_PORT` itself. Leave it off behind nginx ([details](../installation/reverse-proxy.md#grpc-tls-without-nginx)) |
 | `GRPC_TLS_CERT_FILE`, `GRPC_TLS_KEY_FILE` | None | Certificate and key. Required when `GRPC_TLS_ENABLED=true`. |
-| `NONCE_TTL_SECONDS` | `600` | How far a gRPC request's timestamp may be from the server's clock; nonces are remembered this long to refuse replays |
+| `NONCE_TTL_SECONDS` | `600` | How far a gRPC request's timestamp may be from the server's clock, and how long nonces are remembered to refuse replays |
 
 ## Database
 
@@ -29,14 +29,14 @@ See [Database](../installation/database.md) and [Encryption keys](encryption-key
 | --- | --- | --- |
 | `DATABASE_DIALECT` | `sqlite` | `sqlite`, `mysql` (MySQL and MariaDB) or `postgres` |
 | `SQLITE_DATABASE_PATH` | `data/relaysms.db` | SQLite database file |
-| `MYSQL_HOST` | `127.0.0.1` | MySQL server |
+| `MYSQL_HOST` | `127.0.0.1` (`localhost` if unset) | MySQL server |
 | `MYSQL_PORT` | `3306` | MySQL port |
 | `MYSQL_USER`, `MYSQL_PASSWORD` | None | Required for `mysql` |
-| `MYSQL_DATABASE` | `relaysms` | Required for `mysql`; created if it doesn't exist |
-| `POSTGRES_HOST` | `127.0.0.1` | PostgreSQL server |
+| `MYSQL_DATABASE` | `relaysms` | Required for `mysql`. Created if it doesn't exist. |
+| `POSTGRES_HOST` | `127.0.0.1` (`localhost` if unset) | PostgreSQL server |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD` | None | Required for `postgres` |
-| `POSTGRES_DATABASE` | `relaysms` | Required for `postgres`; created if it doesn't exist |
+| `POSTGRES_DATABASE` | `relaysms` | Required for `postgres`. Created if it doesn't exist. |
 | `DATABASE_ENCRYPTION_ENABLED` | `true` (`false` if unset) | Encrypts the SQLite file with SQLCipher. No effect on MySQL or PostgreSQL. |
 | `DATABASE_ENCRYPTION_KEY` | None | Required for SQLite when encryption is on |
 | `DATABASE_FIELD_ENCRYPTION_ENABLED` | `true` (`false` if unset) | Encrypts linked accounts' platform tokens |
@@ -80,7 +80,7 @@ See [Offline publishing](offline-publishing.md).
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` | `smtp` (empty if unset) | Comma-separated protocols whose offline payloads publish: `https`, `smtp`. Empty allows both. |
+| `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` | `smtp` (empty if unset) | Comma-separated protocols whose offline payloads publish, such as `smtp,https`. Empty allows every protocol. |
 | `OFFLINE_PUBLISH_SHARED_SECRET` | None | 64 hex characters. Required when `https` is allowed. |
 
 ## SMTP transport
@@ -109,7 +109,7 @@ See [Managing adapters](../platforms/manage.md#files). Relative paths are from t
 | `PLATFORMS_ADAPTERS_VENV_DIR` | `data/platforms/venvs` | Directory for adapters' virtualenvs |
 | `PLATFORMS_ADAPTERS_CONFIG_DIR` | `data/platforms/config` | Directory for adapters' `credentials.json` files |
 | `PLATFORMS_ADAPTERS_STATE_DIR` | `data/platforms/state` | Directory for files adapters write, such as databases |
-| `PLATFORMS_GITHUB_ORGS` | None | Comma-separated GitHub orgs that administrators may install and update adapters from over the REST API. Empty refuses REST installs; `publisher.sh platforms` is unaffected. |
+| `PLATFORMS_GITHUB_ORGS` | None | Comma-separated GitHub orgs that administrators may install and update adapters from over the REST API. Empty refuses REST installs, but not `publisher.sh platforms`. |
 
 ## REST API access
 
@@ -136,6 +136,6 @@ See [Observability](../operating/observability.md).
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc` or `http/protobuf` |
 | `OTEL_TRACES_SAMPLER` | `parentbased_traceidratio` | Which traces to keep |
 | `OTEL_TRACES_SAMPLER_ARG` | `1.0` | Fraction of traces kept, `0` to `1` |
-| `OTEL_LOGS_EXPORTER` | `otlp` | `otlp` sends logs to the collector; `none` doesn't |
+| `OTEL_LOGS_EXPORTER` | `otlp` | `otlp` sends logs to the collector, and `none` turns log export off |
 | `OTEL_PYTHON_LOG_CORRELATION` | `true` | Adds trace and span IDs to log records |
 | `UPTIME_KUMA_WORKER_PUSH_URL`, `UPTIME_KUMA_SMTP_PUSH_URL` | None | Uptime Kuma push URLs for the worker and email listener heartbeats. Blank turns them off. |

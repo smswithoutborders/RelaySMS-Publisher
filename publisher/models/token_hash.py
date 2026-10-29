@@ -36,8 +36,8 @@ class TokenHash(Base):
         "ClientEphemeralKey", back_populates="token_hash", cascade="all, delete-orphan"
     )
 
-    # MySQL can't index a BLOB/TEXT column without an explicit key length;
-    # mysql_length is ignored on other dialects.
+    # mysql_length gives MySQL the key length it needs to index a BLOB column.
+    # Other dialects ignore it.
     __table_args__ = (
         Index(
             "uq_token_hashes_token_hash",
@@ -50,7 +50,7 @@ class TokenHash(Base):
 
 
 def create(session: Session, token_pk_id: int) -> tuple[TokenHash, bytes]:
-    """Create a token hash; return it with the raw token, which isn't stored."""
+    """Create a token hash and return it with the raw token, which isn't stored."""
     raw_token = secrets.token_bytes(32)
     token_hash_bytes = hashlib.sha256(raw_token).digest()
 

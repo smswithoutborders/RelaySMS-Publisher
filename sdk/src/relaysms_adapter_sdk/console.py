@@ -163,14 +163,13 @@ def revoke(ws: Workspace, _args: argparse.Namespace) -> None:
 
 def setup(ws: Workspace, args: argparse.Namespace) -> None:
     if not ws.manifest.setup:
-        raise ConsoleError(f"This adapter has no setup; write its {CREDENTIALS_FILE}.")
+        raise ConsoleError(f"This adapter has no setup. Write its {CREDENTIALS_FILE}.")
     inputs = manifest.parse_inputs(
         ws.manifest.setup, args.input, _ask, ask_required=True
     )
     inputs = manifest.check_values(ws.manifest.setup, inputs, require_all=True)
 
     result = call(ws, "setup", SetupRequest(inputs))
-    # The settings replace the file, so every required one must be there.
     settings = manifest.check_values(
         ws.manifest.config, result["settings"], require_all=True
     )
@@ -250,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         default=[],
         metavar="KEY=VALUE",
-        help="repeatable; KEY=@PATH for a file. Asks for required inputs not given.",
+        help="repeatable, KEY=@PATH for a file. Asks for required inputs not given.",
     )
     setup_parser.set_defaults(handler=setup)
 
@@ -260,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
         handler=config_show
     )
     set_parser = config_commands.add_parser(
-        "set", help="change settings; a bare KEY asks for its value"
+        "set", help="change settings (a bare KEY asks for its value)"
     )
     set_parser.add_argument("values", nargs="*", metavar="KEY=VALUE|KEY")
     set_parser.add_argument("--unset", action="append", default=[], metavar="KEY")
@@ -350,7 +349,7 @@ def _link_pnba(ws: Workspace, args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _wait_for_redirect(url: str) -> dict[str, str] | None:
-    """Catch the redirect on a local server; None when the URL isn't local."""
+    """Catch the redirect's query, or return None if not a local URL or none came."""
     target = urlparse(url)
     if target.scheme != "http" or target.hostname not in {"localhost", "127.0.0.1"}:
         return None
@@ -410,7 +409,7 @@ def _load_account(ws: Workspace) -> dict[str, Any]:
     try:
         return json.loads(ws.account_file.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise ConsoleError("No linked account; run relaysms-adapter link.") from None
+        raise ConsoleError("No linked account. Run relaysms-adapter link.") from None
 
 
 def _save_account(ws: Workspace, account: dict[str, Any]) -> None:

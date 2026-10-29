@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# Re-runnable: an existing install or vhost/user is left as-is.
+# Re-runnable: keeps an existing server, vhost and user, and sets the user's
+# password, tags and permissions to this run's.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -82,7 +83,7 @@ parse_args() {
 main() {
   parse_args "$@"
   require_root
-  [ -f "$INSTALL_DIR/.env" ] || error "$INSTALL_DIR/.env not found, run install.sh first"
+  [ -f "$INSTALL_DIR/.env" ] || error "$INSTALL_DIR/.env not found. Run install.sh first."
   validate_identifier "--broker-vhost" "$BROKER_VHOST"
   validate_identifier "--broker-user" "$BROKER_USER"
   if [ "$BROKER_EXISTING" != "1" ] && { [ "$BROKER_HOST" != "127.0.0.1" ] || [ "$BROKER_PORT" != "5672" ]; }; then
@@ -93,10 +94,8 @@ main() {
     [ -n "$BROKER_PASSWORD" ] || error "--broker-password is required with --existing"
     validate_secret "--broker-password" "$BROKER_PASSWORD"
 
-    # rabbitmqctl only works locally, so this checks the management HTTP API
-    # instead. A user without the "management" tag gets 401 on every endpoint
-    # here, indistinguishable from a wrong password by status code alone.
-    # Hence the body sniff below.
+    # Checks the credentials through the management HTTP API. A 401 whose body
+    # says "Not management user" means the user lacks the management tag.
     log "Checking connection to existing RabbitMQ server at $BROKER_HOST:$BROKER_MGMT_PORT"
     tmp_body=$(mktemp)
     http_code=$(curl -s -o "$tmp_body" -w '%{http_code}' -u "$BROKER_USER:$BROKER_PASSWORD" \

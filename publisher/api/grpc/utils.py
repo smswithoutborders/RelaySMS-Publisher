@@ -23,8 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def require_fields(request, *fields: str) -> None:
-    # Only for string, bytes and repeated fields: proto3 sends 0 and false as unset,
-    # so a valid 0 id would be rejected.
+    # Only for string, bytes and repeated fields: proto3 sends 0 and false as unset.
     for field in fields:
         if not getattr(request, field, None):
             raise InvalidArgument(f"Missing required field: {field}")
@@ -63,7 +62,7 @@ def call_adapter(adapter: PlatformAdapter, method: str, request: Any) -> dict:
     """Call an adapter, turning its errors into gRPC errors.
 
     Invalid input, failed authentication and rate limits reach the client with the
-    adapter's message; any other error is logged and the client gets a generic one.
+    adapter's message. Any other error is logged and the client gets a generic one.
     """
     try:
         return ipc.call(adapter, method, request)

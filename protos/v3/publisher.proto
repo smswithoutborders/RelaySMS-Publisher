@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package publisher.v3;
 
-// Represents a public key
 message PublicKey {
   // The key ID
   uint32 key_id = 1;
@@ -23,9 +22,9 @@ message GetOAuth2AuthorizationUrlRequest {
   string platform = 1;
   // Optional state parameter to prevent CSRF attacks
   string state = 2;
-  // Optional PKCE code verifier. Ignored if autogenerate_code_verifier is true.
+  // Optional PKCE code verifier
   string code_verifier = 3;
-  // If true, a PKCE code verifier is auto-generated and code_verifier is ignored
+  // If true and code_verifier is empty, a PKCE code verifier is auto-generated
   bool autogenerate_code_verifier = 4;
   // Optional redirect URL for the OAuth2 application
   string redirect_url = 5;
@@ -247,7 +246,6 @@ message SyncKeysResponse {
   repeated PublicKey server_ephemeral_public_keys = 3;
 }
 
-// Publisher service
 service Publisher {
   // RPC for getting the OAuth2 authorization URL
   rpc GetOAuth2AuthorizationUrl(GetOAuth2AuthorizationUrlRequest) returns (GetOAuth2AuthorizationUrlResponse);

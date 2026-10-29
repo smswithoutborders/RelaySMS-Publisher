@@ -3,26 +3,32 @@
 
 import datetime
 import hashlib
-import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import LargeBinary, select, text
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from sqlalchemy import LargeBinary, func, select, text
 from sqlalchemy.dialects import mysql
 from sqlalchemy.exc import IntegrityError
 
-from publisher import credentials, db, keys
+from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
+from publisher import credentials, db, keys, publications
 from publisher.credentials import CredentialConflictError, CredentialExistsError
 from publisher.db import Base, pagination
 from publisher.models import audit_event, publication_stats
-from publisher.models import gateway_client as gateway_clients
 from publisher.models import platform_adapter_job as jobs
 from publisher.models import token as tokens
 from publisher.models import token_hash as token_hashes
 from publisher.models.audit_event import AuditAction
 from publisher.models.credential import ALL_SCOPES
+from publisher.models.payload_segment import PayloadSegment
+from publisher.models.payload_session import PayloadSession
 from publisher.models.platform_adapter import PlatformAdapter
 from publisher.models.publication_stats import PublicationStats, StatsFilters
 from publisher.models.server_identity_key import get_private_key, get_public_keys
@@ -66,33 +72,6 @@ def add_stats(*created: datetime.datetime) -> list[int]:
 def test_migrations_downgrade_and_upgrade_again(alembic_config):
     command.downgrade(alembic_config, "base")
     command.upgrade(alembic_config, "head")
-
-
-def test_migration_imports_the_gateway_client_registry(
-    alembic_config, tmp_path, monkeypatch
-):
-    registry = tmp_path / "registry.json"
-    client = {
-        "msisdn": "+237670000000",
-        "country": UNICODE,
-        "operator": "MTN Cameroon",
-        "operator_code": "62401",
-        "protocols": ["https", "sms"],
-    }
-    incomplete = {"msisdn": "+237690000000", "protocols": ["sms"]}
-    registry.write_text(json.dumps({c["msisdn"]: c for c in (client, incomplete)}))
-    monkeypatch.setenv("GATEWAY_CLIENTS_REGISTRY_FILE", str(registry))
-
-    command.downgrade(alembic_config, "018")
-    command.upgrade(alembic_config, "head")
-
-    with db.get_session() as session:
-        assert len(gateway_clients.find(session, include_disabled=True)) == 1
-        [imported] = gateway_clients.find(session, country=UNICODE.upper())
-        assert (imported.msisdn, imported.protocols) == (
-            client["msisdn"],
-            ["https", "sms"],
-        )
 
 
 def _same_type(context, inspected_column, metadata_column, inspected, metadata):
@@ -293,3 +272,117 @@ def test_audit_details_keep_json_and_unicode():
         page = audit_event.list_events(session, scopes=ALL_SCOPES, limit=10)
 
     assert [event.details for event in page.items] == [details]
+
+
+def _segments() -> list[str]:
+    payload = rrs.V1Payloads(
+        contents=b"x" * 1000, k_id=5, len_att=600, t_id=7, sess_id=9
+    )
+    return [segment.decode() for segment in payload.split(rrs.Transports.SMS)]
+
+
+def _store_segment(session, sms: str):
+    payload_raw, raw_segment, _ = publications.validate(sms)
+    return publications._store_segment_and_try_join(
+        session, sender_id="sender", payload_raw=payload_raw, raw_segment=raw_segment
+    )
+
+
+def _in_overlapping_transactions(work_first, work_second):
+    """Run two functions in overlapping transactions, as two workers would."""
+    first_done, second_started = threading.Event(), threading.Event()
+
+    def run_first():
+        with db.get_session() as session:
+            result = work_first(session)
+            first_done.set()
+            assert second_started.wait(5), "the second worker never started"
+            time.sleep(0.2)  # Lets the second reach the lock before this commits.
+        return result
+
+    def run_second():
+        first_done.wait(5)
+        second_started.set()
+        with db.get_session() as session:
+            return work_second(session)
+
+    with ThreadPoolExecutor(2) as pool:
+        return pool.submit(run_first), pool.submit(run_second)
+
+
+def _store_both(first: str, second: str):
+    futures = _in_overlapping_transactions(
+        lambda session: _store_segment(session, first),
+        lambda session: _store_segment(session, second),
+    )
+    return tuple(future.result() for future in futures)
+
+
+def test_segments_arriving_together_share_one_session():
+    first, second, *_ = _segments()
+
+    assert _store_both(first, second) == (None, None)
+
+    with db.get_session() as session:
+        assert session.scalar(select(func.count(PayloadSession.id))) == 1
+        assert session.scalar(select(func.count(PayloadSegment.id))) == 2
+
+
+def test_the_last_segments_arriving_together_are_joined():
+    *earlier, second_last, last = _segments()
+    with db.get_session() as session:
+        for segment in earlier:
+            assert _store_segment(session, segment) is None
+
+    first, second = _store_both(second_last, last)
+
+    assert first is None
+    assert second is not None
+    with db.get_session() as session:
+        assert session.scalar(select(func.count(PayloadSession.id))) == 0
+
+
+SLOT = 20
+
+
+def _token_with_key_pools() -> tuple[int, tuple[bytes, bytes]]:
+    """Create a token with key pools, returning its hash id and SLOT's public keys."""
+    client_keys = [X25519PrivateKey.generate() for _ in range(256)]
+    client_public = [k.public_key().public_bytes_raw() for k in client_keys]
+    with db.get_session() as session:
+        keys.initialize_server_identity_keys(session)
+        token = tokens.create(session, "gmail", 0, 0, {"account_id": "a", "token": {}})
+        token_hash, _ = token_hashes.create(session, token.id)
+        server_public = keys.sync_token_pools(
+            session,
+            token_hash,
+            [
+                SimpleNamespace(key_id=i, public_key=pk)
+                for i, pk in enumerate(client_public)
+            ],
+        )
+        return token_hash.id, (server_public[SLOT], client_public[SLOT])
+
+
+def test_a_key_slot_can_be_used_once():
+    token_hash_id, public_keys = _token_with_key_pools()
+
+    with db.get_session() as session:
+        assert keys.pop_keys(session, token_hash_id, SLOT)[2:] == public_keys
+
+    with pytest.raises(keys.KeyUnavailableError), db.get_session() as session:
+        keys.pop_keys(session, token_hash_id, SLOT)
+
+
+def test_one_of_two_workers_using_a_key_slot_at_once_gets_it(caplog):
+    token_hash_id, public_keys = _token_with_key_pools()
+
+    def pop(session):
+        return keys.pop_keys(session, token_hash_id, SLOT)
+
+    first, second = _in_overlapping_transactions(pop, pop)
+
+    assert first.result()[2:] == public_keys
+    with pytest.raises(keys.KeyUnavailableError):
+        second.result()
+    assert "Server ephemeral key unavailable" in caplog.text

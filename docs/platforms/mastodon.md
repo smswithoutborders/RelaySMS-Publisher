@@ -30,7 +30,7 @@ sudo ./publisher.sh platforms setup mastodon \
 | `website` | No | Home page on the consent page |
 | `base_url` | No | The server. Default: `https://mastodon.social` |
 
-`setup` registers the app with the scopes `profile`, `write:statuses` and `write:media`, and saves its client ID and secret. Run it again to change the redirect URIs or the server; it registers a new app and replaces every setting. After changing the server, users must link again.
+`setup` registers the app with the scopes `profile`, `write:statuses` and `write:media`, and saves its client ID and secret. Run it again to change the redirect URIs or the server. It registers a new app and replaces every setting. After changing the server, users must link again.
 
 ## Check it
 

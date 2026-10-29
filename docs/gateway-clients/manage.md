@@ -1,21 +1,21 @@
 # Managing gateway clients
 
-Register each number that relays SMS to this server, so the RelaySMS app lists it, then [connect its relay](connect-a-relay.md). Credentials with `gc:read` and `gc:write` can also manage them over the [REST API](../reference/rest-api.md#managing-gateway-clients); every change is recorded in the [audit log](../operating/audit-log.md).
+Register each number that relays SMS to this server, so the RelaySMS app lists it, then [connect its relay](connect-a-relay.md). Credentials with `gc:read` and `gc:write` can also manage them over the [REST API](../reference/rest-api.md#managing-gateway-clients). Every change is recorded in the [audit log](../operating/audit-log.md).
 
 ## Commands
 
 | Command | Does |
 | --- | --- |
-| `gateway-clients suggest <MSISDN>` | Shows the number's details and PLMN candidates; saves nothing |
-| `gateway-clients create --msisdn <MSISDN> --protocols <PROTOCOLS>` | Registers a number; also takes `--country`, `--operator` and `--operator-code` |
-| `gateway-clients list` | Lists them; filter with `--msisdn`, `--country` or `--operator` |
+| `gateway-clients suggest <MSISDN>` | Shows the number's details and PLMN candidates, without saving |
+| `gateway-clients create --msisdn <MSISDN> --protocols <PROTOCOLS>` | Registers a number. Also takes `--country`, `--operator` and `--operator-code` |
+| `gateway-clients list` | Lists them, optionally filtered by `--msisdn`, `--country` or `--operator` |
 | `gateway-clients update <MSISDN>` | Changes `--country`, `--operator`, `--operator-code` or `--protocols` |
 | `gateway-clients disable <MSISDN>` | Hides it from the public list |
 | `gateway-clients enable <MSISDN>` | Lists it publicly again |
 | `gateway-clients delete <MSISDN>` | Removes it |
 | `gateway-clients countries` | Lists the countries that have a gateway client |
 | `gateway-clients operators --country <COUNTRY>` | Lists the operators of that country's gateway clients |
-| `gateway-clients mcc-mnc list` | Searches the PLMN table; filter with `--country-code`, `--network` or `--iso` |
+| `gateway-clients mcc-mnc list` | Searches the PLMN table, optionally filtered by `--country-code`, `--network` or `--iso` |
 
 Prefix each with `sudo ./publisher.sh`. `<PROTOCOLS>` is how the relay reaches the Publisher, comma-separated: `https` for one that posts to the REST API, `smtp` for one that emails. For example:
 
@@ -23,7 +23,7 @@ Prefix each with `sudo ./publisher.sh`. `<PROTOCOLS>` is how the relay reaches t
 sudo ./publisher.sh gateway-clients create --msisdn +237600000000 --protocols https
 ```
 
-`create` fills in any of `--country`, `--operator` and `--operator-code` you leave out with what `suggest` finds. It fills the PLMN code (MCC+MNC) only when every candidate shares it; otherwise run `suggest`, pick a candidate and pass it with `--operator-code`.
+`create` fills in any of `--country`, `--operator` and `--operator-code` you leave out with what `suggest` finds. It fills the PLMN code (MCC+MNC) only when every candidate shares it. Otherwise, run `suggest`, pick a candidate and pass it with `--operator-code`.
 
 ## How suggest works
 

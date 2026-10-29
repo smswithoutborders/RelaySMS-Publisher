@@ -23,7 +23,7 @@ def run(
     stdout: TextIO = sys.stdout,
 ):
     """Answer each request line until standard input closes."""
-    # One loop for the process, so async clients can outlive a request.
+    # Every async method runs on this one event loop.
     with asyncio.Runner() as runner:
         for line in stdin:
             if line.strip():
@@ -37,8 +37,7 @@ def handle(
     """Answer one JSON-RPC request line.
 
     Given the class, it creates an adapter for each request, except setup, which
-    runs on the class because an adapter's __init__ may read the settings setup
-    creates.
+    runs on the class.
     """
     try:
         request = wire.parse_request(line)

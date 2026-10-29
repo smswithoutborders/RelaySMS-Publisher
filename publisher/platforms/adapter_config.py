@@ -73,7 +73,7 @@ def missing(adapter: PlatformAdapter) -> list[str]:
 
 
 def is_configured(adapter: PlatformAdapter) -> bool:
-    """Whether every required setting has a value; False if its files are broken."""
+    """Whether every required setting has a value, or False if its files are broken."""
     try:
         return not missing(adapter)
     except AdapterError as e:
@@ -87,9 +87,9 @@ def update(
     values: dict[str, Any],
     actor: Credential | None = None,
 ) -> None:
-    """Change the settings given and keep the others; None removes a setting.
+    """Change the settings given and keep the others. None removes a setting.
 
-    The file is replaced before this returns; commit right after.
+    The file is replaced before this returns. Commit right after.
 
     Raises:
         InvalidConfigError: A key isn't a setting, or a value has the wrong type.
@@ -107,8 +107,8 @@ def setup(
 ) -> None:
     """Run the adapter's setup and save the settings it returns, replacing the file.
 
-    End the transaction that loaded adapter first, since the adapter call can be
-    slow, and commit right after, as for update.
+    End the transaction that loaded adapter first, and commit right after, as for
+    update.
 
     Raises:
         InvalidConfigError: The inputs don't fit the adapter's [setup] tables, or
@@ -119,7 +119,7 @@ def setup(
     """
     declared = load_manifest(adapter)
     if not declared.setup:
-        raise AdapterError(f"{adapter.name} has no setup; set its config instead.")
+        raise AdapterError(f"{adapter.name} has no setup. Set its config instead.")
     inputs = _check(declared.setup, inputs, InvalidConfigError, require_all=True)
     try:
         result = ipc.call(adapter, "setup", SetupRequest(inputs))
@@ -163,8 +163,7 @@ def _save(
     actor: Credential | None,
     changed: dict[str, Any],
 ) -> None:
-    # Updating the row bumps its version, so a concurrent change to the adapter
-    # fails with a conflict.
+    # Touching the row makes a concurrent change to the adapter fail with a conflict.
     adapter.updated_at = utc_now()
     adapter.updated_by = actor.id if actor else None
     flush(session, adapter)

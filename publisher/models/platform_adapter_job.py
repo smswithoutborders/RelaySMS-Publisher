@@ -13,7 +13,7 @@ from publisher.db import Base
 from publisher.db.types import UTCDateTime, utc_now
 from publisher.errors import PublisherError
 
-# Longer than the task's time limit, so only abandoned jobs are failed.
+# Above platform_task.TIME_LIMIT_SECONDS: a job active this long was abandoned.
 STALE_AFTER = datetime.timedelta(hours=1)
 # Bytes, under MySQL's 65,535-byte TEXT limit.
 LOG_LIMIT = 60 * 1024
@@ -61,7 +61,11 @@ def create(
     from_commit: str | None = None,
     requested_by: uuid.UUID | None = None,
 ) -> PlatformAdapterJob:
-    """Raises JobBusyError while another job for the adapter is active."""
+    """Queue a job for an adapter.
+
+    Raises:
+        JobBusyError: While another job for the adapter is active.
+    """
     job = PlatformAdapterJob(
         adapter_id=adapter_id,
         action=action,
@@ -82,7 +86,7 @@ def create(
 
 
 def start(session: Session, job_id: uuid.UUID) -> PlatformAdapterJob | None:
-    """Mark a queued job running; None if it was already started or failed."""
+    """Mark a queued job running, or return None if it was already started or failed."""
     result = cast(
         CursorResult,
         session.execute(
@@ -110,7 +114,7 @@ def finish(
 ) -> None:
     job = session.get_one(PlatformAdapterJob, job_id)
     job.state = state
-    # Cutting the bytes can split a character; the partial one is dropped.
+    # Keeps the last LOG_LIMIT bytes, dropping a character the cut splits.
     job.log = "\n".join(log).encode()[-LOG_LIMIT:].decode(errors="ignore")
     job.tag = tag or job.tag
     job.to_commit = to_commit
@@ -159,8 +163,7 @@ def delete_older_than(session: Session, cutoff: datetime.datetime) -> int:
     result = cast(
         CursorResult,
         session.execute(
-            # By finished_at, so an old job that cleanup just failed as abandoned
-            # is kept for the full retention period.
+            # Retention counts from finished_at, not created_at.
             delete(PlatformAdapterJob).where(PlatformAdapterJob.finished_at < cutoff)
         ),
     )

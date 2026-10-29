@@ -18,7 +18,7 @@ def _networks(carrier, iso, country_code):
         ("Glo Mobile Nigeria", "ng", 234, [("62150", "Glo Mobile")]),
         # Words split differently, or one of several "/" names.
         ("Beeline", "uz", 998, [("43404", "Bee Line/Unitel")]),
-        # NANP regions share calling code 1, so the region decides.
+        # NANP regions share calling code 1 and are told apart by region.
         ("Viva", "do", 1, [("37004", "Viva")]),
         # Guernsey has no rows of its own and uses the UK's.
         ("Sure", "gg", 44, [("23455", "Sure Guernsey")]),
@@ -49,6 +49,6 @@ def test_find_matches_searches_the_snapshot_ignoring_case_and_accents():
     [match] = mcc_mnc.find_matches(country_code="237", network="mtn", iso="cm")
     assert (match["mcc"], match["mnc"]) == ("624", "01")
 
-    assert mcc_mnc.find_matches(network="TELEFÓNICA") == mcc_mnc.find_matches(
-        network="telefonica"
-    )
+    telefonica = mcc_mnc.find_matches(network="telefonica")
+    assert telefonica
+    assert mcc_mnc.find_matches(network="TELEFÓNICA") == telefonica

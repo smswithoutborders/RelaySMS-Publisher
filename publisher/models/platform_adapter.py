@@ -23,7 +23,6 @@ class PlatformAdapter(Base):
     # uuid5 of the source URL, which also names the adapter's directories.
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     source_url: Mapped[str] = mapped_column(String(255))
-    # NULL for an adapter registered by `platforms import`.
     tag: Mapped[str | None] = mapped_column(String(100), default=None)
     commit: Mapped[str] = mapped_column(String(40))
     name: Mapped[str] = mapped_column(String(100))
@@ -47,11 +46,10 @@ class PlatformAdapter(Base):
     __table_args__ = (
         Index("uq_platform_adapters_name_proto_id", "name", "proto_id", unique=True),
     )
-    # Every UPDATE and DELETE checks the version it loaded, so a concurrent change
-    # fails with StaleDataError instead of being overwritten.
+    # Every UPDATE and DELETE checks the version it loaded and raises
+    # StaleDataError if a concurrent change bumped it.
     __mapper_args__: ClassVar[dict] = {"version_id_col": version}
 
-    # Paths come from config, so moving the data directory needs no rewrite.
     @property
     def path(self) -> str:
         return str(PlatformsConfig.get().adapters_dir / self.id)
@@ -77,7 +75,7 @@ def find(
     cat_id: int | None = None,
     include_disabled: bool = False,
 ) -> list[PlatformAdapter]:
-    """Enabled adapters only, unless include_disabled."""
+    """Find adapters, enabled only unless include_disabled."""
     stmt = select(PlatformAdapter).order_by(
         PlatformAdapter.name, PlatformAdapter.proto_id
     )
@@ -95,7 +93,11 @@ def find(
 def get_for_protocol(
     session: Session, platform: str, proto_id: int, *, include_disabled: bool = False
 ) -> PlatformAdapter:
-    """Raises NotImplementedError when no adapter serves platform over proto_id."""
+    """Return the adapter serving platform over proto_id.
+
+    Raises:
+        NotImplementedError: No adapter serves it.
+    """
     adapters = find(
         session, name=platform, proto_id=proto_id, include_disabled=include_disabled
     )

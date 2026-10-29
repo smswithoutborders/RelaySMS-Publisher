@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""Helpers for tests that create credentials and log in."""
+"""Helpers that create credentials, adapters, linked accounts and adapter repos."""
 
 import base64
 from collections.abc import Iterable
@@ -26,7 +26,7 @@ def create_credential(username: str, scopes: Iterable[str] = ALL_SCOPES) -> str:
 
 
 def add_adapter(name: str, proto_id: int, cat_id: int = 0) -> PlatformAdapter:
-    """Register an adapter row; its id is "<name>-<proto_id>"."""
+    """Register an adapter row with id "<name>-<proto_id>"."""
     with db.get_session() as session:
         adapter = PlatformAdapter(
             id=f"{name}-{proto_id}",
@@ -52,7 +52,7 @@ def add_adapter_with_manifest(
 
 
 def link_account(platform: str, proto_id: int) -> int:
-    """Store a token as linking an account would; return its row id."""
+    """Store a token as linking an account would and return its row id."""
     with db.get_session() as session:
         token = create_token(
             session,
@@ -112,7 +112,7 @@ def adapter_repo(
 def commit_manifest(
     repo: Repo, name: str, proto_id: int, tag: str | None = None
 ) -> str:
-    """Write and commit adapter.toml, tagged if tag; return the commit's sha."""
+    """Write and commit adapter.toml, tag it if tag is set, and return its sha."""
     path = repo.working_tree_dir
     protocol = PROTOCOL_NAMES[proto_id]
     with open(f"{path}/adapter.toml", "w") as f:

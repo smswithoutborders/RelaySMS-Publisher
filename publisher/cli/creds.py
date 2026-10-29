@@ -23,8 +23,8 @@ def _show_password(username, password):
     click.echo(f"Username : {username}")
     click.echo(f"Password : {password}")
     click.echo(
-        "Store this password now (e.g. in a password manager); "
-        "it is not stored and can't be shown again.",
+        "Store this password now (e.g. in a password manager). "
+        "It is not stored and can't be shown again.",
         err=True,
     )
 
@@ -135,7 +135,7 @@ def reset_password(username):
         credential = credentials.get_or_raise(db, username)
         password = credentials.reset_password(db, credential)
 
-    click.echo("Password reset; existing sessions were ended.")
+    click.echo("Password reset. Existing sessions were ended.")
     _show_password(credential.username, password)
 
 
@@ -146,7 +146,7 @@ def disable(username):
     with session() as db:
         credentials.update(db, credentials.get_or_raise(db, username), active=False)
 
-    click.echo(f"Credential {username} disabled; existing sessions were ended.")
+    click.echo(f"Credential {username} disabled. Existing sessions were ended.")
 
 
 @cli.command()

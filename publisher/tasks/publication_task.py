@@ -34,8 +34,7 @@ from relaysms_adapter_sdk.errors import (
 
 logger = logging.getLogger(__name__)
 
-# Stats keep fixed codes so they group cleanly. Error messages stay in the logs:
-# adapters pass on upstream text that can name recipients or echo responses.
+# Fixed failure codes for the stats. Error messages go only to the logs.
 _FAILURE_REASONS = {
     PayloadMalformedError: "payload_malformed",
     PayloadNotSupportedError: "payload_not_supported",
@@ -59,7 +58,7 @@ _ADAPTER_FAILURE_REASONS = {
 def _failure_reason(exc: Exception) -> str:
     if isinstance(exc, AdapterIntegrationError):
         return _ADAPTER_FAILURE_REASONS.get(exc.code, "adapter_error")
-    # The class hierarchy, so a subclass of a mapped error keeps its code.
+    # A subclass of a mapped error gets its base class's code.
     for cls in type(exc).__mro__:
         if cls in _FAILURE_REASONS:
             return _FAILURE_REASONS[cls]
@@ -81,10 +80,8 @@ def publish_message(
 ) -> None:
     """Validate and publish a payload, then record the outcome."""
     delivery = refreshed_token = None
+    status = "failed"
     try:
-        # Commits only after a successful send. A failure rolls back, so the payload's
-        # keys can be used again, and a duplicate that arrives during the send waits
-        # on their row lock.
         with get_session() as db:
             payload_raw, raw_segment, payload_type = publications.validate(text_payload)
             delivery = publications.prepare(
@@ -96,26 +93,15 @@ def publish_message(
                 protocol=protocol,
                 tag=tag,
             )
-            if delivery is None:
-                # Segments of a multi-part payload are still missing.
-                return
-            new_token = publications.send(delivery)
-            publications.finish(db, delivery, new_token)
-            record_publication(
-                db,
-                protocol=protocol,
-                status="published",
-                platform_name=delivery.platform,
-                country_code=country_code,
-            )
+        if delivery is None:
+            # Segments of a multi-part payload are still missing.
             return
-    except (
-        PayloadMalformedError,
-        PayloadNotSupportedError,
-        ProtocolNotAllowedError,
-        OfflineTagError,
-        KeyManagementError,
-    ) as exc:
+        new_token = publications.send(delivery)
+    except (ProtocolNotAllowedError, OfflineTagError) as exc:
+        logger.warning("Rejected payload: %s", exc)
+        status = "rejected"
+        platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
+    except (PayloadMalformedError, PayloadNotSupportedError, KeyManagementError) as exc:
         logger.error("Failed to process payload: %s", exc)
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
     except AdapterIntegrationError as exc:
@@ -126,6 +112,22 @@ def publish_message(
         logger.exception("An unexpected error occurred during task processing.")
         platform_name = delivery.platform if delivery else None
         failure_reason = _failure_reason(exc)
+    else:
+        try:
+            with get_session() as db:
+                publications.finish(db, delivery, new_token)
+                record_publication(
+                    db,
+                    protocol=protocol,
+                    status="published",
+                    platform_name=delivery.platform,
+                    country_code=country_code,
+                )
+        except Exception:
+            logger.exception(
+                "Sent via %r, but couldn't record the result.", delivery.platform
+            )
+        return
 
     with get_session() as db:
         if delivery and refreshed_token:
@@ -133,7 +135,7 @@ def publish_message(
         record_publication(
             db,
             protocol=protocol,
-            status="failed",
+            status=status,
             platform_name=platform_name,
             country_code=country_code,
             failure_reason=failure_reason,

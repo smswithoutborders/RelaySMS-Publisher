@@ -17,7 +17,6 @@ from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 
 logger = logging.getLogger(__name__)
 
-# Beside the client, so it works from any working directory.
 DB_PATH = Path(__file__).with_name("db.json")
 
 
@@ -70,7 +69,7 @@ def grpc_call(fn, *args, **kwargs) -> tuple:
     try:
         return fn(*args, **kwargs), None
     except grpc.RpcError as e:
-        return None, f"gRPC error: {e.code()} -- {e.details()}"
+        return None, f"gRPC error: {e.code()}: {e.details()}"
 
 
 def fetch_server_identity_public_key(rest_api_url: str, key_id: int) -> bytes:
@@ -86,7 +85,7 @@ def fetch_server_identity_public_key(rest_api_url: str, key_id: int) -> bytes:
 def build_v1_request_metadata(
     rest_api: str, method_name: str, payload: bytes | None = None
 ) -> tuple[bytes, bytes, list[tuple]]:
-    """Encrypt a request to a random server identity key; return its headers."""
+    """Return the client key pair and headers for an encrypted request."""
     key_id = secrets.randbelow(256)
     ss_pk_bytes = fetch_server_identity_public_key(rest_api, key_id)
 

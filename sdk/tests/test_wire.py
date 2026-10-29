@@ -73,12 +73,6 @@ class TestResponses:
             wire.parse_response(line)
         assert (e.value.token, e.value.retry_after) == ({"t": 2}, 30)
 
-    def test_rate_limit_keeps_retry_after(self):
-        line = wire.encode_error(1, RateLimitedError("slow down", retry_after=30))
-        with pytest.raises(RateLimitedError) as e:
-            wire.parse_response(line)
-        assert e.value.retry_after == 30
-
     def test_unknown_code(self):
         line = wire.encode_error(1, AdapterError("odd", code=-32099))
         with pytest.raises(AdapterError) as e:
@@ -153,7 +147,7 @@ class TestConversion:
         with pytest.raises(InvalidParamsError, match=error):
             wire.from_json(SendRequest, data)
 
-    def test_bool_is_not_str_or_int(self):
+    def test_bool_is_not_a_str(self):
         with pytest.raises(InvalidParamsError, match="must be str"):
             wire.from_json(Account, {"identifier": True})
 

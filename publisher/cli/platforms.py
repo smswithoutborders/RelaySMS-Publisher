@@ -93,7 +93,7 @@ def enable(name, proto_id, cat_id):
 @click.argument("name")
 @_filter_options
 def disable(name, proto_id, cat_id):
-    """Hide an adapter from users; it can still revoke tokens."""
+    """Hide an adapter from users. It can still revoke tokens."""
     with session() as db:
         manager.set_enabled(db, _find_one(db, name, proto_id, cat_id), False)
     click.echo(f"Adapter {name!r} disabled.")
@@ -144,7 +144,7 @@ def update(name, proto_id, cat_id, tag):
         ids = [adapter.id for adapter in adapters]
 
     failed = False
-    # One transaction each, so one bad adapter doesn't undo the others.
+    # A failed update doesn't undo the others.
     for adapter_id in ids:
         try:
             with session() as db:
@@ -213,7 +213,7 @@ def config_group():
 @click.argument("name")
 @_filter_options
 def config_show(name, proto_id, cat_id):
-    """Show an adapter's settings; secrets only show whether they're set."""
+    """Show an adapter's settings. Secrets show only whether they're set."""
     with session() as db:
         adapter = _find_one(db, name, proto_id, cat_id)
         settings = adapter_config.show(adapter)
@@ -260,7 +260,7 @@ def config_set(name, values, unset, proto_id, cat_id):
     "inputs",
     multiple=True,
     metavar="KEY=VALUE",
-    help="Repeatable; KEY=@PATH for a file. Asks for required inputs not given.",
+    help="Repeatable. KEY=@PATH reads a file. Asks for required inputs not given.",
 )
 @_filter_options
 def setup(name, inputs, proto_id, cat_id):
@@ -309,14 +309,3 @@ def _shown_value(setting: adapter_config.Setting) -> str:
         return "-"
     value = setting.value
     return ", ".join(value) if isinstance(value, list) else str(value)
-
-
-@cli.command(name="import")
-def import_command():
-    """Register adapter directories on disk and move their files out of the code."""
-    with session() as db:
-        imported = [adapter.name for adapter in manager.import_from_disk(db)]
-        moved = [adapter.name for adapter in manager.move_files_out_of_code(db)]
-    click.echo(f"Imported {len(imported)} adapter(s). {' '.join(imported)}".rstrip())
-    if moved:
-        click.echo(f"Moved the files of {len(moved)} adapter(s). {' '.join(moved)}")

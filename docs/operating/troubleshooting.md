@@ -39,13 +39,15 @@ The container applies migrations before the services start. Wait, or follow `doc
 | Log line | Cause |
 | --- | --- |
 | `Published via '<PLATFORM>'.` | It worked |
-| `Failed to process payload: ...` | The payload didn't decrypt or validate, its keys are unknown or used up, or offline publishing refused it ([Offline publishing](../configuration/offline-publishing.md)) |
-| `Failed to publish message: Adapter error: ...` | The platform refused it; the rest of the line is the adapter's reason. Fix it with the platform's [provider guide](../platforms/manage.md#provider-guides), then the user sends the same SMS again. |
+| `Failed to process payload: ...` | The payload didn't decrypt or validate, or its keys are unknown or used up |
+| `Rejected payload: ...` | Offline publishing refused it ([Offline publishing](../configuration/offline-publishing.md)) |
+| `Failed to publish message: Adapter error: ...` | The platform refused it. The rest of the line is the adapter's reason. Fix it with the platform's [provider guide](../platforms/manage.md#provider-guides), then the user sends the message again. |
+| `Sent via '<PLATFORM>', but couldn't record the result.` | It was published, but a database error kept it out of the stats. The traceback follows. |
 | `Session <ID> can't be assembled from <N> segment(s): ...` | A multi-part payload's segments don't fit together |
-| `An unexpected error occurred during task processing.` | A bug; the traceback follows. [Report it](https://github.com/smswithoutborders/RelaySMS-Publisher/issues). |
-| No line at all | The worker isn't running (`sudo ./manage.sh status`), or a multi-part payload is still waiting for its other segments, for up to `PAYLOAD_SESSION_MAX_AGE_HOURS` |
+| `An unexpected error occurred during task processing.` | A bug. The traceback follows. [Report it](https://github.com/smswithoutborders/RelaySMS-Publisher/issues). |
+| No line at all | The worker isn't running (`sudo ./manage.sh status`), or a multi-part payload is still waiting for its other segments, for up to `PAYLOAD_SESSION_MAX_AGE_HOURS`, then it's discarded and recorded as `failed` with reason `segments_missing` |
 
-`GET /v1/stats/publications` lists each failure with a reason code, for credentials with `stats:publications:reasons`.
+`GET /v1/stats/publications` lists each failure and rejection with a reason code, for credentials with `stats:publications:reasons`.
 
 ### Linking an account fails
 
@@ -66,7 +68,7 @@ The webhook URL in the Twilio console doesn't match the URL the relay sees, sche
 
 ### The Twilio relay answers `502` `Forwarding failed.`
 
-A `FORWARD_URLS_JSON` URL refused the payload or couldn't be reached; the relay's log names it. Check that `https://<HOST>/v1/publications` answers from the relay's host.
+A `FORWARD_URLS_JSON` URL refused the payload or couldn't be reached. The relay's log names it. Check that `https://<HOST>/v1/publications` answers from the relay's host.
 
 ## REST API
 
@@ -84,7 +86,7 @@ The session idled past `AUTH_SESSION_IDLE_MINUTES`, reached `AUTH_SESSION_MAX_HO
 
 ### `Origin not allowed.`
 
-The web client's origin is neither the API's own nor listed in `AUTH_WEB_ORIGINS`; logins and writes with a session cookie both check it. Add the origin, which must be on the same site as the API, then `sudo ./manage.sh restart`.
+The web client's origin is neither the API's own nor listed in `AUTH_WEB_ORIGINS`. Logins and writes with a session cookie both check it. Add the origin, which must be on the same site as the API, then `sudo ./manage.sh restart`.
 
 ### `Too many requests. Please try again shortly.`
 

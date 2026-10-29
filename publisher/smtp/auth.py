@@ -31,8 +31,7 @@ def is_sender_allowed(email_address: str) -> bool:
 def _trusted_result(msg: Message) -> authres.core.AuthenticationResultsHeader | None:
     """First Authentication-Results header matching SMTP_TRUSTED_AUTHSERV_ID, if any.
 
-    Headers from any other (or missing) authserv-id are ignored, since a
-    sender can put arbitrary text of their own in this header.
+    Headers from any other (or missing) authserv-id are ignored.
     """
     trusted_id = smtp_config.trusted_authserv_id
     if not trusted_id:
@@ -53,7 +52,7 @@ def _trusted_result(msg: Message) -> authres.core.AuthenticationResultsHeader | 
 def evaluate_authentication(msg: Message) -> tuple[bool, str]:
     """Check SPF/DKIM verdicts from a trusted Authentication-Results header."""
     if not smtp_config.trusted_authserv_id:
-        return False, "SMTP_TRUSTED_AUTHSERV_ID not configured; rejecting all mail"
+        return False, "SMTP_TRUSTED_AUTHSERV_ID not configured, rejecting all mail"
 
     header = _trusted_result(msg)
     if header is None:

@@ -25,7 +25,11 @@ def test_stats_adds_realistic_rows_in_batches(monkeypatch):
     with get_session() as db:
         rows = db.query(PublicationStats).all()
     assert len(rows) == 50
-    assert all((row.status == "failed") == bool(row.failure_reason) for row in rows)
+    assert all((row.status != "published") == bool(row.failure_reason) for row in rows)
+    assert all(
+        (row.status == "rejected") == (row.failure_reason in seed.REJECTION_REASONS)
+        for row in rows
+    )
     times = [row.created_at for row in rows]
     assert max(times) - min(times) <= datetime.timedelta(days=3)
 

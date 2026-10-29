@@ -39,7 +39,7 @@ def _patch_infra(monkeypatch):
 
 
 def _stub_publications(monkeypatch, *, prepare_error=None, send_error=None):
-    """Stub each publication step; an error makes that step raise it."""
+    """Stub each publication step, making prepare or send raise the given error."""
     stub = MagicMock()
     stub.validate.return_value = (b"raw", b"seg", object())
     stub.prepare.return_value = MagicMock(platform="gmail")
@@ -67,24 +67,35 @@ def _run_with_publish_error(monkeypatch, error):
     [
         (PayloadNotSupportedError("unsupported type"), "payload_not_supported"),
         (PayloadMalformedError("bad payload"), "payload_malformed"),
-        (ProtocolNotAllowedError("protocol not allowed"), "protocol_not_allowed"),
-        (OfflineTagMissingError("missing tag"), "offline_tag_missing"),
-        (OfflineTagInvalidError("invalid tag"), "offline_tag_invalid"),
         (KeyNotFoundError("Token not found"), "token_not_found"),
         (KeyUnavailableError("key used"), "key_unavailable"),
         (TokenVerificationError("unknown key"), "token_verification_failed"),
     ],
 )
-def test_pipeline_errors_are_caught_and_logged(monkeypatch, caplog, error, reason):
-    """The task must swallow these, not raise; the REST caller already got its 200."""
-    stub = _run_with_publish_error(monkeypatch, error)
+def test_pipeline_errors_are_recorded_as_failed(monkeypatch, caplog, error, reason):
+    _run_with_publish_error(monkeypatch, error)
 
-    stub.send.assert_not_called()
     assert "Failed to process payload" in caplog.text
     publication_task.record_publication.assert_called_once()
     kwargs = publication_task.record_publication.call_args.kwargs
     assert kwargs["status"] == "failed"
     assert kwargs["failure_reason"] == reason
+
+
+@pytest.mark.parametrize(
+    "error, reason",
+    [
+        (ProtocolNotAllowedError("protocol not allowed"), "protocol_not_allowed"),
+        (OfflineTagMissingError("missing tag"), "offline_tag_missing"),
+        (OfflineTagInvalidError("invalid tag"), "offline_tag_invalid"),
+    ],
+)
+def test_offline_refusals_are_rejected_not_failed(monkeypatch, caplog, error, reason):
+    _run_with_publish_error(monkeypatch, error)
+
+    assert "Rejected payload" in caplog.text
+    kwargs = publication_task.record_publication.call_args.kwargs
+    assert (kwargs["status"], kwargs["failure_reason"]) == ("rejected", reason)
 
 
 def test_a_subclass_of_a_mapped_error_keeps_its_code(monkeypatch):
@@ -114,14 +125,12 @@ def test_adapter_failures_record_a_code_not_the_message(monkeypatch, code, reaso
     assert kwargs["failure_reason"] == reason
 
 
-def test_a_failed_send_rolls_back_and_keeps_the_refreshed_token(monkeypatch, caplog):
+def test_a_failed_send_keeps_the_refreshed_token(monkeypatch, caplog):
     error = AdapterIntegrationError("boom", code=UpstreamError.code, token={"t": 2})
     stub = _stub_publications(monkeypatch, send_error=error)
 
     publication_task.publish_message("text", "sender", "https")
 
-    # The keys' deletion is rolled back; the failure is recorded afterwards.
-    assert EVENTS == ["open", "send", "rollback", "open", "commit"]
     assert "Failed to publish message" in caplog.text
     assert stub.store_token.call_args.args[2] == {"t": 2}
     stub.finish.assert_not_called()
@@ -130,7 +139,6 @@ def test_a_failed_send_rolls_back_and_keeps_the_refreshed_token(monkeypatch, cap
 
 
 def test_unexpected_error_is_caught_logged_and_recorded(monkeypatch, caplog):
-    """A bare, unanticipated exception must not crash the worker."""
     _run_with_publish_error(monkeypatch, RuntimeError("boom"))
 
     assert "unexpected error" in caplog.text.lower()
@@ -146,6 +154,7 @@ def test_success_records_published_stat(monkeypatch):
     publication_task.publish_message("text", "sender", "https", country_code="CM")
 
     assert stub.prepare.call_args.kwargs["sender_id"] == "sender"
+    assert EVENTS == ["open", "commit", "send", "open", "commit"]
     stub.finish.assert_called_once()
     publication_task.record_publication.assert_called_once()
     kwargs = publication_task.record_publication.call_args.kwargs
@@ -155,7 +164,6 @@ def test_success_records_published_stat(monkeypatch):
 
 
 def test_incomplete_segment_session_skips_recording(monkeypatch):
-    """Return early without recording an outcome while awaiting more segments."""
     stub = _stub_publications(monkeypatch)
     stub.prepare.return_value = None
 
@@ -165,21 +173,26 @@ def test_incomplete_segment_session_skips_recording(monkeypatch):
     publication_task.record_publication.assert_not_called()
 
 
-def test_a_successful_send_commits_once(monkeypatch):
-    _stub_publications(monkeypatch)
+def test_a_recording_failure_after_the_send_is_not_a_failed_publication(
+    monkeypatch, caplog
+):
+    stub = _stub_publications(monkeypatch)
+    stub.finish.side_effect = RuntimeError("db dropped")
 
     publication_task.publish_message("text", "sender", "https")
 
-    assert EVENTS == ["open", "send", "commit"]
+    assert EVENTS == ["open", "commit", "send", "open", "rollback"]
+    assert "couldn't record the result" in caplog.text
+    publication_task.record_publication.assert_not_called()
 
 
-def test_a_rejected_payload_rolls_back_before_sending(monkeypatch):
+def test_a_failed_payload_rolls_back_before_sending(monkeypatch):
     _run_with_publish_error(monkeypatch, PayloadMalformedError("bad payload"))
 
     assert EVENTS == ["open", "rollback", "open", "commit"]
 
 
-def test_tag_is_forwarded_to_service_publish(monkeypatch):
+def test_tag_is_passed_to_prepare(monkeypatch):
     stub = _stub_publications(monkeypatch)
 
     publication_task.publish_message("text", "sender", "https", "s3cret-tag")

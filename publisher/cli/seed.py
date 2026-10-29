@@ -32,13 +32,14 @@ FAILURE_REASONS = (
     "token_not_found",
     "key_unavailable",
     "payload_malformed",
-    "offline_tag_invalid",
+    "segments_missing",
     "adapter_token_invalid",
     "adapter_rate_limited",
     "adapter_upstream",
     "unexpected_error",
 )
-FAILURE_RATE = 0.2
+REJECTION_REASONS = ("protocol_not_allowed", "offline_tag_invalid")
+UNPUBLISHED_RATE = 0.2
 DISABLED_RATE = 0.1
 BATCH_SIZE = 1000
 # name, display name, protocol, category (0 email, 1 message, 2 text).
@@ -53,16 +54,19 @@ ADAPTERS = (
 
 
 def _random_stat(now: datetime.datetime, days: int) -> dict:
-    failed = random.random() < FAILURE_RATE
+    status, reason = "published", None
+    if random.random() < UNPUBLISHED_RATE:
+        reason = random.choice(FAILURE_REASONS + REJECTION_REASONS)
+        status = "rejected" if reason in REJECTION_REASONS else "failed"
     return dict(
-        status="failed" if failed else "published",
+        status=status,
         protocol=random.choice(PROTOCOLS),
-        # Some failures happen before the platform is known.
+        # Failures and rejections can happen before the platform is known.
         platform_name=(
-            None if failed and random.random() < 0.3 else random.choice(PLATFORMS)
+            None if reason and random.random() < 0.3 else random.choice(PLATFORMS)
         ),
         country_code=random.choice(COUNTRIES),
-        failure_reason=random.choice(FAILURE_REASONS) if failed else None,
+        failure_reason=reason,
         created_at=now - datetime.timedelta(seconds=random.uniform(0, days * 86400)),
     )
 
@@ -136,7 +140,7 @@ def platforms():
                 PlatformAdapter(
                     id=adapter_id(url),
                     source_url=url,
-                    # No tag, so platforms update installs the newest release.
+                    # With no tag, platforms update installs the newest release.
                     commit=secrets.token_hex(20),
                     name=name,
                     display_name=display_name,
@@ -173,8 +177,7 @@ def gateway_clients_command(count):
         while added < count:
             msisdn = _random_mobile(random.choice(COUNTRIES))
             suggestion = gateway_clients.suggest(msisdn)
-            # Takes the first candidate when the operator is ambiguous, as an
-            # administrator would.
+            # Takes the first candidate when the operator is ambiguous.
             candidate = suggestion.candidates[0]
             try:
                 client = gateway_clients.create(

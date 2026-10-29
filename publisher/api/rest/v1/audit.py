@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""The audit log of credential activity."""
+"""The audit log of logins and changes."""
 
 import datetime
 

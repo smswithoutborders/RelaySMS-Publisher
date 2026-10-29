@@ -24,6 +24,7 @@ from publisher.publications import (
     PayloadMalformedError,
     ProtocolNotAllowedError,
 )
+from publisher.tasks import publication_task
 from relaysms_adapter_sdk import Account, Message, UpstreamError
 from tests.helpers import add_adapter
 
@@ -117,7 +118,7 @@ def test_https_offline_unchecked_when_secret_unset(offline):
     assert result == "rmail"
 
 
-def test_protocol_allowlist_is_still_enforced_before_tag_check(set_config, offline):
+def test_protocol_allowlist_applies_even_with_a_correct_tag(set_config, offline):
     set_config(
         publications,
         "offline_config",
@@ -132,10 +133,6 @@ def test_protocol_allowlist_is_still_enforced_before_tag_check(set_config, offli
 def test_online_payload_bypasses_protocol_and_tag_checks(
     set_config, monkeypatch, offline
 ):
-    """Skip the offline-only allowlist and tag checks for online payloads.
-
-    Holds even over https with a secret configured and no tag.
-    """
     set_config(
         publications,
         "offline_config",
@@ -153,7 +150,7 @@ def test_online_payload_bypasses_protocol_and_tag_checks(
     )
 
 
-# Publishing end to end: real keys and ciphertext; only the adapter process is faked.
+# Publishing end to end with real keys and ciphertext. Only the adapter is faked.
 
 SENDER = "+237600000000"
 # A 1x1 PNG, padded so the payload spans several SMS segments.
@@ -194,7 +191,7 @@ def account(test_db):
         )
         return SimpleNamespace(
             token_id=token.token_id,
-            # The token's own slot is used up; any other in 16-255 is free.
+            # Any slot in 16-255 but the token's own is free.
             slot=17 if token_slot != 17 else 18,
             client_keys=client_keys,
             server_keys=server_keys,
@@ -251,21 +248,14 @@ def _prepare(text, protocol="sms"):
 
 
 def _publish(text, protocol="sms"):
-    """Publish in one transaction, as the task does; return the platform."""
-    payload_raw, raw_segment, payload_type = publications.validate(text)
+    """Publish and return the platform, or None while segments are missing."""
+    delivery = _prepare(text, protocol)
+    if delivery is None:
+        return None
+    new_token = publications.send(delivery)
     with get_session() as s:
-        delivery = publications.prepare(
-            s,
-            payload_raw=payload_raw,
-            sender_id=SENDER,
-            raw_segment=raw_segment,
-            payload_type=payload_type,
-            protocol=protocol,
-        )
-        if delivery is None:
-            return None
-        publications.finish(s, delivery, publications.send(delivery))
-        return delivery.platform
+        publications.finish(s, delivery, new_token)
+    return delivery.platform
 
 
 def _slot_has_keys(account, slot):
@@ -333,18 +323,15 @@ def test_publish_saves_a_refreshed_token(account, adapter):
     assert _stored_token(account)[0]["token"] == refreshed
 
 
-def test_a_failed_send_keeps_the_keys_for_a_retry(account, adapter):
+def test_a_failed_send_cant_publish_again(account, adapter):
     adapter.results["send_message"] = UpstreamError("platform down")
     contents = _encrypt(account, account.slot, _email())
     [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
 
-    with pytest.raises(AdapterIntegrationError):
-        _publish(text)
-    assert _slot_has_keys(account, account.slot)
-
+    publication_task.publish_message(text, SENDER)
     adapter.results["send_message"] = {}
-    assert _publish(text) == "gmail"
-    assert not _slot_has_keys(account, account.slot)
+    publication_task.publish_message(text, SENDER)
+    assert len(adapter.calls) == 1
 
 
 def test_a_failed_send_still_saves_the_refreshed_token(account, adapter):
@@ -352,13 +339,8 @@ def test_a_failed_send_still_saves_the_refreshed_token(account, adapter):
     adapter.results["send_message"] = UpstreamError("post failed", token=refreshed)
     contents = _encrypt(account, account.slot, _email())
     [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
-    delivery = _prepare(text)
-    assert delivery
 
-    with pytest.raises(AdapterIntegrationError) as error:
-        publications.send(delivery)
-    with get_session() as s:
-        publications.store_token(s, delivery, error.value.token)
+    publication_task.publish_message(text, SENDER)
 
     assert _stored_token(account)[0]["token"] == refreshed
 
@@ -388,6 +370,16 @@ def test_attachment_is_published_once_all_segments_arrive(account, adapter, capl
     [attached] = request.message.attachments
     assert attached.mimetype == "image/png"
     assert attached.data == PNG
+
+
+def test_a_segment_delivered_twice_is_joined_once(account, adapter):
+    contents = _encrypt(account, 5, _email(attachment=PNG))
+    texts = _sms(contents, slot=5, token_id=account.token_id, attachment=PNG, sess_id=3)
+
+    results = [_publish(text) for text in [texts[0], *texts]]
+
+    assert results[-1] == "gmail"
+    assert len(adapter.calls) == 1
 
 
 def test_offline_payload_goes_to_the_offline_adapter(test_db, adapter):

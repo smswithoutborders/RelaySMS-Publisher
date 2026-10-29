@@ -15,27 +15,13 @@ curl -fsSL https://raw.githubusercontent.com/smswithoutborders/RelaySMS-Publishe
 
 ## Documentation
 
-The [manual](docs/README.md) starts with:
-
-- [Quick start](docs/getting-started/quick-start.md)
-- [Settings reference](docs/configuration/settings.md)
-- [Managing adapters](docs/platforms/manage.md) and the [provider guides](docs/platforms/manage.md#provider-guides)
-- [Connecting a relay](docs/gateway-clients/connect-a-relay.md)
-- [Troubleshooting](docs/operating/troubleshooting.md)
-
-`sudo ./manage.sh docs <DOMAIN>` serves the manual from your own server.
+Read the [manual](docs/README.md). Its [Where to start](docs/README.md#where-to-start) table points to the page for each task.
 
 ## Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md) covers setup, running the services locally, testing and the workflow. To start:
+Read [CONTRIBUTING.md](CONTRIBUTING.md) to set up a development checkout and open a pull request.
 
-```bash
-git clone --recurse-submodules https://github.com/smswithoutborders/RelaySMS-Publisher.git
-cd RelaySMS-Publisher
-make setup
-```
-
-Adapters are built with the [adapter SDK](sdk/README.md).
+To add a platform, see [Writing an adapter](docs/developers/writing-an-adapter.md).
 
 ## Security
 

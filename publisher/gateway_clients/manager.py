@@ -62,7 +62,7 @@ def _candidates(rows: list[dict]) -> list[Candidate]:
 
 
 def suggest(msisdn: str) -> Suggestion:
-    """Best-effort details for an MSISDN; operator_code only when unambiguous."""
+    """Best-effort details for an MSISDN, with operator_code only when unambiguous."""
     msisdn = msisdn.strip()
     try:
         number = phonenumbers.parse(msisdn, None)
@@ -94,7 +94,7 @@ def suggest(msisdn: str) -> Suggestion:
 
 
 def check_msisdn(msisdn: str) -> str:
-    """Return it stripped, or raise if it isn't in E.164 format."""
+    """Return the MSISDN stripped, or raise GatewayClientError if it isn't E.164."""
     msisdn = msisdn.strip()
     if not MSISDN_PATTERN.match(msisdn):
         raise GatewayClientError(f"MSISDN {msisdn!r} isn't in E.164 format")
@@ -125,7 +125,7 @@ def _flush(session: Session, client: GatewayClient) -> None:
         ) from None
     except StaleDataError:
         raise GatewayClientConflictError(
-            f"Gateway client {msisdn!r} was changed concurrently; retry"
+            f"Gateway client {msisdn!r} was changed concurrently. Retry."
         ) from None
 
 
@@ -166,7 +166,7 @@ def create(
             codes = ", ".join(sorted({c.operator_code for c in suggestion.candidates}))
             message = f"Multiple PLMNs match operator {operator!r}: {codes}."
         raise GatewayClientError(
-            f"{message} Supply the missing details; suggest lists the candidates."
+            f"{message} Supply the missing details (suggest lists the candidates)."
         )
 
     client = GatewayClient(
@@ -200,7 +200,7 @@ def update(
     protocols: list[str] | None = None,
     actor: Credential | None = None,
 ) -> None:
-    """Change the given fields; None leaves a field as it is."""
+    """Change the given fields, leaving those passed as None."""
     _check(operator_code=operator_code, protocols=protocols)
     new = {
         "country": country,

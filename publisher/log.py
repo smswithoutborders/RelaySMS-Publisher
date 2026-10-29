@@ -10,7 +10,7 @@ from publisher.config import LoggingConfig
 
 def setup_logging() -> None:
     """Configure the root logger at LOG_LEVEL."""
-    # journald adds its own timestamp to each line.
+    # Leave out the timestamp under journald, which adds its own.
     under_journald = bool(os.getenv("JOURNAL_STREAM")) and not sys.stderr.isatty()
     log_format = "%(name)s - %(levelname)s - %(message)s"
     if not under_journald:

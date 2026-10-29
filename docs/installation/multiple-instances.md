@@ -18,4 +18,4 @@ To run a second Publisher on the same host, give it its own install directory, i
    sudo ./manage.sh nginx acme.example.com
    ```
 
-Its units are named after the instance (`relaysms-publisher-acme.target`, `relaysms-publisher-acme-rest.service`, ...), and the `manage.sh` in each install directory manages only its own instance. Running `install.sh` again on that directory reuses the name; a different `--instance-name` is refused.
+Its units are named after the instance (`relaysms-publisher-acme.target`, `relaysms-publisher-acme-rest.service`, ...), and the `manage.sh` in each install directory manages only its own instance. Running `install.sh` again on that directory reuses the name, and refuses a different `--instance-name`.

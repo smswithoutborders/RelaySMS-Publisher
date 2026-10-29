@@ -27,7 +27,7 @@ The services run as the user who ran the installer with `sudo`, or as a new `rel
 | `AUTH_SESSION_COOKIE_SECURE` | `true` |
 | `AUTH_WEB_ORIGINS` | Only the web client origins you run |
 | `PLATFORMS_GITHUB_ORGS` | Only orgs you trust: installing an adapter runs its code on the server |
-| `SMTP_ALLOWED_SENDERS` | Exact addresses; a domain trusts every sender on it ([details](../configuration/smtp-transport.md#allowlist)) |
+| `SMTP_ALLOWED_SENDERS` | Exact addresses, since a domain trusts every sender on it ([details](../configuration/smtp-transport.md#allowlist)) |
 | `DATABASE_ENCRYPTION_ENABLED`, `DATABASE_FIELD_ENCRYPTION_ENABLED` | `true` |
 
 ## Credentials

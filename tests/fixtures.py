@@ -52,7 +52,7 @@ def app():
 
 @pytest.fixture
 def client(app):
-    # https, or the Secure cookie isn't sent back.
+    # The Secure session cookie is only sent back over https.
     return TestClient(app, base_url="https://testserver")
 
 
@@ -78,7 +78,7 @@ def writer():
 
 @pytest.fixture
 def platforms_config(tmp_path, monkeypatch):
-    """Points the adapter directories at tmp_path; call it to change other fields."""
+    """Points the adapter directories at tmp_path. Call it to change other fields."""
     config = dataclasses.replace(
         PlatformsConfig.get(),
         adapters_dir=tmp_path / "adapters",

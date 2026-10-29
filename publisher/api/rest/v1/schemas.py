@@ -12,7 +12,7 @@ from publisher.publications import PublishContentRequest
 from relaysms_adapter_sdk.manifest import FieldType
 
 USERNAME_FIELD = Field(
-    None, description="Username; null for the CLI or a deleted credential."
+    None, description="Username, or null for the CLI or a deleted credential."
 )
 
 
@@ -42,8 +42,7 @@ class OAuthClientMetadata(BaseModel):
     client_name: str
     client_uri: str
     scope: str
-    # The same for every atproto web client, so the adapter's settings leave them
-    # out and these defaults fill them in.
+    # Defaults for every atproto web client, used when the adapter's settings omit them.
     dpop_bound_access_tokens: bool = True
     application_type: str = "web"
     grant_types: list[str] = ["authorization_code", "refresh_token"]
@@ -67,7 +66,7 @@ class PublishContentResponse(BaseModel):
     message: str | None = None
     error: str | None = Field(
         default=None,
-        description="Always null here; errors come back with a 4xx status.",
+        description="Always null here. Errors come back with an error status.",
     )
 
 
@@ -75,22 +74,26 @@ class PublicationStat(BaseModel):
     id: int
     platform_name: str | None = None
     protocol: str | None = None
-    status: str
+    status: str = Field(
+        ...,
+        description="published, failed or rejected (refused by the offline "
+        "publishing settings).",
+    )
     country_code: str | None = None
     failure_reason: str | None = Field(
         None,
-        description="Why it failed, as a short code such as payload_malformed or "
-        "adapter_rate_limited.",
+        description="Why it failed or was rejected, as a short code such as "
+        "payload_malformed or offline_tag_invalid.",
     )
     created_at: datetime.datetime
 
 
 class PageLinks(BaseModel):
     next: str | None = Field(
-        None, description="URL of the next (older) page; null on the last page."
+        None, description="URL of the next (older) page, or null on the last page."
     )
     prev: str | None = Field(
-        None, description="URL of the previous (newer) page; null on the first page."
+        None, description="URL of the previous (newer) page, or null on the first page."
     )
 
 
@@ -176,7 +179,7 @@ class AuditEventInfo(BaseModel):
     actor: str | None = Field(
         None,
         validation_alias="actor_username",
-        description="Username at the time; null for the CLI or a failed login.",
+        description="Username at the time, or null for the CLI or a failed login.",
     )
     action: str = Field(..., description="e.g. creds.update")
     target: str | None = Field(
@@ -196,7 +199,9 @@ class PlatformAdapterInfo(PlatformManifest):
     id: str
     source_url: str
     tag: str | None = Field(
-        None, description="Null for an adapter registered by `platforms import`."
+        None,
+        description="Null for an adapter registered before tags were recorded, "
+        "until its first update.",
     )
     commit: str
     enabled: bool
@@ -316,14 +321,14 @@ class AdapterSetting(AdapterField):
 class AdapterConfig(BaseModel):
     settings: list[AdapterSetting]
     setup: list[AdapterField] = Field(
-        ..., description="Inputs POST .../setup takes; empty if it has no setup."
+        ..., description="Inputs POST .../setup takes, or empty if it has no setup."
     )
 
 
 class AdapterConfigUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     settings: dict[str, Any] = Field(
-        ..., description="Settings to change; others are kept, and null removes one."
+        ..., description="Settings to change. Others are kept, and null removes one."
     )
 
 

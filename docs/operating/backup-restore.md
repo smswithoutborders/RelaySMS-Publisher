@@ -46,7 +46,7 @@ For a database on another host, or named differently in `.env`, connect with the
 
 ## Restore
 
-1. [Install](../installation/server.md) the Publisher in the same directory, with the same `--instance-name`. With MySQL or PostgreSQL, pass `--setup-db`, `--db-name`, `--db-user` and `--db-password` with the values from the backed-up `.env` (`MYSQL_*` or `POSTGRES_*`); with RabbitMQ, the same for `--broker-password`. Otherwise the servers refuse the restored `.env`'s logins.
+1. [Install](../installation/server.md) the Publisher in the same directory, with the same `--instance-name`. With MySQL or PostgreSQL, pass `--setup-db`, `--db-name`, `--db-user` and `--db-password` with the values from the backed-up `.env` (`MYSQL_*` or `POSTGRES_*`). With RabbitMQ, do the same for `--broker-password`. Otherwise the servers refuse the restored `.env`'s logins.
 2. Stop the services:
 
    ```bash

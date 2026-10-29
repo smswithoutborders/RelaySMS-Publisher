@@ -8,7 +8,7 @@ The Publisher runs as systemd services, grouped under `relaysms-publisher.target
 | `relaysms-publisher-grpc` | gRPC API |
 | `relaysms-publisher-worker` | Celery worker: publishes queued payloads |
 | `relaysms-publisher-beat` | Celery Beat: schedules cleanups, and the worker heartbeat with Uptime Kuma |
-| `relaysms-publisher-smtp` | [Email listener](../configuration/smtp-transport.md); exits at once while `SMTP_TRANSPORT_ENABLED` is off |
+| `relaysms-publisher-smtp` | [Email listener](../configuration/smtp-transport.md). Exits at once while `SMTP_TRANSPORT_ENABLED` is off |
 
 The REST API listens on `HOST:PORT` (`127.0.0.1:16000`) and gRPC on `GRPC_HOST:GRPC_PORT` (`127.0.0.1:6000`).
 
@@ -25,7 +25,7 @@ You should see every service active, and `{"status":"ok"}`. To follow publicatio
 sudo ./manage.sh logs --unit worker
 ```
 
-Each published payload logs `Published via '<PLATFORM>'.`, and each failure a line starting `Failed to` ([what each means](troubleshooting.md#a-payload-is-accepted-but-never-published)). Credentials with `stats:publications:read` can also query the counts at `GET /v1/stats/publications`.
+The worker logs each payload's outcome ([what each line means](troubleshooting.md#a-payload-is-accepted-but-never-published)). Credentials with `stats:publications:read` can also query the counts at `GET /v1/stats/publications`.
 
 ## manage.sh
 
@@ -48,7 +48,7 @@ Run it from the install directory with `sudo`:
 
 `logs` takes:
 
-- `-u`, `--unit`: `rest`, `grpc`, `worker`, `beat` or `smtp`; repeatable
+- `-u`, `--unit`: `rest`, `grpc`, `worker`, `beat` or `smtp`, repeatable
 - `-n`, `--lines`: how many lines to show
 - `-s`, `--since`: a time, such as `"1 hour ago"`
 - `--no-follow`: print and exit

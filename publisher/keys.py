@@ -4,9 +4,10 @@
 import hashlib
 import logging
 import secrets
+from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import CursorResult, delete, func, insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -43,7 +44,7 @@ class TokenVerificationError(KeyManagementError):
 
 
 def initialize_server_identity_keys(session: Session, count: int = 256) -> None:
-    """Create database identity keys if they don't exist yet."""
+    """Create the server identity keys if none exist."""
     existing = session.execute(select(func.count(ServerIdentityKey.id))).scalar_one()
     if existing > 0:
         logger.info("Server identity keys exist (%d found), skipping", existing)
@@ -76,7 +77,7 @@ def create_token_pools_and_encrypt(
 ) -> tuple[bytes, int, list[bytes]]:
     """Create the token's hash and key pools, and encrypt the token to one slot.
 
-    Slots 0-15 are reserved, so the token's slot is picked from 16-255.
+    The token's slot is picked from 16-255 (0-15 are reserved).
     """
     token_hash, raw_token = create_token_hash(session, token_pk_id)
     kid_index = secrets.randbelow(240) + 16
@@ -100,7 +101,7 @@ def create_token_pools_and_encrypt(
 def sync_token_pools(
     session: Session, token_hash: TokenHash, client_public_keys: list
 ) -> list[bytes]:
-    """Replace the token's key pools; return the server public keys by slot."""
+    """Replace the token's key pools and return the server public keys by slot."""
     session.execute(
         delete(ServerEphemeralKey).where(
             ServerEphemeralKey.token_hash_id == token_hash.id
@@ -133,7 +134,6 @@ def _insert_pools(
                 "key_index": i,
                 "private_key": kp.private_bytes_raw(),
                 "public_key": server_public_keys[i],
-                "used": False,
             }
             for i, kp in enumerate(server_keypairs)
             if i != skip
@@ -146,7 +146,6 @@ def _insert_pools(
                 "token_hash_id": token_hash_id,
                 "key_index": k.key_id,
                 "public_key": k.public_key,
-                "used": False,
             }
             for k in client_public_keys
             if k.key_id != skip
@@ -155,41 +154,36 @@ def _insert_pools(
     return server_keypairs, server_public_keys
 
 
+def _pop_slot[S: (ServerEphemeralKey, ClientEphemeralKey)](
+    session: Session, model: type[S], token_hash_id: int, key_id: int, label: str
+) -> S:
+    """Delete and return a slot's row, or raise KeyUnavailableError if it's gone."""
+    row = session.scalars(
+        select(model).where(
+            model.token_hash_id == token_hash_id, model.key_index == key_id
+        )
+    ).first()
+    if row is not None:
+        deleted = cast(
+            CursorResult, session.execute(delete(model).where(model.id == row.id))
+        )
+        if deleted.rowcount:
+            return row
+    logger.error(
+        "%s ephemeral key unavailable: token_hash_id=%s, kid=%s",
+        label,
+        token_hash_id,
+        key_id,
+    )
+    raise KeyUnavailableError(f"{label} ephemeral key already used or missing")
+
+
 def pop_keys(
     session: Session, token_hash_id: int, key_id: int
 ) -> tuple[bytes, bytes, bytes, bytes]:
     """Delete and return a slot's keys: ss_kid, es_kid, es_kid_pk, ec_kid_pk."""
-    se_row = session.execute(
-        delete(ServerEphemeralKey)
-        .where(
-            ServerEphemeralKey.token_hash_id == token_hash_id,
-            ServerEphemeralKey.key_index == key_id,
-        )
-        .returning(ServerEphemeralKey.private_key, ServerEphemeralKey.public_key)
-    ).first()
-    if not se_row:
-        logger.error(
-            "Server ephemeral key unavailable: token_hash_id=%s, kid=%s",
-            token_hash_id,
-            key_id,
-        )
-        raise KeyUnavailableError("Server ephemeral key already used or missing")
-
-    ce_row = session.execute(
-        delete(ClientEphemeralKey)
-        .where(
-            ClientEphemeralKey.token_hash_id == token_hash_id,
-            ClientEphemeralKey.key_index == key_id,
-        )
-        .returning(ClientEphemeralKey.public_key)
-    ).first()
-    if not ce_row:
-        logger.error(
-            "Client ephemeral key unavailable: token_hash_id=%s, kid=%s",
-            token_hash_id,
-            key_id,
-        )
-        raise KeyUnavailableError("Client ephemeral key already used or missing")
+    se_row = _pop_slot(session, ServerEphemeralKey, token_hash_id, key_id, "Server")
+    ce_row = _pop_slot(session, ClientEphemeralKey, token_hash_id, key_id, "Client")
 
     ss_kid = get_private_key(session, key_id).private_bytes_raw()
     logger.debug(

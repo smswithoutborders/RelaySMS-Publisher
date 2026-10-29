@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# Re-runnable: an existing install or database/user is left as-is.
+# Re-runnable: keeps an existing server, database and user, and sets the user's
+# password to this run's.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,7 +77,7 @@ parse_args() {
 main() {
   parse_args "$@"
   require_root
-  [ -f "$INSTALL_DIR/.env" ] || error "$INSTALL_DIR/.env not found, run install.sh first"
+  [ -f "$INSTALL_DIR/.env" ] || error "$INSTALL_DIR/.env not found. Run install.sh first."
   validate_identifier "--db-name" "$DB_NAME"
   validate_identifier "--db-user" "$DB_USER"
   if [ "$DB_EXISTING" != "1" ] && { [ "$DB_HOST" != "127.0.0.1" ] || [ "$DB_PORT" != "3306" ]; }; then

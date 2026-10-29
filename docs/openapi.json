@@ -11,7 +11,7 @@
           "Auth"
         ],
         "summary": "Log in",
-        "description": "Sets an HttpOnly session cookie for the web client; scripts use HTTP Basic.",
+        "description": "Sets an HttpOnly session cookie for the web client. Scripts use HTTP Basic.",
         "operationId": "login_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -55,7 +55,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -286,7 +286,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -384,7 +384,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -508,7 +508,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -615,7 +615,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -643,7 +643,7 @@
           "Credentials"
         ],
         "summary": "Reset password",
-        "description": "New password shown once; sessions end. Needs If-Match. Scope: creds:write.",
+        "description": "New password shown once, and sessions end. Needs If-Match. Scope: creds:write.",
         "operationId": "reset_credential_password_v1_creds__username__reset_password_post",
         "security": [
           {
@@ -731,7 +731,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -759,7 +759,7 @@
           "Credentials"
         ],
         "summary": "Revoke sessions",
-        "description": "Logs it out everywhere; Basic auth still works. Scope: creds:write.",
+        "description": "Logs it out everywhere. Basic auth still works. Scope: creds:write.",
         "operationId": "revoke_credential_sessions_v1_creds__username__revoke_sessions_post",
         "security": [
           {
@@ -830,7 +830,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1033,7 +1033,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1260,7 +1260,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1278,7 +1278,7 @@
           "Stats"
         ],
         "summary": "Summarize publications",
-        "description": "Counts per group; last 30 days by default. Scope: stats:publications:read.\n\nGrouping by `failure_reason` also needs stats:publications:reasons. Groups sort by\nperiod, then count, highest first. Periods with no rows are left out; chart them\nas 0.",
+        "description": "Counts per group (last 30 days by default). Scope: stats:publications:read.\n\nGrouping by `failure_reason` also needs stats:publications:reasons. Groups sort by\nperiod, then count, highest first. Periods with no rows are left out.",
         "operationId": "summarize_publication_stats_v1_stats_publications_summary_get",
         "security": [
           {
@@ -1489,7 +1489,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1507,7 +1507,7 @@
           "Publishing"
         ],
         "summary": "Publish",
-        "description": "Queues an SMS payload for publishing.\n\nMulti-part payloads are kept until every segment arrives, then published. Payloads\nare tagged with protocol `https`; see Offline publishing in the manual for\n`OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors\nhappen later in the queue, so they're logged, not returned.",
+        "description": "Queues an SMS payload for publishing.\n\nMulti-part payloads are kept until every segment arrives, then published. Payloads\nare tagged with protocol `https`. See Offline publishing in the manual for\n`OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors are\nlogged, not returned.",
         "operationId": "create_publications_v1_publications_post",
         "requestBody": {
           "content": {
@@ -1541,7 +1541,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1635,7 +1635,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1691,7 +1691,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1743,7 +1743,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1817,7 +1817,7 @@
           "Platform Adapters"
         ],
         "summary": "Install adapter",
-        "description": "Queues an install; poll the job at Location. Administrators only.",
+        "description": "Queues an install. Poll the job at Location. Administrators only.",
         "operationId": "install_adapter_v1_platforms_adapters_post",
         "requestBody": {
           "content": {
@@ -1881,7 +1881,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1990,7 +1990,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2105,7 +2105,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2131,7 +2131,7 @@
           "Platform Adapters"
         ],
         "summary": "Uninstall adapter",
-        "description": "Needs If-Match. Scope: platforms:write.\n\nRefused while accounts are linked through it; disable it instead.",
+        "description": "Needs If-Match. Scope: platforms:write.\n\nRefused while accounts are linked through it. Disable it instead.",
         "operationId": "delete_adapter_v1_platforms_adapters__adapter_id__delete",
         "security": [
           {
@@ -2213,7 +2213,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2310,7 +2310,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2445,7 +2445,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2592,7 +2592,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2630,7 +2630,7 @@
           "Platform Adapters"
         ],
         "summary": "Update adapter",
-        "description": "Queues a move to a version tag; poll the job at Location. Administrators only.",
+        "description": "Queues a move to a version tag. Poll the job at Location. Administrators only.",
         "operationId": "update_adapter_version_v1_platforms_adapters__adapter_id__update_post",
         "security": [
           {
@@ -2729,7 +2729,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2825,7 +2825,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2906,7 +2906,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3001,7 +3001,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3139,7 +3139,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3239,7 +3239,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3325,7 +3325,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3449,7 +3449,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3556,7 +3556,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3648,7 +3648,7 @@
             }
           },
           "422": {
-            "description": "A parameter or body field is missing or invalid; the message names it.",
+            "description": "A parameter or body field is missing or invalid. The message names it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3708,7 +3708,7 @@
             },
             "type": "array",
             "title": "Setup",
-            "description": "Inputs POST .../setup takes; empty if it has no setup."
+            "description": "Inputs POST .../setup takes, or empty if it has no setup."
           }
         },
         "type": "object",
@@ -3724,7 +3724,7 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Settings",
-            "description": "Settings to change; others are kept, and null removes one."
+            "description": "Settings to change. Others are kept, and null removes one."
           }
         },
         "additionalProperties": false,
@@ -4024,7 +4024,7 @@
               }
             ],
             "title": "Actor",
-            "description": "Username at the time; null for the CLI or a failed login."
+            "description": "Username at the time, or null for the CLI or a failed login."
           },
           "action": {
             "type": "string",
@@ -4082,7 +4082,7 @@
               }
             ],
             "title": "Next",
-            "description": "URL of the next (older) page; null on the last page."
+            "description": "URL of the next (older) page, or null on the last page."
           },
           "prev": {
             "anyOf": [
@@ -4094,7 +4094,7 @@
               }
             ],
             "title": "Prev",
-            "description": "URL of the previous (newer) page; null on the first page."
+            "description": "URL of the previous (newer) page, or null on the first page."
           },
           "data": {
             "items": {
@@ -4499,7 +4499,7 @@
               }
             ],
             "title": "Created By",
-            "description": "Username; null for the CLI or a deleted credential."
+            "description": "Username, or null for the CLI or a deleted credential."
           },
           "updated_at": {
             "type": "string",
@@ -4516,7 +4516,7 @@
               }
             ],
             "title": "Updated By",
-            "description": "Username; null for the CLI or a deleted credential."
+            "description": "Username, or null for the CLI or a deleted credential."
           }
         },
         "type": "object",
@@ -4926,7 +4926,7 @@
               }
             ],
             "title": "Tag",
-            "description": "Null for an adapter registered by `platforms import`."
+            "description": "Null for an adapter registered before tags were recorded, until its first update."
           },
           "commit": {
             "type": "string",
@@ -4956,7 +4956,7 @@
               }
             ],
             "title": "Created By",
-            "description": "Username; null for the CLI or a deleted credential."
+            "description": "Username, or null for the CLI or a deleted credential."
           },
           "updated_at": {
             "type": "string",
@@ -4973,7 +4973,7 @@
               }
             ],
             "title": "Updated By",
-            "description": "Username; null for the CLI or a deleted credential."
+            "description": "Username, or null for the CLI or a deleted credential."
           }
         },
         "type": "object",
@@ -5110,7 +5110,8 @@
           },
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "description": "published, failed or rejected (refused by the offline publishing settings)."
           },
           "country_code": {
             "anyOf": [
@@ -5133,7 +5134,7 @@
               }
             ],
             "title": "Failure Reason",
-            "description": "Why it failed, as a short code such as payload_malformed or adapter_rate_limited."
+            "description": "Why it failed or was rejected, as a short code such as payload_malformed or offline_tag_invalid."
           },
           "created_at": {
             "type": "string",
@@ -5161,7 +5162,7 @@
               }
             ],
             "title": "Next",
-            "description": "URL of the next (older) page; null on the last page."
+            "description": "URL of the next (older) page, or null on the last page."
           },
           "prev": {
             "anyOf": [
@@ -5173,7 +5174,7 @@
               }
             ],
             "title": "Prev",
-            "description": "URL of the previous (newer) page; null on the first page."
+            "description": "URL of the previous (newer) page, or null on the first page."
           },
           "data": {
             "items": {
@@ -5270,7 +5271,7 @@
               }
             ],
             "title": "Error",
-            "description": "Always null here; errors come back with a 4xx status."
+            "description": "Always null here. Errors come back with an error status."
           }
         },
         "type": "object",

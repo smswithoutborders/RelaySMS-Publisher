@@ -12,7 +12,7 @@ It needs `audit:read`, plus the read scope of each area: `creds:read` for `auth.
 
 | Action | Recorded when |
 | --- | --- |
-| `creds.create`, `creds.update`, `creds.reset_password`, `creds.revoke_sessions`, `creds.delete` | A credential changes. `details` says what changed, never secrets. |
+| `creds.create`, `creds.update`, `creds.reset_password`, `creds.revoke_sessions`, `creds.delete` | A credential changes. `details` says what changed. |
 | `auth.login` | A web session starts, or a web or HTTP Basic login for an existing username is refused |
 | `auth.logout` | A web session ends |
 | `platforms.add`, `platforms.update`, `platforms.remove` | An adapter is installed, updated or removed. `details` has the source URL and commits. |
@@ -24,7 +24,7 @@ It needs `audit:read`, plus the read scope of each area: `creds:read` for `auth.
 ## Fields
 
 - `outcome`: `success`, `denied` (the change went beyond the actor's scopes) or `failed` (a refused login for an existing username: wrong password, or disabled).
-- `actor`: the username at the time; null for the CLI or a failed login.
-- `details`: what changed, never secrets; for `auth.login`, `method` is `session` or `basic`.
+- `actor`: the username at the time, or null for the CLI or a failed login.
+- `details`: what changed. For `auth.login`, `method` is `session` or `basic`.
 
 Successful HTTP Basic requests aren't recorded. Events are kept for `AUDIT_RETENTION_DAYS` ([Retention](../configuration/settings.md#retention)).

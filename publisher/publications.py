@@ -19,11 +19,10 @@ from publisher.config import DatabaseConfig, OfflinePublishConfig
 from publisher.errors import PublisherError
 from publisher.keys import pop_token_keys
 from publisher.models import platform_adapter as platform_adapters
-from publisher.models.payload_segment import create_if_not_exists as create_segment
+from publisher.models.payload_segment import create as create_segment
 from publisher.models.payload_segment import get_all_data
-from publisher.models.payload_session import create as create_session
 from publisher.models.payload_session import delete as delete_session
-from publisher.models.payload_session import get_by_sender_and_session
+from publisher.models.payload_session import get_or_create_locked
 from publisher.models.platform_adapter import PNBA, PlatformAdapter
 from publisher.models.server_identity_key import get_private_key, mark_key_used
 from publisher.models.token import Token, update_token_data
@@ -84,14 +83,14 @@ class AdapterIntegrationError(PublicationError):
     ):
         super().__init__(message, platform_name=platform_name)
         self.code = code
-        # A token the adapter refreshed before the send failed; it replaces the
-        # stored one.
+        # A token the adapter refreshed before the send failed, stored in place of
+        # the old one.
         self.token = token
 
 
 @dataclass(frozen=True)
 class Delivery:
-    """A decrypted payload ready to send; token_id is None for offline content."""
+    """A decrypted payload ready to send, with no token_id for offline content."""
 
     adapter: PlatformAdapter
     request: SendRequest
@@ -169,10 +168,9 @@ def prepare(
     protocol: str | None = None,
     tag: str | None = None,
 ) -> Delivery | None:
-    """Decrypt a payload, deleting its keys; None while segments are missing.
+    """Decrypt a payload and delete its keys, or return None while segments are missing.
 
-    The deletion only sticks if the session commits, so commit it after a
-    successful send() and finish(), and roll it back otherwise.
+    Commit the session before calling send().
     """
     payload = _assemble(
         session,
@@ -336,7 +334,7 @@ def _publish_online_content(
 
 
 def send(delivery: Delivery) -> dict | None:
-    """Send through the adapter; return the token it refreshed, if any.
+    """Send through the adapter and return the token it refreshed, if any.
 
     Raises:
         AdapterIntegrationError: The adapter failed.
@@ -412,18 +410,18 @@ def _store_segment_and_try_join(
 ) -> rrs.V1Payloads | None:
     sess_id = rrs.v1_get_payload_session_id(payload_raw)
 
-    payload_session = get_by_sender_and_session(session, sender_id, sess_id)
-    if payload_session is None:
-        payload_session = create_session(session, sender_id, sess_id)
-
+    payload_session = get_or_create_locked(session, sender_id, sess_id)
     create_segment(session, payload_session.id, raw_segment)
-    segment_data = get_all_data(session, payload_session.id)
+    # Drops segments delivered more than once.
+    segment_data = list(dict.fromkeys(get_all_data(session, payload_session.id)))
 
     try:
         joined = rrs.V1Payloads.join(segment_data)
     except (rrs.V1PayloadsError.NoLastSegments, rrs.V1PayloadsError.MissingSegments):
         logger.debug(
-            "Session %s waiting for segments, %d stored.", sess_id, len(segment_data)
+            "Payload session %s waiting for segments, %d stored.",
+            sess_id,
+            len(segment_data),
         )
         return None
     except Exception as exc:
@@ -436,7 +434,9 @@ def _store_segment_and_try_join(
         return None
 
     delete_session(session, payload_session)
-    logger.info("Session %s assembled from %d segments.", sess_id, len(segment_data))
+    logger.info(
+        "Payload session %s assembled from %d segments.", sess_id, len(segment_data)
+    )
     return joined
 
 

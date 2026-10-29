@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""CLI tool for testing gRPC flows."""
+"""Reference client for the gRPC and REST flows."""
 
 import json
 import logging
@@ -79,7 +79,7 @@ Examples:\n
 """
 )
 def cli():
-    """CLI test tool for gRPC flows."""
+    """Reference client for the gRPC and REST flows."""
     pass
 
 
@@ -440,7 +440,7 @@ def cmd_exchange_pnba_code(
     **_,
 ):
     """Exchange a PNBA code, decrypt the token, and store session data."""
-    logger.info("platform=%s | phone=%s | code=%s", platform, phone_number, code)
+    logger.info("platform=%s", platform)
 
     client_keypairs = [X25519PrivateKey.generate() for _ in range(256)]
 
@@ -781,7 +781,7 @@ def cmd_sync_keys(host, port, tls, rest_api, token, **_):
     "--address",
     required=True,
     metavar="MSISDN",
-    help="Sender's phone number (e.g. +237123456789).",
+    help="Sender's phone number (e.g. +237600000000).",
 )
 @click.option("--to", metavar="ADDRESS", help="Recipient address (email or phone).")
 @click.option(
@@ -843,7 +843,7 @@ def cmd_send(
 
     if offline:
         if not platform or platform.lower() != "rmail":
-            logger.error("--offline is currently only supported for --platform rmail.")
+            logger.error("--offline supports only --platform rmail.")
             sys.exit(1)
         if not to:
             logger.error("--to is required when using --offline.")
@@ -924,7 +924,7 @@ def cmd_send(
             resp = requests.post(url, json=req_body, timeout=30)
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            logger.error("HTTP error on seg %d: %s -- %s", idx, e, resp.text)
+            logger.error("HTTP error on seg %d: %s: %s", idx, e, resp.text)
             sys.exit(1)
         except Exception as e:
             logger.error("request failed on seg %d: %s", idx, e)

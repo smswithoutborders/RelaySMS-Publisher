@@ -50,7 +50,7 @@ The installer:
 5. installs and starts the systemd services;
 6. sets up nginx and the certificate, if you gave a domain.
 
-Running it again updates the install in place and keeps its `.env`. Run it as the same user as the first time; it refuses another service user.
+Running it again updates the install in place and keeps its `.env`. Run it as the same user as the first time, since it refuses another service user.
 
 ## After installing
 

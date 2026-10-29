@@ -18,7 +18,7 @@ from relaysms_adapter_sdk.paths import CONFIG_DIR_ENV, STATE_DIR_ENV
 logger = logging.getLogger(__name__)
 
 TIMEOUT = 60
-# Adapters run third-party code, so they get only these from the environment.
+# The only variables adapter processes get from the environment.
 PASSED_ENV = (
     "PATH",
     "HOME",

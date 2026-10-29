@@ -14,8 +14,6 @@ from publisher.db.types import PrivateEncryptedBinary, utc_now
 
 
 class ServerIdentityKey(Base):
-    """Persistent x25519 server identity key."""
-
     __tablename__ = "server_identity_keys"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -60,7 +58,7 @@ def get_public_key(session: Session, key_id: int) -> dict[str, Any]:
 
 
 def get_private_key(session: Session, key_id: int) -> X25519PrivateKey:
-    """Fetch a private key for cryptographic operations."""
+    """Return the server identity private key at key_id."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
     key = session.scalar(
@@ -72,7 +70,7 @@ def get_private_key(session: Session, key_id: int) -> X25519PrivateKey:
 
 
 def mark_key_used(session: Session, key_id: int) -> None:
-    """Mark a server identity key as used after a successful operation."""
+    """Record a use of a server identity key."""
     if not (0 <= key_id <= 255):
         raise ValueError(f"Invalid key_id {key_id}: must be 0-255")
     result = cast(

@@ -52,7 +52,7 @@ class EchoAdapter(PNBAAdapter):
 
     @override
     def revoke(self, request: RevokeRequest) -> None:
-        logger.info("Unlinked %s", request.account.identifier)
+        logger.info("Unlinked the account.")
 
     @override
     @classmethod

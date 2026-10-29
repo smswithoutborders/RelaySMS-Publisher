@@ -20,14 +20,12 @@ from tqdm import tqdm
 from publisher.config import PlatformsConfig
 from publisher.errors import PublisherError
 from publisher.models import audit_event
-from publisher.models import platform_adapter as platform_adapters
 from publisher.models import token as tokens
 from publisher.models.audit_event import AuditAction
 from publisher.models.credential import Credential
 from publisher.models.platform_adapter import PROTOCOL_NAMES, PlatformAdapter
 from relaysms_adapter_sdk.manifest import Category, Manifest, ManifestError, Protocol
 from relaysms_adapter_sdk.manifest import load as load_manifest
-from relaysms_adapter_sdk.paths import CREDENTIALS_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -165,12 +163,12 @@ def flush(session: Session, adapter: PlatformAdapter) -> None:
         ) from None
     except StaleDataError:
         raise AdapterConflictError(
-            f"Adapter {name!r} was changed concurrently; retry"
+            f"Adapter {name!r} was changed concurrently. Retry."
         ) from None
 
 
 def adapter_id(url: str) -> str:
-    """Stable per URL, so a reinstall finds the same directories."""
+    """The adapter's id: a UUID derived from its source URL."""
     return str(uuid.uuid5(uuid.NAMESPACE_URL, url.strip().lower()))
 
 
@@ -242,12 +240,7 @@ def _register(session: Session, adapter: PlatformAdapter, manifest: Manifest) ->
 
 
 def activate(adapter: PlatformAdapter) -> None:
-    """Move a built version into place. Call it after the install or update commits.
-
-    If it ran first and the commit failed, the new files would be in place while the
-    database still names the old version.
-    """
-    # Renames are atomic, so an adapter call sees the old version or the new.
+    """Move a built version into place. Call it after the install or update commits."""
     for current in (Path(adapter.path), Path(adapter.venv_path)):
         new, old = _beside(current, "new"), _beside(current, "old")
         if not new.exists():
@@ -312,8 +305,7 @@ def update(
     """Register tag, or the newest version tag, for an adapter."""
     tag = tag or latest_tag(adapter.source_url)
     commit, manifest = _build(adapter, tag, log)
-    # Refused: the installed tag now points to other code, so it was moved after
-    # its release.
+    # Refuse the installed tag when it now points to a different commit.
     if tag == adapter.tag and commit != adapter.commit:
         _discard_build(adapter)
         raise AdapterError(
@@ -356,17 +348,15 @@ def remove(
     *,
     force: bool = False,
 ) -> None:
-    """Unregister an adapter; call delete_files after the commit.
+    """Unregister an adapter. Call delete_files after the commit.
 
     Raises:
         AdapterInUseError: When accounts are linked through it and force is off.
     """
-    # The id names its directories; reject one that could point elsewhere.
+    # Reject an id that could make its directory paths point elsewhere.
     if adapter.id in ("", ".", "..") or "/" in adapter.id:
         raise AdapterError(f"Unsafe adapter id {adapter.id!r}")
     linked = tokens.count_for_platform(session, adapter.name, adapter.proto_id)
-    # Refused while accounts are linked: without the adapter, their tokens can't
-    # be revoked at the platform.
     if linked and not force:
         raise AdapterInUseError(
             f"{linked} linked account(s) use {adapter.name!r}. Disable it instead, "
@@ -385,66 +375,3 @@ def remove(
     )
     session.delete(adapter)
     flush(session, adapter)
-
-
-def import_from_disk(session: Session) -> list[PlatformAdapter]:
-    """Register adapter directories with no row, e.g. from the old JSON registry."""
-    adapters_dir = PlatformsConfig.get().adapters_dir
-    if not adapters_dir.is_dir():
-        return []
-
-    # Checked up front: one clash at flush would fail the whole import.
-    taken = {
-        (a.name, a.proto_id)
-        for a in platform_adapters.find(session, include_disabled=True)
-    }
-    imported = []
-    for path in sorted(adapters_dir.iterdir()):
-        if not path.is_dir() or session.get(PlatformAdapter, path.name):
-            continue
-        try:
-            manifest = _read_manifest(path)
-            repo = Repo(path)
-            adapter = PlatformAdapter(
-                id=path.name,
-                source_url=repo.remotes.origin.url,
-                commit=repo.head.commit.hexsha,
-            )
-            _apply_manifest(adapter, manifest)
-        except Exception as e:
-            logger.warning("Skipping adapter directory %s: %s", path, e)
-            continue
-        if (adapter.name, adapter.proto_id) in taken:
-            logger.warning("Skipping %s: %r is already installed", path, adapter.name)
-            continue
-        taken.add((adapter.name, adapter.proto_id))
-        session.add(adapter)
-        imported.append(adapter)
-    session.flush()
-    return imported
-
-
-def move_files_out_of_code(session: Session) -> list[PlatformAdapter]:
-    """Copy credentials.json to config dirs and move assets dirs to state dirs.
-
-    Leaves an adapter alone where its new location already exists.
-    """
-    legacy_state_dir = PlatformsConfig.get().adapters_state_dir.parent / "assets"
-    changed = []
-    for adapter in platform_adapters.find(session, include_disabled=True):
-        credentials = Path(adapter.path) / CREDENTIALS_FILE
-        config = Path(adapter.config_path) / CREDENTIALS_FILE
-        legacy_state = legacy_state_dir / adapter.id
-        state = Path(adapter.state_path)
-        moved = False
-        if credentials.is_file() and not config.exists():
-            config.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(credentials, config)
-            moved = True
-        if legacy_state.is_dir() and not state.exists():
-            state.parent.mkdir(parents=True, exist_ok=True)
-            legacy_state.rename(state)
-            moved = True
-        if moved:
-            changed.append(adapter)
-    return changed

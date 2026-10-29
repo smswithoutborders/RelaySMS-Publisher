@@ -13,7 +13,7 @@ from publisher.errors import PublisherError
 
 @contextmanager
 def session() -> Generator[Session]:
-    """Commit on success; show domain errors as CLI errors."""
+    """Commit on success and show domain errors as CLI errors."""
     try:
         with get_session() as db:
             yield db

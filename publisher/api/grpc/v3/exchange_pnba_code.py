@@ -57,7 +57,7 @@ def exchange_pnba_code_and_store(
             two_step_verification_enabled=True,
             platform=adapter.name,
             cat_id=adapter.cat_id,
-            message="two-steps verification is enabled and a password is required",
+            message="Two-step verification is enabled and a password is required",
         )
 
     account_identifier = result["identifier"]

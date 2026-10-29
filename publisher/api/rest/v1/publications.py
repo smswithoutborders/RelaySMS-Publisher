@@ -26,9 +26,9 @@ def create_publications(body: PublishRestContentRequest) -> PublishContentRespon
     """Queues an SMS payload for publishing.
 
     Multi-part payloads are kept until every segment arrives, then published. Payloads
-    are tagged with protocol `https`; see Offline publishing in the manual for
-    `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors
-    happen later in the queue, so they're logged, not returned.
+    are tagged with protocol `https`. See Offline publishing in the manual for
+    `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` and `tag`. Decryption and adapter errors are
+    logged, not returned.
     """
     try:
         publications.validate(body.text)

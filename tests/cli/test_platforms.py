@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-from git import Repo
 
 from publisher import db
 from publisher.cli import platforms as platforms_cli
@@ -76,21 +75,16 @@ def _run(*args):
     return CliRunner().invoke(platforms_cli.cli, list(args))
 
 
-def test_add_list_and_import(tmp_path):
+def test_add_and_list(tmp_path):
     url = str(adapter_repo(tmp_path / "src" / "mastodon", "mastodon").working_tree_dir)
 
     added = _run("add", url)
     assert added.exit_code == 0, added.output
     assert "Adapter 'mastodon' added at v1.0.0" in added.output
 
-    source = adapter_repo(tmp_path / "src" / "telegram", "telegram", PNBA)
-    Repo.clone_from(str(source.working_tree_dir), tmp_path / "adapters" / "tg-id")
-    imported = _run("import")
-    assert imported.output.strip() == "Imported 1 adapter(s). telegram"
-
     listed = _run("list")
     names = [line.split("|")[2].strip() for line in listed.output.splitlines()[2:]]
-    assert names == ["gmail", "mastodon", "telegram"]
+    assert names == ["gmail", "mastodon"]
 
 
 @pytest.mark.parametrize(

@@ -24,7 +24,7 @@ sudo ./manage.sh restart
 
 1. `update --migrate` stops the services, pulls the code, reinstalls the dependencies, rebuilds, applies pending migrations and starts the services again. When the install serves this manual, it rebuilds it too.
 2. `sync-env.sh` adds the settings the new `template.env` has and `.env` lacks, showing the change before writing it.
-3. `check` reports any setting still missing or invalid; fill it in `.env`.
+3. `check` reports any setting still missing or invalid. Fill it in `.env`.
 4. `restart` loads the new settings.
 
 When `.env` has an invalid setting, `update` still restarts every service, then exits with an error ([fix](troubleshooting.md#update-ends-with-env-has-errors)).
@@ -40,7 +40,7 @@ If you edited tracked files that the update changes, `update` refuses to pull. D
 ## Roll back
 
 1. Take the commit you noted [before upgrading](#before-you-upgrade).
-2. If the update applied migrations, [restore the backup](backup-restore.md#restore) taken before it; older code can't use the migrated database.
+2. If the update applied migrations, [restore the backup](backup-restore.md#restore) taken before it.
 3. Check out that commit and rebuild. `--pulled` skips the pull that would undo the checkout:
 
    ```bash
@@ -57,7 +57,7 @@ git pull --recurse-submodules
 docker compose up -d --build
 ```
 
-The container applies new migrations and runs `platforms import` when it starts.
+The container applies new migrations when it starts.
 
 ## Update adapters
 
@@ -68,19 +68,3 @@ sudo ./publisher.sh platforms update
 ```
 
 See [Versions](../platforms/manage.md#versions).
-
-## Upgrade notes
-
-Steps a particular upgrade needs once, newest first.
-
-### Gateway client registry import (migration 019)
-
-For installs from before 2026-10-07.
-
-`update --migrate` applies migration 019, which imports `data/gateway_clients/registry.json` (or `GATEWAY_CLIENTS_REGISTRY_FILE`, if `.env` sets it). It logs the entries in `mcc_mnc_overrides.json` without importing them. Delete both files afterwards.
-
-### Adapter registry import
-
-For installs from before 2026-10-06.
-
-`update --migrate` and `manage.sh migrate` register adapter directories on disk that the database lacks, and move their settings and files out of the code. The Docker container does it at every start.

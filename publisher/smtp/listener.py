@@ -45,7 +45,7 @@ def _ping_heartbeat() -> None:
     try:
         requests.get(url, timeout=5)
     except requests.RequestException as exc:
-        logger.warning("Failed to ping SMTP listener heartbeat: %s", exc)
+        logger.warning("Failed to ping SMTP listener heartbeat: %s", type(exc).__name__)
 
 
 def _mask_email(address: str) -> str:
@@ -58,9 +58,8 @@ def _mask_email(address: str) -> str:
 def process_incoming_email(msg: MailMessage) -> bool:
     """Validate, authenticate, and queue an incoming email for publication.
 
-    Returns whether the email is done with (should be deleted). False means
-    an unexpected error occurred and it should be left for a retry next
-    cycle; every other outcome, handled or intentionally rejected, is done.
+    Return True when the email can be deleted, or False after an unexpected error,
+    to retry it next cycle.
     """
     email_uid = msg.uid
     from_email = msg.from_
@@ -72,20 +71,18 @@ def process_incoming_email(msg: MailMessage) -> bool:
 
         if not smtp_auth.is_sender_allowed(from_email):
             logger.warning(
-                "Dropping email %s from unauthorized sender: %s",
+                "Discarding email %s from unauthorized sender: %s",
                 email_uid,
                 _mask_email(from_email),
             )
             return True
 
-        # as_bytes() re-serializes rather than returning the literal wire
-        # bytes, but dkimpy tolerates that (see auth.verify_dkim_independently).
         auth_passed, auth_reason = smtp_auth.evaluate(
             msg.obj, msg.obj.as_bytes(), from_email
         )
         if not auth_passed:
             logger.warning(
-                "Dropping email %s failing authentication (sender %s): %s",
+                "Discarding email %s failing authentication (sender %s): %s",
                 email_uid,
                 _mask_email(from_email),
                 auth_reason,
@@ -197,7 +194,7 @@ def main() -> None:
             socket.herror,
             socket.gaierror,
         ) as e:
-            logger.error("Error occurred: %s", e)
+            logger.error("Mailbox connection failed: %s", e)
             logger.error(traceback.format_exc())
             logger.info("Reconnecting in a minute...")
             time.sleep(60)

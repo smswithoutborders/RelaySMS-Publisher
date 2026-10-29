@@ -41,7 +41,7 @@ jobs:
   tests:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    # Ubuntu 24.04 LTS and Debian 13. The coverage job covers 3.14, the Docker image's.
+    # The Python versions of Ubuntu 24.04 and Debian 13. The coverage job runs 3.14, the Docker image's.
     strategy:
       fail-fast: false
       matrix:
@@ -105,8 +105,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Adapters pin SDK releases while the Publisher runs sdk/ as it is, so every
-      # change to it needs a version that can be tagged.
       - name: Require a version bump for SDK changes
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -114,7 +112,7 @@ jobs:
           git cat-file -e "$BASE^{commit}" 2>/dev/null || exit 0
           git diff --quiet "$BASE...HEAD" -- sdk/src && exit 0
           git diff "$BASE...HEAD" -- sdk/pyproject.toml | grep -q '^+version = ' && exit 0
-          echo "::error file=sdk/pyproject.toml::sdk/src changed; bump version here."
+          echo "::error file=sdk/pyproject.toml::sdk/src changed without a new version here."
           exit 1
 
   deploy-staging:

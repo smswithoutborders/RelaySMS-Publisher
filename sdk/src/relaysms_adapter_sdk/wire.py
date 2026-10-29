@@ -44,7 +44,7 @@ def parse_request(line: str) -> Request:
     """Parse one request line.
 
     Raises:
-        AdapterError: With PARSE_ERROR or INVALID_REQUEST, as JSON-RPC requires.
+        AdapterError: With PARSE_ERROR or INVALID_REQUEST.
     """
     message = _loads(line)
     request_id = message.get("id")

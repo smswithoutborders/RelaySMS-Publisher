@@ -5,9 +5,6 @@
 # observability/signoz/casting.yaml (gitignored, contains real
 # credentials). See docs/operating/observability.md for the manual equivalent.
 #
-# Left unset, Foundry defaults the Postgres fields to the literal string
-# "signoz", so don't cast this template file directly.
-#
 # Writes pours/deployment/ relative to the current directory (generated,
 # gitignored, do not hand-edit).
 apiVersion: v1alpha1
@@ -38,13 +35,11 @@ spec:
     spec:
       config:
         data:
-          # Foundry points this at the metastore Postgres container instead
-          # of the actual SigNoz backend, so the collector can never
-          # register as an opamp agent.
+          # Points the collector's opamp client at the SigNoz backend.
           opamp.yaml: |
             server_endpoint: ws://relaysms-publisher-signoz-signoz-0:4320/v1/opamp
   patches:
-    # Foundry publishes these on 0.0.0.0 by default; restrict to localhost.
+    # Publishes these ports on 127.0.0.1 only.
     - target: "deployment/compose.yaml"
       operations:
         - op: replace

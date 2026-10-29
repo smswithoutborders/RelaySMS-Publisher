@@ -13,9 +13,9 @@ The `rmail` adapter gives each user an email alias tied to their phone number, a
 
 ## SimpleLogin
 
-1. Sign up at [app.simplelogin.io](https://app.simplelogin.io). The signup address becomes your mailbox; to use another, add and verify it under [Mailboxes](https://app.simplelogin.io/dashboard/mailbox).
+1. Sign up at [app.simplelogin.io](https://app.simplelogin.io). The signup address becomes your mailbox. To use another, add and verify it under [Mailboxes](https://app.simplelogin.io/dashboard/mailbox).
 2. Add your domain, or a subdomain such as `mail.example.com`, under [Custom domains](https://app.simplelogin.io/dashboard/custom_domain).
-3. Create the DNS records the domain's page lists: ownership TXT, MX, SPF, DKIM and DMARC. SimpleLogin marks the last three optional; without them, mail sent from aliases doesn't arrive.
+3. Create the DNS records the domain's page lists: ownership TXT, MX, SPF, DKIM and DMARC. SimpleLogin marks the last three optional, but without them mail sent from aliases doesn't arrive.
 4. Create an [API key](https://app.simplelogin.io/dashboard/api_key).
 
 ## SMTP

@@ -13,7 +13,7 @@ from publisher.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
-# Under jobs.STALE_AFTER, so cleanup never fails a job that's still running.
+# Must stay under jobs.STALE_AFTER.
 TIME_LIMIT_SECONDS = 30 * 60
 
 
@@ -52,7 +52,7 @@ def run_adapter_job(job_id: str) -> None:
     except PublisherError as e:
         log.append(f"Failed: {e}")
     except Exception as e:
-        logger.exception("Adapter job %s failed unexpectedly", job_id)
+        logger.exception("Unexpected error in adapter job %s", job_id)
         log.append(f"Failed unexpectedly: {e}")
 
     with get_session() as db:

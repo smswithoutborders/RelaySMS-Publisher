@@ -65,11 +65,11 @@ coverage:
 test-sdk:
 	$(PYTHON) -m pytest -c sdk/pyproject.toml sdk/tests sdk/examples $(PYTEST_ARGS)
 
-## Migrate and query SQLite, SQLCipher, and Postgres, MySQL and MariaDB in podman.
+## Migrate and query SQLite and SQLCipher, and Postgres, MySQL and MariaDB in podman.
 test-dialects:
 	$(PYTHON) -m pytest tests/dialects $(PYTEST_ARGS)
 
-## Install and update in a systemd container with podman (slow, needs network).
+## Install, update and uninstall in systemd containers with podman (slow, needs network).
 test-e2e:
 	$(PYTHON) -m pytest --noconftest tests/e2e $(PYTEST_ARGS)
 

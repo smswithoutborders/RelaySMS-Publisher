@@ -27,7 +27,7 @@ class PublicationStats(Base):
     failure_reason: Mapped[str | None] = mapped_column(String(255), default=None)
     created_at: Mapped[datetime.datetime] = mapped_column(UTCDateTime, default=utc_now)
 
-    # (created_at, id) serves keyset pagination; id breaks timestamp ties.
+    # (created_at, id) serves keyset pagination, with id breaking timestamp ties.
     __table_args__ = (
         Index("ix_publication_stats_created_at_id", "created_at", "id"),
         Index("ix_publication_stats_status_created_at", "status", "created_at"),
@@ -71,6 +71,7 @@ def record(
     platform_name: str | None = None,
     country_code: str | None = None,
     failure_reason: str | None = None,
+    created_at: datetime.datetime | None = None,
 ) -> PublicationStats:
     """Record the outcome of a publish attempt."""
     stats = PublicationStats(
@@ -79,6 +80,7 @@ def record(
         platform_name=platform_name,
         country_code=country_code,
         failure_reason=failure_reason,
+        created_at=created_at,
     )
     session.add(stats)
     session.flush()

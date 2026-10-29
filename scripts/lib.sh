@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Shared helpers sourced by the other scripts in this repo.
 
-# Colors are skipped when the relevant stream isn't a terminal.
 _no_color="${NO_COLOR:-}"
 if [[ -t 1 && -z "$_no_color" ]]; then
   _grn=$'\033[0;32m'
@@ -17,8 +16,7 @@ else
   _ylw=''
 fi
 
-# $1=color $2=symbol $3=fd (1 or 2) $4=message. Reset code is derived from
-# whether $1 is set, so callers don't have to track a matching "off" value.
+# $1=color $2=symbol $3=fd (1 or 2) $4=message.
 _log_line() {
   local now off=''
   printf -v now '%(%Y-%m-%d %H:%M:%S)T' -1
@@ -35,7 +33,7 @@ error() {
 on_err() { _log_line "$_red" 'x' 2 "ERROR: aborted at line $1 (last command: $2)"; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
-# Keeps output like generated credentials from getting lost in the log.
+# Prints the lines in a banner, e.g. generated credentials.
 highlight() {
   local line
   echo
@@ -47,22 +45,18 @@ highlight() {
   echo
 }
 
-# Excludes characters unsafe in SQL/AMQP, and can't start with - (CLI flag).
 validate_identifier() {
   local name="$1" value="$2"
   [[ "$value" =~ ^[A-Za-z_][A-Za-z0-9_]{0,63}$ ]] ||
     error "$name must contain only letters, digits, and underscores, and start with a letter or underscore (got: '$value')"
 }
 
-# Excludes characters that could break out of SQL/sed/amqp:// contexts.
 validate_secret() {
   local name="$1" value="$2"
   [[ "$value" =~ ^[A-Za-z0-9_.,!?+=~^-]+$ ]] ||
     error "$name contains unsupported characters (letters, digits, and _.,!?+=~^- only)"
 }
 
-# Rejects slashes (path traversal into nginx conf paths) and a leading -
-# (could be mistaken for a certbot flag).
 validate_hostname() {
   local name="$1" value="$2"
   [[ "$value" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]] ||
@@ -73,7 +67,7 @@ validate_hostname() {
 # bash` (stdin is the script itself there). Falls back to $default if no
 # tty is reachable.
 prompt() {
-  # __-prefixed so a caller's result variable named e.g. reply isn't shadowed.
+  # The __ prefix keeps these locals from shadowing the caller's result variable.
   local __resultvar="$1" __question="> $2" __default="${3:-}" __reply=""
   if [ -t 0 ]; then
     read -r -p "$__question" __reply
@@ -141,9 +135,7 @@ set_unit_names() {
 render_units() {
   local unit_user="$1" rw_paths
   rw_paths="$(app_directories | paste -sd ' ')"
-  # Only matches unit-name references (PartOf=, WantedBy=, ...), never
-  # Description=/Documentation=: those read "RelaySMS Publisher" (space,
-  # capitalized), not this lowercase-hyphenated pattern.
+  # Renames the unit references (PartOf=, WantedBy=, ...) for the instance.
   local instance_sed_args=() template name
   if [ -n "${INSTANCE_NAME:-}" ]; then
     instance_sed_args+=(-e "s/relaysms-publisher\.target/$(unit_name_for "$TARGET_UNIT_TEMPLATE")/g")
@@ -171,7 +163,7 @@ read_instance_name() {
   [ -f "$INSTALL_DIR/.instance-name" ] && cat "$INSTALL_DIR/.instance-name" || true
 }
 
-# `|| true` on the grep stops a no-match from tripping pipefail.
+# Prints the last value of $1 in env file $2, without quotes.
 read_env_var() {
   local key="$1" file="$2" val
   val=$( (grep -E "^(export[[:space:]]+)?${key}[[:space:]]*=" "$file" 2>/dev/null || true) |
@@ -184,8 +176,8 @@ read_env_var() {
 }
 
 # Every directory the services write to, one per line, absolute and
-# deduplicated. Vars unset in .env fall back to template.env, which holds the
-# same defaults as publisher/config.py. Expects INSTALL_DIR to already be set.
+# deduplicated. Vars unset in .env fall back to template.env. Expects
+# INSTALL_DIR to already be set.
 app_directories() {
   local var kind path
   while read -r var kind; do
@@ -214,8 +206,6 @@ ensure_app_directories() {
   root="$(realpath "$INSTALL_DIR")"
   while read -r dir; do
     [ "$dir" != "$INSTALL_DIR" ] || continue
-    # The services can write these dirs, so a symlink planted in one could
-    # point root's chown at any directory.
     if [ "$(realpath -m "$dir")" != "${dir/#"$INSTALL_DIR"/$root}" ]; then
       warn "Skipping $dir: its path goes through a symlink"
       continue
@@ -225,6 +215,16 @@ ensure_app_directories() {
     chmod 750 "$dir"
     log "  $dir"
   done < <(app_directories)
+}
+
+run_config_check() {
+  log "Checking configuration"
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m publisher config check)
+}
+
+run_migrations() {
+  log "Running database migrations"
+  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" venv/bin/python -m alembic upgrade head)
 }
 
 # Prints nothing when the services aren't installed. Expects INSTANCE_NAME to
@@ -291,8 +291,8 @@ request_certificate() {
   certbot "${args[@]}"
 }
 
-# gRPC needs HTTP/2, which certbot never enables. nginx 1.25.1+ takes
-# "http2 on;"; below 1.25.1 only "listen ... http2" works.
+# Enables HTTP/2 for gRPC in site file $1: "http2 on;" on nginx 1.25.1+,
+# "listen ... http2" below.
 enable_nginx_http2() {
   local conf="$1" version
   version=$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9.]*\).*#\1#p')

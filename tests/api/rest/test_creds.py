@@ -10,7 +10,7 @@ pytestmark = pytest.mark.usefixtures("test_db", "fast_hasher")
 
 @pytest.fixture
 def analyst_session(app):
-    """A separate client, since a session cookie takes precedence over Basic auth."""
+    """A second client, logged in as analyst with a session cookie."""
     session_client = TestClient(app, base_url="https://testserver")
     password = create_credential("analyst", ["stats:publications:read"])
     login(session_client, password, username="analyst")
@@ -53,7 +53,7 @@ def test_endpoints_require_auth_and_scope(client, analyst, method, url):
     assert response.json()["error"].startswith("Missing scope: creds:")
 
 
-def test_list_and_get(client, admin, analyst):
+def test_list_and_get_show_scopes_without_etags(client, admin, analyst):
     listed = client.get("/v1/creds", headers=admin)
 
     assert listed.status_code == 200
@@ -76,7 +76,7 @@ def test_etags_are_opaque(client, admin, analyst):
 
     # Both are at version 1, yet their etags differ and don't show it.
     assert etags[USERNAME] != etags["analyst"]
-    assert all(len(etag) == 34 and etag not in ('"1"', "1") for etag in etags.values())
+    assert all(len(etag) == 34 for etag in etags.values())
 
 
 def test_create_returns_a_working_password_once(client, admin):
@@ -133,12 +133,12 @@ def test_update_requires_a_current_if_match(client, admin, analyst, caplog):
 
     missing = client.patch(url, json=body, headers=admin)
     stale = client.patch(url, json=body, headers={**admin, "If-Match": '"999"'})
-    # Weak, as nginx gzip sends it back.
+    # The weak form nginx gzip sends back.
     ok = client.patch(url, json=body, headers={**admin, "If-Match": f"W/{etag}"})
 
     assert missing.status_code == 428
     assert stale.status_code == 412
-    # The client gets a plain message; the comparison goes to the log.
+    # The comparison goes to the log, not the response.
     assert '"999"' not in stale.json()["error"]
     assert 'If-Match "999" != ETag' in caplog.text
     assert ok.status_code == 200, ok.text
@@ -180,14 +180,14 @@ def test_reset_password_replaces_the_old_one(client, admin):
     )
 
 
-def test_revoke_sessions(client, admin, analyst_session):
+def test_revoke_sessions_logs_out_existing_sessions(client, admin, analyst_session):
     response = client.post("/v1/creds/analyst/revoke-sessions", headers=admin)
 
     assert response.status_code == 204
     assert analyst_session.get("/v1/auth/me").status_code == 401
 
 
-def test_delete(client, admin, analyst):
+def test_delete_needs_if_match_and_removes_the_credential(client, admin, analyst):
     url = "/v1/creds/analyst"
 
     assert client.delete(url, headers=admin).status_code == 428

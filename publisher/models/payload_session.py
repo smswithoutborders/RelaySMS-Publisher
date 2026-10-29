@@ -2,9 +2,11 @@
 """Multi-part payloads waiting for all their segments."""
 
 import datetime
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, UniqueConstraint, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from publisher.db import Base
@@ -36,19 +38,20 @@ class PayloadSession(Base):
     )
 
 
-def create(session: Session, sender_id: str, session_id: int) -> PayloadSession:
-    payload_session = PayloadSession(sender_id=sender_id, session_id=session_id)
-    session.add(payload_session)
-    session.flush()
-    return payload_session
-
-
-def get_by_sender_and_session(
+def get_or_create_locked(
     session: Session, sender_id: str, session_id: int
-) -> PayloadSession | None:
-    return session.scalar(
-        select(PayloadSession).filter_by(sender_id=sender_id, session_id=session_id)
-    )
+) -> PayloadSession:
+    """Return the payload session, inserting it if missing, locked until commit."""
+    try:
+        with session.begin_nested():
+            session.add(PayloadSession(sender_id=sender_id, session_id=session_id))
+    except IntegrityError:
+        pass  # It already exists.
+    return session.scalars(
+        select(PayloadSession)
+        .filter_by(sender_id=sender_id, session_id=session_id)
+        .with_for_update()
+    ).one()
 
 
 def delete(session: Session, payload_session: PayloadSession) -> None:
@@ -57,12 +60,14 @@ def delete(session: Session, payload_session: PayloadSession) -> None:
     session.flush()
 
 
-def delete_stale(session: Session, older_than: datetime.datetime) -> int:
-    """Delete payload sessions created before the cutoff."""
+def delete_stale(
+    session: Session, older_than: datetime.datetime
+) -> Sequence[PayloadSession]:
+    """Delete and return payload sessions created before the cutoff."""
     stale_sessions = session.scalars(
         select(PayloadSession).where(PayloadSession.created_at < older_than)
     ).all()
     for payload_session in stale_sessions:
         session.delete(payload_session)
     session.flush()
-    return len(stale_sessions)
+    return stale_sessions

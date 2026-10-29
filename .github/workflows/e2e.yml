@@ -47,7 +47,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The e2e tests only need pytest, not the app's test environment.
       - name: Install pytest
         run: |
           python -m venv venv
