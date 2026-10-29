@@ -1,6 +1,6 @@
 # Contributing
 
-This guide covers changing the Publisher's code, tests and manual. To install or run the Publisher, read the [manual](docs/README.md) instead.
+How to change the Publisher's code, tests and manual. To install or run it, read the [manual](docs/README.md) instead.
 
 ## Contents
 
@@ -88,7 +88,7 @@ git remote add upstream git@github.com:smswithoutborders/RelaySMS-Publisher.git
 make setup
 ```
 
-`make setup` creates `venv` with the dev dependencies, installs the Git hooks, runs `make build`, creates `.env` with fresh encryption keys, checks the config and migrates the database. Running it again keeps an existing `.env`. `./sync-env.sh` adds the variables `.env` is missing from `template.env`.
+`make setup` creates `venv` with the dev dependencies, installs the Git hooks, runs `make build`, creates `.env` with fresh encryption keys, checks the config and migrates the database. Running it again keeps an existing `.env`. After a pull adds settings to `template.env`, `./sync-env.sh` copies them into `.env` without changing existing values.
 
 Make targets use `venv/bin/python`. Run `source venv/bin/activate` before the `python` commands below.
 
@@ -148,7 +148,7 @@ Every pytest target passes `PYTEST_ARGS` on, such as `make test PYTEST_ARGS="-k 
 
 | CI check | Runs on | Run it locally |
 | --- | --- | --- |
-| **Hooks** (formatting, ruff, pyright, import-linter, shell, Docker and YAML checks) | Every PR | `make check` |
+| **Hooks** (formatting, lint and types, see [.pre-commit-config.yaml](.pre-commit-config.yaml)) | Every PR | `make check` |
 | **Tests** on Python 3.12 and 3.13 | Every PR | `make test` |
 | **Coverage** on Python 3.14 | Every PR | `make coverage` |
 | **SDK** on Python 3.12 to 3.14 | Every PR | `make test-sdk` |
@@ -158,9 +158,9 @@ Every pytest target passes `PYTEST_ARGS` on, such as `make test PYTEST_ARGS="-k 
 | **Docs** (link check and book build) | PRs touching Markdown or the book | `make book` |
 | **Check Requirements** | PRs touching `requirements*.txt` | `pip install --dry-run -r requirements-observability.txt` |
 
-The workflows in [.github/workflows](.github/workflows) list the exact paths. **Database dialects** and **E2E** can also run from the Actions tab with **Run workflow**. A push to `staging` deploys once the checks that run on every PR pass.
+The workflows in [.github/workflows](.github/workflows) list the exact paths. **Database dialects** and **E2E** can also run from the Actions tab with **Run workflow**.
 
-Each pytest job adds a results table to the run's summary page, with the failing tests under it.
+Each pytest job except **SDK** adds a results table to the run's summary page, with the failing tests under it.
 
 | When this fails | Try |
 | --- | --- |
@@ -215,11 +215,9 @@ Shared fixtures live in `tests/fixtures.py` and `tests/conftest.py`, and helpers
 | `set_config` | Changes a config section bound in a module, for one test |
 | `adapter_calls` | Fakes adapter processes: set `results[method]` to a result or an error, read `calls` back |
 
-A test module can set `SUMMARY_BY` to group its rows in the CI summary by test or by a parametrized fixture, see `tests/summary.py`.
-
 ### Checking Python 3.12
 
-To check 3.12 locally with [uv](https://docs.astral.sh/uv/):
+With [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv venv --python 3.12 .venv312
@@ -239,21 +237,11 @@ make build test PYTHON=.venv312/bin/python
 | `migrations/` | Alembic migrations |
 | `protos/` | gRPC service definitions |
 | `deploy/` | systemd units and nginx templates |
-| `scripts/` | Install, setup and maintenance scripts used by `manage.sh` |
+| `scripts/` | Shell scripts for installing, running and maintaining the Publisher, and the shared `lib.sh` |
 | `tools/` | The reference client |
 | `data/` | Runtime data, not tracked |
 
-Each `publisher` row may import only the rows below it, and entry points don't import each other. import-linter enforces this in `make check`. The [architecture](docs/explanation/architecture.md) page shows how the services fit together.
-
-### How a publication flows
-
-1. A payload arrives over REST (`/v1/publications`) or SMTP.
-2. The entry point validates it and calls `queue_publication`, which replaces the sender's address with a keyed hash and queues `publish_message`.
-3. The worker runs `publisher/tasks/publication_task.py`. In one transaction, `publications.prepare` joins the payload's segments, deletes its keys and decrypts it. The transaction commits before anything is sent, so the payload can't publish twice.
-4. With no transaction open, `publications.send` runs the adapter through `platforms/ipc.py`.
-5. A new transaction stores any refreshed token (`finish` after a success) and records the outcome in the publication stats.
-
-The gRPC service handles the account side: storing OAuth2 and PNBA tokens, revoking them and syncing key pools.
+Each `publisher` row may import only the rows below it, and `cli`, `api` and `smtp` don't import each other. import-linter enforces this in `make check`. The [architecture](docs/explanation/architecture.md) page shows how the services fit together and how a publication flows.
 
 ## Code conventions
 
@@ -265,12 +253,12 @@ The hooks enforce formatting, lint, types and commit messages. Review checks the
 - **No transaction stays open while an adapter runs,** since a call can take a minute.
 - **Domain errors subclass `PublisherError`** (`publisher/errors.py`). Each interface maps them to its own responses: HTTP status codes, gRPC status codes, SMTP replies.
 - **Loggers are `logging.getLogger(__name__)`.** Each entry point calls `publisher.log.setup_logging()` once. Never log tokens, keys, passwords or decrypted content.
-- **Comments explain why, not what.** Docstrings are one line unless callers need a `Raises:` section. REST route docstrings become the API reference, so describe what a client needs there.
+- **Comment only what the code can't say.** REST route docstrings become the API reference, so describe what a client needs there.
 - **Mark overridden framework methods with `@typing.override`.**
 - **Code must run on Python 3.12.** Quote `TYPE_CHECKING` forward references (`Mapped["Token"]`) and avoid syntax newer than 3.12.
 - **Every `.py` file starts with** `# SPDX-License-Identifier: GPL-3.0-only`.
 
-Shell scripts follow one layout: `#!/usr/bin/env bash`, the SPDX line, `set -Eeuo pipefail`, then `source` `scripts/lib.sh` for logging, errors and shared helpers. Scripts with options parse them in `parse_args` and run from `main "$@"`. `install.sh` is the one exception: piped through curl, it clones the repository first and re-runs from the clone.
+Shell scripts follow one layout: `#!/usr/bin/env bash`, the SPDX line, `set -Eeuo pipefail`, then `source` `scripts/lib.sh` for logging, errors and shared helpers. Scripts with options parse them in `parse_args` and run from `main "$@"`.
 
 ## Common changes
 
@@ -326,10 +314,7 @@ The manual in `docs/` is an [mdBook](https://rust-lang.github.io/mdBook/) that r
 - List a new page in `docs/SUMMARY.md`, or the book leaves it out.
 - Link pages in `docs/` relatively, and files outside it by their full GitHub URL, since the book only has `docs/`.
 - Draw diagrams as `mermaid` code blocks.
-- Say "web client" and "public", and use `publisher.example.com`, `example.com` and `+237600000000` in examples. Keep GitHub alerts for what readers must not miss.
-- Start a task page with its requirements. End a page that points onward with a `## Next steps` section of one or two linked sentences or a short list. Skip it when the book's next page is the only next step.
-- Use tables for reference data, numbered steps for procedures, and one heading per symptom for troubleshooting.
-- Write plainly and briefly in US English, one paragraph per line, with sentence-case headings and `<UPPER_SNAKE>` placeholders.
+- Write in US English, one paragraph per line, and match the layout of similar pages. In examples, use `<UPPER_SNAKE>` placeholders, `publisher.example.com`, `example.com` and `+237600000000`.
 
 ## Commits and pull requests
 
@@ -370,7 +355,6 @@ feat(reports)!: rename REPORTS_DIR to REPORTS_PATH
 
 - Types are commitizen's, such as `feat`, `fix`, `refactor`, `test` and `docs`. Scopes name the area, such as `grpc`, `rest` or `auth`.
 - Mark breaking changes with `!` and explain the migration path in a `BREAKING CHANGE:` footer. Breaking changes include removed or renamed env vars, CLI commands, endpoints and RPC fields, and anything an operator must do by hand on update.
-- Add `[migrate]` to a commit that adds a migration, such as `feat(reports): add a reports table [migrate]`.
 
 ### Pull request checklist
 
@@ -384,7 +368,7 @@ feat(reports)!: rename REPORTS_DIR to REPORTS_PATH
 
 ### Review
 
-A maintainer reviews every PR. Leave "Allow edits by maintainers" ticked. Answer each comment, push fixes as new commits rather than rewriting the branch, and re-request review when you're done. Commits are squashed or tidied on merge as needed.
+A maintainer reviews every PR. Leave "Allow edits by maintainers" ticked. Answer each comment, push review fixes as new commits rather than amending earlier ones, and re-request review when you're done. Commits are squashed or tidied on merge as needed.
 
 ## AI-assisted contributions
 
