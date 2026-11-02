@@ -1,8 +1,7 @@
 name: PR guidelines
 
 # Labels and comments on fork PRs that don't follow CONTRIBUTING.md, and closes
-# them after 5 days without activity. It runs with a write token: never check
-# out or run the PR's code.
+# them after 5 days without activity.
 on:
   pull_request_target:
     types: [opened, edited, reopened, synchronize]
