@@ -13,7 +13,7 @@ Settings live in `.env` in the install directory. `template.env` lists each one 
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | REST API address. Docker always binds `0.0.0.0`. |
 | `PORT` | `16000` | REST API port |
-| `WORKERS` | None | REST API worker processes: `1` by default under `scripts/run.sh`, `4` on Docker and server installs |
+| `WORKERS` | None | REST API worker processes: `1` by default under `scripts/run.sh`, `4` on Docker and server installs. All three read it from `.env`. |
 | `GRPC_HOST` | `127.0.0.1` | gRPC address. Docker always binds `0.0.0.0`. |
 | `GRPC_PORT` | `6000` | gRPC port |
 | `GRPC_MAX_WORKERS` | `10` | gRPC worker threads |
