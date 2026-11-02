@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Index, String, func, select
+from sqlalchemy import Index, String, func, or_, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from publisher.db import Base, pagination
@@ -89,10 +89,11 @@ def record(
 
 @dataclass(frozen=True)
 class StatsFilters:
-    status: str | None = None
-    platform_name: str | None = None
-    protocol: str | None = None
-    country_code: str | None = None
+    status: tuple[str, ...] = ()
+    platform_name: tuple[str, ...] = ()
+    protocol: tuple[str, ...] = ()
+    country_code: tuple[str, ...] = ()
+    exclude_country_code: tuple[str, ...] = ()
     since: datetime.datetime | None = None
     until: datetime.datetime | None = None
 
@@ -100,9 +101,15 @@ class StatsFilters:
 def _filter_clauses(filters: StatsFilters) -> list:
     clauses = []
     for name in ("status", "platform_name", "protocol", "country_code"):
-        value = getattr(filters, name)
-        if value is not None:
-            clauses.append(getattr(PublicationStats, name) == value)
+        values = getattr(filters, name)
+        if values:
+            clauses.append(getattr(PublicationStats, name).in_(values))
+    if filters.exclude_country_code:
+        country = PublicationStats.country_code
+        # Keep rows with no country, which NOT IN never matches.
+        clauses.append(
+            or_(country.not_in(filters.exclude_country_code), country.is_(None))
+        )
     if filters.since is not None:
         clauses.append(PublicationStats.created_at >= filters.since)
     if filters.until is not None:

@@ -2,13 +2,18 @@
 
 import datetime
 import hashlib
+from typing import Annotated
 
 from fastapi import HTTPException, Query, Request
+from pydantic import StringConstraints
 
 from publisher.api.rest.v1.errors import ApiError
 from publisher.db.types import as_utc
 
 NAME_PATTERN = r"^[a-zA-Z0-9_-]+$"
+MAX_FILTER_VALUES = 50
+
+FilterValue = Annotated[str, StringConstraints(max_length=100, pattern=NAME_PATTERN)]
 
 
 def filter_query(max_length: int, description: str):
@@ -17,6 +22,14 @@ def filter_query(max_length: int, description: str):
         max_length=max_length,
         pattern=NAME_PATTERN,
         description=description,
+    )
+
+
+def filter_list_query(description: str):
+    return Query(
+        (),
+        max_length=MAX_FILTER_VALUES,
+        description=f"{description}. Repeatable.",
     )
 
 

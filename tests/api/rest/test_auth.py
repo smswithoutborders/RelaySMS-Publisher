@@ -228,7 +228,7 @@ def test_cleanup_deletes_only_expired_sessions(client, password):
     [
         (
             "/v1/stats/publications?status=bad%0Aline",
-            "query.status: String should match pattern '^[a-zA-Z0-9_-]+$', "
+            "query.status.0: String should match pattern '^[a-zA-Z0-9_-]+$', "
             "got 'bad\\nline'",
         ),
         (

@@ -230,6 +230,56 @@ def test_filters_and_time_range(authed_client, seeded):
     assert {item["id"] for item in response.json()["data"]} == expected
 
 
+def test_repeated_filters_match_any_value(authed_client, seeded):
+    extra = [dict(seeded[1], status="rejected"), dict(seeded[1], country_code="GH")]
+    _seed(extra)
+    rows = seeded + extra
+
+    response = authed_client.get(
+        "/v1/stats/publications",
+        params={"status": ["failed", "published"], "country_code": ["cm", "GH"]},
+    )
+
+    assert response.status_code == 200
+    expected = {
+        n
+        for n, row in enumerate(rows, start=1)
+        if row["status"] in ("failed", "published")
+        and row["country_code"] in ("CM", "GH")
+    }
+    assert {item["id"] for item in response.json()["data"]} == expected
+
+
+def test_exclude_country_code_keeps_rows_without_a_country(authed_client):
+    _seed(
+        dict(
+            platform_name="gmail",
+            protocol="sms",
+            status="published",
+            country_code=country,
+            created_at=BASE_TIME,
+        )
+        for country in ("CM", "NG", "GH", None)
+    )
+
+    response = authed_client.get(
+        "/v1/stats/publications", params={"exclude_country_code": ["ng", "GH"]}
+    )
+
+    assert response.status_code == 200
+    rows = response.json()["data"]
+    assert {row["country_code"] for row in rows} == {"CM", None}
+
+
+@pytest.mark.parametrize("count, status", [(50, 200), (51, 422)])
+def test_filter_values_are_capped_at_50(authed_client, count, status):
+    response = authed_client.get(
+        "/v1/stats/publications", params={"country_code": ["CM"] * count}
+    )
+
+    assert response.status_code == status
+
+
 @pytest.mark.parametrize(
     "params, status",
     [
