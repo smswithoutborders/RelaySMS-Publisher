@@ -128,6 +128,7 @@ END
     sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO \"$DB_USER\";"
   fi
 
+  old_password=$(sed -n "s|^POSTGRES_PASSWORD=||p" "$INSTALL_DIR/.env")
   sed -i "s|^DATABASE_DIALECT=.*|DATABASE_DIALECT=postgres|" "$INSTALL_DIR/.env"
   sed -i "s|^POSTGRES_HOST=.*|POSTGRES_HOST=$DB_HOST|" "$INSTALL_DIR/.env"
   sed -i "s|^POSTGRES_PORT=.*|POSTGRES_PORT=$DB_PORT|" "$INSTALL_DIR/.env"
@@ -142,6 +143,12 @@ END
     "User     : $DB_USER" \
     "Password : $DB_PASSWORD" \
     "Written to $INSTALL_DIR/.env. Not stored anywhere else, save it now."
+
+  if [ -n "$old_password" ] && [ "$old_password" != "$DB_PASSWORD" ]; then
+    warn "The password changed and $INSTALL_DIR/.env was rewritten, but the"
+    warn "Publisher services still run with the old one until they restart:"
+    warn "sudo $INSTALL_DIR/manage.sh restart"
+  fi
 }
 
 main "$@"

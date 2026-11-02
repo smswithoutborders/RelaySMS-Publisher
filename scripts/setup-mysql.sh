@@ -116,6 +116,7 @@ FLUSH PRIVILEGES;
 SQL
   fi
 
+  old_password=$(sed -n "s|^MYSQL_PASSWORD=||p" "$INSTALL_DIR/.env")
   sed -i "s|^DATABASE_DIALECT=.*|DATABASE_DIALECT=mysql|" "$INSTALL_DIR/.env"
   sed -i "s|^MYSQL_HOST=.*|MYSQL_HOST=$DB_HOST|" "$INSTALL_DIR/.env"
   sed -i "s|^MYSQL_PORT=.*|MYSQL_PORT=$DB_PORT|" "$INSTALL_DIR/.env"
@@ -130,6 +131,12 @@ SQL
     "User     : $DB_USER" \
     "Password : $DB_PASSWORD" \
     "Written to $INSTALL_DIR/.env. Not stored anywhere else, save it now."
+
+  if [ -n "$old_password" ] && [ "$old_password" != "$DB_PASSWORD" ]; then
+    warn "The password changed and $INSTALL_DIR/.env was rewritten, but the"
+    warn "Publisher services still run with the old one until they restart:"
+    warn "sudo $INSTALL_DIR/manage.sh restart"
+  fi
 }
 
 main "$@"
