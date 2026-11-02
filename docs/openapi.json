@@ -1104,80 +1104,90 @@
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 20,
-                  "pattern": "^[a-zA-Z0-9_-]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by status",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these statuses. Repeatable.",
+              "default": [],
               "title": "Status"
             },
-            "description": "Filter by status"
+            "description": "Filter by any of these statuses. Repeatable."
           },
           {
             "name": "platform_name",
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 100,
-                  "pattern": "^[a-zA-Z0-9_-]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by platform name",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these platform names. Repeatable.",
+              "default": [],
               "title": "Platform Name"
             },
-            "description": "Filter by platform name"
+            "description": "Filter by any of these platform names. Repeatable."
           },
           {
             "name": "protocol",
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 20,
-                  "pattern": "^[a-zA-Z0-9_-]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by ingestion protocol",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these ingestion protocols. Repeatable.",
+              "default": [],
               "title": "Protocol"
             },
-            "description": "Filter by ingestion protocol"
+            "description": "Filter by any of these ingestion protocols. Repeatable."
           },
           {
             "name": "country_code",
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 10,
-                  "pattern": "^[a-zA-Z0-9_-]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by ISO country code",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these ISO country codes. Repeatable.",
+              "default": [],
               "title": "Country Code"
             },
-            "description": "Filter by ISO country code"
+            "description": "Filter by any of these ISO country codes. Repeatable."
+          },
+          {
+            "name": "exclude_country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Leave out these ISO country codes. Rows with no country are kept. Repeatable.",
+              "default": [],
+              "title": "Exclude Country Code"
+            },
+            "description": "Leave out these ISO country codes. Rows with no country are kept. Repeatable."
           },
           {
             "name": "since",
@@ -1333,80 +1343,90 @@
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 20,
-                  "pattern": "^[a-zA-Z0-9_-]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by status",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these statuses. Repeatable.",
+              "default": [],
               "title": "Status"
             },
-            "description": "Filter by status"
+            "description": "Filter by any of these statuses. Repeatable."
           },
           {
             "name": "platform_name",
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 100,
-                  "pattern": "^[a-zA-Z0-9_-]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by platform name",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these platform names. Repeatable.",
+              "default": [],
               "title": "Platform Name"
             },
-            "description": "Filter by platform name"
+            "description": "Filter by any of these platform names. Repeatable."
           },
           {
             "name": "protocol",
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 20,
-                  "pattern": "^[a-zA-Z0-9_-]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by ingestion protocol",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these ingestion protocols. Repeatable.",
+              "default": [],
               "title": "Protocol"
             },
-            "description": "Filter by ingestion protocol"
+            "description": "Filter by any of these ingestion protocols. Repeatable."
           },
           {
             "name": "country_code",
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 10,
-                  "pattern": "^[a-zA-Z0-9_-]+$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by ISO country code",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these ISO country codes. Repeatable.",
+              "default": [],
               "title": "Country Code"
             },
-            "description": "Filter by ISO country code"
+            "description": "Filter by any of these ISO country codes. Repeatable."
+          },
+          {
+            "name": "exclude_country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 100,
+                "pattern": "^[a-zA-Z0-9_-]+$"
+              },
+              "maxItems": 50,
+              "description": "Leave out these ISO country codes. Rows with no country are kept. Repeatable.",
+              "default": [],
+              "title": "Exclude Country Code"
+            },
+            "description": "Leave out these ISO country codes. Rows with no country are kept. Repeatable."
           },
           {
             "name": "since",

@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 
 from publisher.api.rest.v1.auth import AuthContext, authorize, require_scopes
 from publisher.api.rest.v1.errors import PAGE_QUERY_ERRORS, error_responses
-from publisher.api.rest.v1.params import check_time_range, filter_query, page_link
+from publisher.api.rest.v1.params import (
+    FilterValue,
+    check_time_range,
+    filter_list_query,
+    page_link,
+)
 from publisher.api.rest.v1.schemas import (
     PublicationStatsPage,
     PublicationStatsSummary,
@@ -34,10 +39,21 @@ STATS_SUMMARY_DEFAULT_WINDOW = datetime.timedelta(days=30)
 
 
 def stats_filters(
-    status: str | None = filter_query(20, "Filter by status"),
-    platform_name: str | None = filter_query(100, "Filter by platform name"),
-    protocol: str | None = filter_query(20, "Filter by ingestion protocol"),
-    country_code: str | None = filter_query(10, "Filter by ISO country code"),
+    status: tuple[FilterValue, ...] = filter_list_query(
+        "Filter by any of these statuses"
+    ),
+    platform_name: tuple[FilterValue, ...] = filter_list_query(
+        "Filter by any of these platform names"
+    ),
+    protocol: tuple[FilterValue, ...] = filter_list_query(
+        "Filter by any of these ingestion protocols"
+    ),
+    country_code: tuple[FilterValue, ...] = filter_list_query(
+        "Filter by any of these ISO country codes"
+    ),
+    exclude_country_code: tuple[FilterValue, ...] = filter_list_query(
+        "Leave out these ISO country codes. Rows with no country are kept"
+    ),
     since: datetime.datetime | None = Query(
         None,
         description="Created at or after (ISO-8601, UTC if no offset)",
@@ -52,7 +68,8 @@ def stats_filters(
         status=status,
         platform_name=platform_name,
         protocol=protocol,
-        country_code=country_code,
+        country_code=tuple(code.upper() for code in country_code),
+        exclude_country_code=tuple(code.upper() for code in exclude_country_code),
         since=since,
         until=until,
     )
