@@ -33,6 +33,24 @@ error() {
 on_err() { _log_line "$_red" 'x' 2 "ERROR: aborted at line $1 (last command: $2)"; }
 trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
+# Prints the password from the CELERY_RABBITMQ_URL line of the given env file,
+# or nothing when the line is absent.
+rabbitmq_url_password() {
+  sed -n "s|^CELERY_RABBITMQ_URL=amqp://[^:]*:\([^@]*\)@.*|\1|p" "$1"
+}
+
+# Warns when a setup script changed the stored password but the running
+# services still authenticate with the old one; they reread the env file only
+# on restart (#225). Expects INSTALL_DIR to point at the install directory.
+warn_after_password_rotation() {
+  local old_password="$1" new_password="$2"
+  [ -n "$old_password" ] || return 0
+  [ "$old_password" != "$new_password" ] || return 0
+  warn "The password changed and $INSTALL_DIR/.env was rewritten, but the"
+  warn "Publisher services still run with the old one until they restart:"
+  warn "sudo $INSTALL_DIR/manage.sh restart"
+}
+
 # Prints the lines in a banner, e.g. generated credentials.
 highlight() {
   local line

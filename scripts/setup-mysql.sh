@@ -132,11 +132,7 @@ SQL
     "Password : $DB_PASSWORD" \
     "Written to $INSTALL_DIR/.env. Not stored anywhere else, save it now."
 
-  if [ -n "$old_password" ] && [ "$old_password" != "$DB_PASSWORD" ]; then
-    warn "The password changed and $INSTALL_DIR/.env was rewritten, but the"
-    warn "Publisher services still run with the old one until they restart:"
-    warn "sudo $INSTALL_DIR/manage.sh restart"
-  fi
+  warn_after_password_rotation "$old_password" "$DB_PASSWORD"
 }
 
 main "$@"

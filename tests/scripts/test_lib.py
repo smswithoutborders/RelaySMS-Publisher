@@ -180,3 +180,36 @@ class TestValidators:
     def test_accepts_only_safe_values(self, bash, validator, value, valid):
         result = bash(f'{validator} NAME "$VALUE"', VALUE=value)
         assert (result.returncode == 0) is valid, result.stderr
+
+
+class TestPasswordRotation:
+    def test_warns_and_names_the_restart_command(self, install, bash):
+        result = bash('warn_after_password_rotation old new')
+
+        assert result.returncode == 0, result.stderr
+        assert f"sudo {install}/manage.sh restart" in result.stderr
+        assert "still run with the old one" in result.stderr
+
+    @pytest.mark.parametrize(
+        ("old", "new"),
+        [("same", "same"), ("", "new")],
+        ids=["unchanged", "no-previous-password"],
+    )
+    def test_is_silent_when_there_is_nothing_to_warn_about(self, bash, old, new):
+        result = bash('warn_after_password_rotation "$OLD" "$NEW"', OLD=old, NEW=new)
+
+        assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
+
+    def test_rabbitmq_password_comes_from_the_url(self, install, bash):
+        (install / ".env").write_text(
+            "CELERY_RABBITMQ_URL=amqp://relaysms:s3cret-pass@rabbit:5672/relaysms\n"
+        )
+
+        result = bash("rabbitmq_url_password .env")
+
+        assert (result.returncode, result.stdout) == (0, "s3cret-pass\n")
+
+    def test_rabbitmq_password_is_empty_without_a_url(self, bash):
+        result = bash("rabbitmq_url_password .env")
+
+        assert (result.returncode, result.stdout) == (0, "")

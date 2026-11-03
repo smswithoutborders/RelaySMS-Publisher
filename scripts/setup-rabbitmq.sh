@@ -157,7 +157,7 @@ Check --broker-host/--broker-mgmt-port and that the management plugin is enabled
     rabbitmqctl set_permissions -p "$BROKER_VHOST" "$BROKER_USER" ".*" ".*" ".*"
   fi
 
-  old_password=$(sed -n "s|^CELERY_RABBITMQ_URL=amqp://[^:]*:\([^@]*\)@.*||p" "$INSTALL_DIR/.env")
+  old_password=$(rabbitmq_url_password "$INSTALL_DIR/.env")
   sed -i "s|^CELERY_BROKER_TYPE=.*|CELERY_BROKER_TYPE=rabbitmq|" "$INSTALL_DIR/.env"
   sed -i "s|^#\?[[:space:]]*CELERY_RABBITMQ_URL=.*|CELERY_RABBITMQ_URL=amqp://$BROKER_USER:$BROKER_PASSWORD@$BROKER_HOST:$BROKER_PORT/$BROKER_VHOST|" "$INSTALL_DIR/.env"
 
@@ -169,11 +169,7 @@ Check --broker-host/--broker-mgmt-port and that the management plugin is enabled
     "Password : $BROKER_PASSWORD" \
     "Written to $INSTALL_DIR/.env. Not stored anywhere else, save it now."
 
-  if [ -n "$old_password" ] && [ "$old_password" != "$BROKER_PASSWORD" ]; then
-    warn "The password changed and $INSTALL_DIR/.env was rewritten, but the"
-    warn "Publisher services still run with the old one until they restart:"
-    warn "sudo $INSTALL_DIR/manage.sh restart"
-  fi
+  warn_after_password_rotation "$old_password" "$BROKER_PASSWORD"
 }
 
 main "$@"
