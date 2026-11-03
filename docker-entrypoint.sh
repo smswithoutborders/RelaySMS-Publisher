@@ -8,7 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/scripts/lib.sh"
 
 export HOST="${HOST:-0.0.0.0}"
-export PORT="${PORT:-16000}"
 export WORKERS="${WORKERS:-4}"
 export GRPC_HOST="${GRPC_HOST:-0.0.0.0}"
 

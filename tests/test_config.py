@@ -265,11 +265,9 @@ def test_auth_session_defaults():
     assert auth.cookie_secure
 
 
-def test_docker_entrypoint_port_default_matches_compose():
-    # docker-compose.yml publishes ${PORT:-16000}; with PORT unset the
-    # container must listen on that same port, or nothing reaches it.
-    entrypoint = (config.ROOT / "docker-entrypoint.sh").read_text()
+def test_run_port_default_matches_compose():
+    run = (config.ROOT / "scripts" / "run.sh").read_text()
     compose = (config.ROOT / "docker-compose.yml").read_text()
-    default = re.search(r'PORT="\$\{PORT:-(\d+)\}"', entrypoint).group(1)
+    default = re.search(r'^PORT="\$\{PORT:-(\d+)\}"', run, re.M).group(1)
 
     assert f"${{PORT:-{default}}}:${{PORT:-{default}}}" in compose
