@@ -75,7 +75,7 @@ jobs:
               if (problems.length) {
                 body = [
                   MARKER,
-                  `Thanks for the PR. It doesn't follow the [contribution guide](${GUIDE}) yet:`,
+                  `Thank you for the PR. It doesn't follow the [contribution guide](${GUIDE}) yet:`,
                   "",
                   ...problems.map((p) => `- ${p}`),
                   "",
@@ -87,7 +87,7 @@ jobs:
                   await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [LABEL] });
                 }
               } else {
-                body = `${MARKER}\nThanks, the base branch and tests now follow the [contribution guide](${GUIDE}).`;
+                body = `${MARKER}\nThank you, the base branch and tests now follow the [contribution guide](${GUIDE}).`;
                 for (const name of [LABEL, STALE_LABEL].filter((n) => labels.includes(n))) {
                   await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
                 }

@@ -263,3 +263,11 @@ def test_auth_session_defaults():
 
     assert auth.web_origins == []
     assert auth.cookie_secure
+
+
+def test_run_port_default_matches_compose():
+    run = (config.ROOT / "scripts" / "run.sh").read_text()
+    compose = (config.ROOT / "docker-compose.yml").read_text()
+    default = re.search(r'^PORT="\$\{PORT:-(\d+)\}"', run, re.M).group(1)
+
+    assert f"${{PORT:-{default}}}:${{PORT:-{default}}}" in compose
