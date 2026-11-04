@@ -10,8 +10,7 @@ StartLimitBurst=5
 Type=simple
 User=relaysms
 WorkingDirectory=/opt/relaysms/relaysms-publisher
-# Default worker count. EnvironmentFile= overrides Environment=, so WORKERS
-# in .env wins. systemd has no ${VAR:-default} syntax, hence this line.
+# Used when .env doesn't set WORKERS.
 Environment=WORKERS=4
 EnvironmentFile=/opt/relaysms/relaysms-publisher/.env
 Environment=OTEL_SERVICE_NAME=relaysms-publisher-rest

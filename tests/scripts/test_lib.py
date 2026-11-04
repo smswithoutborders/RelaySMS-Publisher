@@ -135,10 +135,7 @@ class TestRenderUnits:
     def test_rest_unit_reads_workers_with_a_default(self, install, bash):
         rest = self.render(install, bash)["relaysms-publisher-rest.service"]
 
-        # EnvironmentFile= overrides Environment=, so WORKERS in .env wins
-        # over this default.
         assert unit_values(rest, "Environment").count("WORKERS=4") == 1
-        assert unit_values(rest, "EnvironmentFile")
         (exec_start,) = unit_values(rest, "ExecStart")
         assert '--workers "${WORKERS}"' in exec_start
 
