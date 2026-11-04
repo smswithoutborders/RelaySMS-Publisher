@@ -1,0 +1,38 @@
+name: Close issues
+
+# Closes the issues named with `Closes #<ISSUE>` in a PR's description when the
+# PR merges to staging. GitHub only acts on that keyword for PRs to the default
+# branch.
+on:
+  push:
+    branches: [staging]
+
+permissions: {}
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner, repo, commit_sha: context.sha,
+            });
+            const pr = prs.find((p) => p.merged_at && p.base.ref === "staging");
+            if (!pr) return;
+
+            for (const [, issue_number] of (pr.body ?? "").matchAll(/\bcloses:? #(\d+)\b/gi)) {
+              const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number });
+              if (issue.pull_request || issue.state === "closed") continue;
+
+              await github.rest.issues.createComment({
+                owner, repo, issue_number,
+                body: `Merged to \`staging\` in #${pr.number}, and it will ship in the next release.`,
+              });
+              await github.rest.issues.update({ owner, repo, issue_number, state: "closed", state_reason: "completed" });
+            }
