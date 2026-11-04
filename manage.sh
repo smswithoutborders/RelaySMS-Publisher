@@ -68,7 +68,7 @@ cmd_status() {
 # the subshell instead of stopping the script.
 add_unit() {
   local name="$1" full="$1" svc
-  [[ "$name" == *.service ]] || full="relaysms-publisher-${name}.service"
+  [[ "$name" == *.service ]] || full="$(unit_name_for "relaysms-publisher-${name}.service")"
   for svc in "${SERVICE_UNITS[@]}"; do
     if [ "$svc" = "$full" ]; then
       units+=("$full")
