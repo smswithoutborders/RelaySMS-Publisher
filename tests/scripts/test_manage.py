@@ -51,14 +51,15 @@ class TestLogsUnit:
         ]
 
     def test_short_name_selects_the_named_instance_unit(self, logs):
-        result = logs("--unit", "rest", "-u", "worker", instance="acme")
+        result = logs("--unit", "rest", "-u", "worker", "--unit=beat", instance="acme")
 
         assert journal_units(result) == [
             "relaysms-publisher-acme-rest.service",
             "relaysms-publisher-acme-worker.service",
+            "relaysms-publisher-acme-beat.service",
         ]
 
-    def test_full_name_of_the_named_instance_unit(self, logs):
+    def test_full_name_selects_the_named_instance_unit(self, logs):
         result = logs("--unit=relaysms-publisher-acme-grpc.service", instance="acme")
 
         assert journal_units(result) == ["relaysms-publisher-acme-grpc.service"]
@@ -67,4 +68,10 @@ class TestLogsUnit:
         result = logs("--unit", "nope", instance="acme")
 
         assert result.returncode != 0
-        assert "Unknown service unit: nope" in result.stderr + result.stdout
+        assert "Unknown service unit: nope" in result.stderr
+
+    def test_unit_of_another_instance_fails(self, logs):
+        result = logs("--unit", "relaysms-publisher-rest.service", instance="acme")
+
+        assert result.returncode != 0
+        assert "Unknown service unit: relaysms-publisher-rest.service" in result.stderr
