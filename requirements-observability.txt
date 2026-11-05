@@ -5,11 +5,11 @@
 # Includes requirements.txt, since both pull in OTel packages that must
 # resolve to the same versions.
 -r requirements.txt
-opentelemetry-distro==0.66b1
-opentelemetry-exporter-otlp-proto-grpc==1.45.1
-opentelemetry-instrumentation-celery==0.66b1
-opentelemetry-instrumentation-fastapi==0.66b1
-opentelemetry-instrumentation-grpc==0.66b1
-opentelemetry-instrumentation-logging==0.66b1
-opentelemetry-instrumentation-sqlalchemy==0.66b1
-opentelemetry-sdk==1.45.1
+opentelemetry-distro==0.66b2
+opentelemetry-exporter-otlp-proto-grpc==1.45.2
+opentelemetry-instrumentation-celery==0.66b2
+opentelemetry-instrumentation-fastapi==0.66b2
+opentelemetry-instrumentation-grpc==0.66b2
+opentelemetry-instrumentation-logging==0.66b2
+opentelemetry-instrumentation-sqlalchemy==0.66b2
+opentelemetry-sdk==1.45.2
