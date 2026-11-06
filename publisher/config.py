@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE_DIALECTS = ("sqlite", "mysql", "postgres")
 CELERY_BROKERS = ("sqlite", "redis", "rabbitmq")
+OFFLINE_PUBLISH_PROTOCOLS = ("https", "smtp")
 GITHUB_ORG_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$")
 
 # Fill unset variables from .env. Values already in the environment win.
@@ -345,7 +346,18 @@ class OfflinePublishConfig(Section):
 
     @classmethod
     def load(cls, read: _Reader) -> Self:
-        allowed = read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
+        allowed: list[str] = []
+        for protocol in read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS"):
+            choice = protocol.lower()
+            if choice not in OFFLINE_PUBLISH_PROTOCOLS:
+                read.fail(
+                    "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS",
+                    f"expected one of {', '.join(OFFLINE_PUBLISH_PROTOCOLS)}, "
+                    f"got {protocol!r}",
+                )
+                continue
+            if choice not in allowed:
+                allowed.append(choice)
         https_allowed = not allowed or "https" in allowed
         return cls(
             allowed_protocols=allowed,
