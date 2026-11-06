@@ -206,6 +206,33 @@ def test_offline_https_requires_shared_secret(protocols):
     assert not errors(**allowed, OFFLINE_PUBLISH_SHARED_SECRET=KEY)
 
 
+@pytest.mark.parametrize(
+    ("protocols", "expected"),
+    [
+        ("smtp", ["smtp"]),
+        ("SMTP", ["smtp"]),
+        ("https,smtp", ["https", "smtp"]),
+        ("smtp,smtp", ["smtp"]),
+        ("", []),
+    ],
+)
+def test_offline_allowed_protocols_are_normalized(protocols, expected):
+    offline = load(
+        OfflinePublishConfig,
+        OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=protocols,
+        OFFLINE_PUBLISH_SHARED_SECRET=KEY,
+    )
+    assert offline.allowed_protocols == expected
+
+
+@pytest.mark.parametrize("protocols", ["smpt", "SMTP,ftp", "http"])
+def test_offline_allowed_protocols_reject_unknown_entries(protocols):
+    assert "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS" in errors(
+        OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=protocols,
+        OFFLINE_PUBLISH_SHARED_SECRET=KEY,
+    )
+
+
 def test_template_env_paths_match_defaults():
     # scripts/lib.sh falls back to template.env for paths unset in .env.
     template = dotenv_values(config.ROOT / "template.env")
