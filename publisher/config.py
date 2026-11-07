@@ -346,18 +346,15 @@ class OfflinePublishConfig(Section):
 
     @classmethod
     def load(cls, read: _Reader) -> Self:
-        allowed: list[str] = []
-        for protocol in read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS"):
-            choice = protocol.lower()
-            if choice not in OFFLINE_PUBLISH_PROTOCOLS:
+        names = read.get_list("OFFLINE_PUBLISH_ALLOWED_PROTOCOLS")
+        allowed = list(dict.fromkeys(name.lower() for name in names))
+        for protocol in allowed:
+            if protocol not in OFFLINE_PUBLISH_PROTOCOLS:
                 read.fail(
                     "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS",
                     f"expected one of {', '.join(OFFLINE_PUBLISH_PROTOCOLS)}, "
                     f"got {protocol!r}",
                 )
-                continue
-            if choice not in allowed:
-                allowed.append(choice)
         https_allowed = not allowed or "https" in allowed
         return cls(
             allowed_protocols=allowed,

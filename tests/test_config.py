@@ -198,7 +198,7 @@ def test_offline_shared_secret_must_be_a_key():
     assert offline.shared_secret == KEY
 
 
-@pytest.mark.parametrize("protocols", ["https", "smtp,https", ""])
+@pytest.mark.parametrize("protocols", ["https", "HTTPS", "smtp,https", ""])
 def test_offline_https_requires_shared_secret(protocols):
     allowed = {"OFFLINE_PUBLISH_ALLOWED_PROTOCOLS": protocols}
 
@@ -213,6 +213,7 @@ def test_offline_https_requires_shared_secret(protocols):
         ("SMTP", ["smtp"]),
         ("https,smtp", ["https", "smtp"]),
         ("smtp,smtp", ["smtp"]),
+        ("smtp,SMTP", ["smtp"]),
         ("", []),
     ],
 )
@@ -227,10 +228,9 @@ def test_offline_allowed_protocols_are_normalized(protocols, expected):
 
 @pytest.mark.parametrize("protocols", ["smpt", "SMTP,ftp", "http"])
 def test_offline_allowed_protocols_reject_unknown_entries(protocols):
-    assert "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS" in errors(
-        OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=protocols,
-        OFFLINE_PUBLISH_SHARED_SECRET=KEY,
-    )
+    problems = errors(OFFLINE_PUBLISH_ALLOWED_PROTOCOLS=protocols)
+    assert "OFFLINE_PUBLISH_ALLOWED_PROTOCOLS" in problems
+    assert "OFFLINE_PUBLISH_SHARED_SECRET" not in problems
 
 
 def test_template_env_paths_match_defaults():
