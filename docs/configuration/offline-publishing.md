@@ -9,6 +9,7 @@ Each payload is tagged with the protocol it arrived on:
 
 ## Rules
 
+- Listing anything other than the protocols above fails `manage.sh check`, and the services refuse to start.
 - An offline payload from a protocol not in `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` is discarded. An empty list allows every protocol.
 - An offline payload over `https` must carry `OFFLINE_PUBLISH_SHARED_SECRET` in the request's `tag` field, or it's discarded.
 - Leaving `OFFLINE_PUBLISH_ALLOWED_PROTOCOLS` empty, or listing `https`, without the secret fails `manage.sh check`, and the services refuse to start.
