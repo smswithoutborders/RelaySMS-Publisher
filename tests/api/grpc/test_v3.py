@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import grpc
 import pytest
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 
 import publisher.models  # noqa: F401  (registers every table on Base.metadata)
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
@@ -442,6 +442,61 @@ def test_revoke_oauth2_token_with_wrong_token_is_rejected(stub, adapter):
     assert "revocation failed" in error.details()
     assert stored_token(exchanged.token_id) is not None
     assert server_key_exists(exchanged.token_id, 1)
+
+
+def test_revoke_oauth2_token_with_out_of_range_key_id_is_rejected(
+    stub, adapter, caplog
+):
+    exchanged, keypairs = exchange_oauth2(stub, adapter)
+    payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
+    request = publisher_pb2.RevokeOAuth2TokenRequest(
+        token_id=exchanged.token_id, key_id=256
+    )
+
+    error = rpc_error(stub, "RevokeOAuth2Token", request, payload=payload)
+
+    assert error.code() == grpc.StatusCode.UNAUTHENTICATED
+    assert "Key ID out of range" in caplog.text
+
+
+def _failed_redeem_work(monkeypatch, token_id, key_id, payload):
+    """Return a failed redeem_token's SQL statements and its token decrypt count."""
+    statements, decrypts = [], []
+    decrypt = rrs.v1_token_decrypt_server
+
+    def counted_decrypt(**kwargs):
+        decrypts.append(kwargs["key_id"])
+        return decrypt(**kwargs)
+
+    def record(_conn, _cursor, statement, *_args):
+        statements.append(statement)
+
+    monkeypatch.setattr(rrs, "v1_token_decrypt_server", counted_decrypt)
+    event.listen(db.get_engine(), "before_cursor_execute", record)
+    try:
+        with pytest.raises(keys.KeyManagementError), get_session() as s:
+            keys.redeem_token(s, token_id, key_id, payload)
+    finally:
+        event.remove(db.get_engine(), "before_cursor_execute", record)
+    return statements, len(decrypts)
+
+
+def test_failed_token_checks_do_the_same_work(stub, adapter, monkeypatch):
+    exchanged, keypairs = exchange_oauth2(stub, adapter)
+    payload = encrypt_token(exchanged, keypairs, b"not the real token")
+    unknown_token = (exchanged.token_id + 1) % 2**32
+    used_slot, live_slot = exchanged.key_id, 1
+
+    work = [
+        _failed_redeem_work(monkeypatch, unknown_token, live_slot, payload),
+        _failed_redeem_work(monkeypatch, exchanged.token_id, used_slot, payload),
+        _failed_redeem_work(monkeypatch, exchanged.token_id, live_slot, payload),
+    ]
+
+    assert work[0] == work[1] == work[2]
+    statements, decrypts = work[0]
+    assert decrypts == 1
+    assert not any(st.lstrip().upper().startswith("DELETE") for st in statements)
 
 
 def test_revoke_keeps_slot_when_a_later_step_fails(stub, adapter, monkeypatch):

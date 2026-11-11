@@ -19,7 +19,7 @@ def revoke_pnba_token(request, payload: bytes) -> publisher_pb2.RevokePNBATokenR
 
     with get_session() as s:
         try:
-            token = keys.verify_token(s, request.token_id, request.key_id, payload)
+            token = keys.redeem_token(s, request.token_id, request.key_id, payload)
         except keys.KeyManagementError:
             raise Unauthenticated("revocation failed") from None
 

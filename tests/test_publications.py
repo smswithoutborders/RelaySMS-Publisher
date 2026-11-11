@@ -13,6 +13,7 @@ from sqlalchemy import select
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from publisher import keys, publications
 from publisher.db import get_session
+from publisher.models.client_ephemeral_key import ClientEphemeralKey
 from publisher.models.server_ephemeral_key import ServerEphemeralKey
 from publisher.models.server_identity_key import get_private_key
 from publisher.models.token import Token
@@ -261,14 +262,15 @@ def _publish(text, protocol="sms"):
 def _slot_has_keys(account, slot):
     with get_session() as s:
         token = s.scalar(select(Token).where(Token.token_id == account.token_id))
-        return (
+        return any(
             s.scalar(
-                select(ServerEphemeralKey).where(
-                    ServerEphemeralKey.token_hash_id == token.token_hash.id,
-                    ServerEphemeralKey.key_index == slot,
+                select(model).where(
+                    model.token_hash_id == token.token_hash.id,
+                    model.key_index == slot,
                 )
             )
             is not None
+            for model in (ServerEphemeralKey, ClientEphemeralKey)
         )
 
 

@@ -346,7 +346,7 @@ SLOT = 20
 
 
 def _token_with_key_pools() -> tuple[int, tuple[bytes, bytes]]:
-    """Create a token with key pools, returning its hash id and SLOT's public keys."""
+    """Create a token with key pools, returning its token_id and SLOT's public keys."""
     client_keys = [X25519PrivateKey.generate() for _ in range(256)]
     client_public = [k.public_key().public_bytes_raw() for k in client_keys]
     with db.get_session() as session:
@@ -361,28 +361,34 @@ def _token_with_key_pools() -> tuple[int, tuple[bytes, bytes]]:
                 for i, pk in enumerate(client_public)
             ],
         )
-        return token_hash.id, (server_public[SLOT], client_public[SLOT])
+        return token.token_id, (server_public[SLOT], client_public[SLOT])
+
+
+def _consume_slot(session, token_id):
+    slot = keys.get_token_slot(session, token_id, SLOT)
+    keys.consume_token_slot(session, slot)
+    return slot.server_key.public_key, slot.client_key.public_key
 
 
 def test_a_key_slot_can_be_used_once():
-    token_hash_id, public_keys = _token_with_key_pools()
+    token_id, public_keys = _token_with_key_pools()
 
     with db.get_session() as session:
-        assert keys.pop_keys(session, token_hash_id, SLOT)[2:] == public_keys
+        assert _consume_slot(session, token_id) == public_keys
 
     with pytest.raises(keys.KeyUnavailableError), db.get_session() as session:
-        keys.pop_keys(session, token_hash_id, SLOT)
+        _consume_slot(session, token_id)
 
 
 def test_one_of_two_workers_using_a_key_slot_at_once_gets_it(caplog):
-    token_hash_id, public_keys = _token_with_key_pools()
+    token_id, public_keys = _token_with_key_pools()
 
-    def pop(session):
-        return keys.pop_keys(session, token_hash_id, SLOT)
+    def use(session):
+        return _consume_slot(session, token_id)
 
-    first, second = _in_overlapping_transactions(pop, pop)
+    first, second = _in_overlapping_transactions(use, use)
 
-    assert first.result()[2:] == public_keys
+    assert first.result() == public_keys
     with pytest.raises(keys.KeyUnavailableError):
         second.result()
-    assert "Server ephemeral key unavailable" in caplog.text
+    assert "Ephemeral key consumed by another worker" in caplog.text
