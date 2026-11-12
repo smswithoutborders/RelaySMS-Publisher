@@ -134,6 +134,16 @@ def test_install_a_named_tag(tmp_path):
 
 
 @pytest.mark.usefixtures("test_db")
+def test_install_draws_no_progress_bar_without_a_terminal(tmp_path, capsys):
+    repo = adapter_repo(tmp_path / "src")
+
+    # git reports clone progress over file:// but not for a plain local path.
+    _install(f"file://{repo.working_tree_dir}")
+
+    assert capsys.readouterr().err == ""
+
+
+@pytest.mark.usefixtures("test_db")
 def test_an_untagged_repo_is_refused(tmp_path):
     repo = adapter_repo(tmp_path / "src", tag=None)
 
