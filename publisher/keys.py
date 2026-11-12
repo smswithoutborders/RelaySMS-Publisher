@@ -4,12 +4,13 @@
 import hashlib
 import logging
 import secrets
+from dataclasses import dataclass
 from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-from sqlalchemy import CursorResult, delete, func, insert, select
+from sqlalchemy import CursorResult, and_, delete, func, insert, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from publisher.errors import PublisherError
@@ -25,6 +26,12 @@ from publisher.models.token_hash import TokenHash
 from publisher.models.token_hash import create as create_token_hash
 
 logger = logging.getLogger(__name__)
+
+_STAND_IN_KEYS = (
+    X25519PrivateKey.generate().private_bytes_raw(),
+    X25519PrivateKey.generate().private_bytes_raw(),
+    X25519PrivateKey.generate().public_key().public_bytes_raw(),
+)
 
 
 class KeyManagementError(PublisherError):
@@ -154,76 +161,92 @@ def _insert_pools(
     return server_keypairs, server_public_keys
 
 
-def _pop_slot[S: (ServerEphemeralKey, ClientEphemeralKey)](
-    session: Session, model: type[S], token_hash_id: int, key_id: int, label: str
-) -> S:
-    """Delete and return a slot's row, or raise KeyUnavailableError if it's gone."""
-    row = session.scalars(
-        select(model).where(
-            model.token_hash_id == token_hash_id, model.key_index == key_id
-        )
-    ).first()
-    if row is not None:
-        deleted = cast(
-            CursorResult, session.execute(delete(model).where(model.id == row.id))
-        )
-        if deleted.rowcount:
-            return row
-    logger.error(
-        "%s ephemeral key unavailable: token_hash_id=%s, kid=%s",
-        label,
-        token_hash_id,
-        key_id,
-    )
-    raise KeyUnavailableError(f"{label} ephemeral key already used or missing")
+@dataclass(frozen=True)
+class TokenSlot:
+    """A token and the keys of one of its slots, not yet used."""
+
+    token: Token
+    ss_kid: bytes
+    server_key: ServerEphemeralKey
+    client_key: ClientEphemeralKey
 
 
-def pop_keys(
-    session: Session, token_hash_id: int, key_id: int
-) -> tuple[bytes, bytes, bytes, bytes]:
-    """Delete and return a slot's keys: ss_kid, es_kid, es_kid_pk, ec_kid_pk."""
-    se_row = _pop_slot(session, ServerEphemeralKey, token_hash_id, key_id, "Server")
-    ce_row = _pop_slot(session, ClientEphemeralKey, token_hash_id, key_id, "Client")
+def get_token_slot(session: Session, token_id: int, key_id: int) -> TokenSlot:
+    """Load a token and a slot's keys without consuming them.
+
+    For a key ID in 0-255, runs the same two queries whether or not the token
+    or slot exists.
+    """
+    if not 0 <= key_id <= 255:
+        logger.warning("Key ID out of range: token_id=%s, kid=%s", token_id, key_id)
+        raise KeyUnavailableError("Ephemeral key already used or missing")
 
     ss_kid = get_private_key(session, key_id).private_bytes_raw()
-    logger.debug(
-        "Keys consumed for decryption: token_hash_id=%s, kid=%s",
-        token_hash_id,
-        key_id,
+    query = (
+        select(Token, ServerEphemeralKey, ClientEphemeralKey)
+        .outerjoin(Token.token_hash)
+        .options(contains_eager(Token.token_hash))
+        .where(Token.token_id == token_id)
     )
-    return ss_kid, se_row.private_key, se_row.public_key, ce_row.public_key
+    for model in (ServerEphemeralKey, ClientEphemeralKey):
+        query = query.outerjoin(
+            model, and_(model.token_hash_id == TokenHash.id, model.key_index == key_id)
+        )
+    row = session.execute(query).first()
 
-
-def pop_token_keys(
-    session: Session, token_id: int, key_id: int
-) -> tuple[Token, TokenHash, bytes, bytes, bytes, bytes]:
-    """Resolve a token by id, then pop the slot's keys for decrypting its payload."""
-    token = session.scalar(select(Token).where(Token.token_id == token_id))
-    if token is None:
+    if row is None:
         logger.error("Token not found: token_id=%s", token_id)
         raise KeyNotFoundError("Token not found")
 
-    token_hash = token.token_hash
-    if token_hash is None:
+    token, server_key, client_key = row
+    if token.token_hash is None:
         logger.error("Token hash missing for token_id=%s", token_id)
         raise KeyNotFoundError("Token hash not found", platform_name=token.platform)
 
-    try:
-        ss_kid, es_kid, es_kid_pk, ec_kid_pk = pop_keys(session, token_hash.id, key_id)
-    except KeyUnavailableError as exc:
-        exc.platform_name = token.platform
-        raise
-    return token, token_hash, ss_kid, es_kid, es_kid_pk, ec_kid_pk
+    if server_key is None or client_key is None:
+        logger.error(
+            "Ephemeral key unavailable: token_hash_id=%s, kid=%s",
+            token.token_hash.id,
+            key_id,
+        )
+        raise KeyUnavailableError(
+            "Ephemeral key already used or missing", platform_name=token.platform
+        )
+    return TokenSlot(token, ss_kid, server_key, client_key)
 
 
-def verify_token(
-    session: Session, token_id: int, key_id: int, ciphertext: bytes
-) -> Token:
-    """Pop the slot's keys, decrypt the client's token and check its hash."""
-    token, token_hash, ss_kid, es_kid, _, ec_kid_pk = pop_token_keys(
-        session, token_id, key_id
+def consume_token_slot(session: Session, slot: TokenSlot) -> None:
+    """Delete a slot's keys, or raise KeyUnavailableError if another worker did."""
+    for row in (slot.server_key, slot.client_key):
+        model = type(row)
+        deleted = cast(
+            CursorResult, session.execute(delete(model).where(model.id == row.id))
+        )
+        if not deleted.rowcount:
+            logger.error(
+                "Ephemeral key consumed by another worker: token_hash_id=%s, kid=%s",
+                row.token_hash_id,
+                row.key_index,
+            )
+            raise KeyUnavailableError(
+                "Ephemeral key already used or missing",
+                platform_name=slot.token.platform,
+            )
+    logger.debug(
+        "Keys consumed: token_hash_id=%s, kid=%s",
+        slot.server_key.token_hash_id,
+        slot.server_key.key_index,
     )
 
+
+def _token_matches(
+    ss_kid: bytes,
+    es_kid: bytes,
+    ec_kid_pk: bytes,
+    key_id: int,
+    ciphertext: bytes,
+    token_hash: bytes,
+) -> bool:
     try:
         decrypted = rrs.v1_token_decrypt_server(
             ss_kid=ss_kid,
@@ -232,15 +255,34 @@ def verify_token(
             key_id=key_id,
             ciphertext=ciphertext,
         )
-        valid = secrets.compare_digest(
-            hashlib.sha256(decrypted).digest(), token_hash.token_hash
-        )
     except rrs.V1CryptographicError.FailedToDecrypt:
-        valid = False
+        return False
+    return secrets.compare_digest(hashlib.sha256(decrypted).digest(), token_hash)
 
-    if not valid:
+
+def redeem_token(
+    session: Session, token_id: int, key_id: int, ciphertext: bytes
+) -> Token:
+    """Check the client's token against a slot, then use up the slot's keys."""
+    try:
+        slot = get_token_slot(session, token_id, key_id)
+    except KeyManagementError:
+        # Decrypt with throwaway keys, the same work as checking a wrong token.
+        _token_matches(*_STAND_IN_KEYS, 0, ciphertext, bytes(32))
+        raise
+
+    if not _token_matches(
+        slot.ss_kid,
+        slot.server_key.private_key,
+        slot.client_key.public_key,
+        key_id,
+        ciphertext,
+        slot.token.token_hash.token_hash,
+    ):
         logger.warning("Token verification failed: kid=%s", key_id)
         raise TokenVerificationError(
-            "Token verification failed", platform_name=token.platform
+            "Token verification failed", platform_name=slot.token.platform
         )
-    return token
+
+    consume_token_slot(session, slot)
+    return slot.token

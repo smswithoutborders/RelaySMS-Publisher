@@ -17,7 +17,7 @@ from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from publisher import tokens
 from publisher.config import DatabaseConfig, OfflinePublishConfig
 from publisher.errors import PublisherError
-from publisher.keys import pop_token_keys
+from publisher.keys import consume_token_slot, get_token_slot
 from publisher.models import platform_adapter as platform_adapters
 from publisher.models.payload_segment import create as create_segment
 from publisher.models.payload_segment import get_all_data
@@ -281,16 +281,15 @@ def _publish_online_content(
     len_att: int,
     content_ciphertext: bytes,
 ) -> Delivery:
-    token, _, ss_kid, es_kid, es_kid_pk, ec_kid_pk = pop_token_keys(
-        session, token_id, key_id
-    )
+    slot = get_token_slot(session, token_id, key_id)
+    token = slot.token
 
     try:
         content_bytes = rrs.v1_platform_publisher_decrypt(
-            ec_kid_pk=ec_kid_pk,
-            es_kid_pk=es_kid_pk,
-            ss_kid=ss_kid,
-            es_kid=es_kid,
+            ec_kid_pk=slot.client_key.public_key,
+            es_kid_pk=slot.server_key.public_key,
+            ss_kid=slot.ss_kid,
+            es_kid=slot.server_key.private_key,
             key_id=key_id,
             received_payload=content_ciphertext,
         )
@@ -301,6 +300,7 @@ def _publish_online_content(
         raise PayloadMalformedError(
             "Online payload decryption failed.", platform_name=token.platform
         ) from exc
+    consume_token_slot(session, slot)
 
     try:
         cat_id = rrs.v1_content_category_from_u8(token.cat_id)
