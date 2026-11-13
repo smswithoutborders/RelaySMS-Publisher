@@ -42,6 +42,16 @@ server {
         deny all;
     }
 
+    # Live tail is a long-lived event stream. Buffering holds events back, and
+    # the 30s read timeout cuts the stream whenever no logs arrive for 30s.
+    location /api/v3/logs/livetail {
+        proxy_pass            http://signoz_ui;
+        proxy_buffering       off;
+        proxy_cache           off;
+        gzip                  off;
+        proxy_read_timeout    1h;
+    }
+
     location / {
         proxy_pass http://signoz_ui;
     }
