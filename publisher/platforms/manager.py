@@ -98,6 +98,7 @@ class CloneProgress(RemoteProgress):
                 unit="objects",
                 desc="Cloning repository",
                 leave=False,
+                disable=None,
             )
         if self.pbar:
             self.pbar.n = cur_count
