@@ -21,6 +21,14 @@ _engine: Engine | None = None
 _session_factory: sessionmaker | None = None
 
 
+class DatabaseConnectionError(Exception):
+    """Establishing a database connection failed.
+
+    Not a ValueError, so handlers that catch ValueError around key lookups
+    don't report connection problems to clients.
+    """
+
+
 def _make_sqlcipher3_creator(db_path: str, key: bytes):
     """Return a function that opens the encrypted SQLCipher database."""
     # sqlcipher3 re-exports its C extension with import *, which pyright can't follow.
@@ -37,7 +45,9 @@ def _make_sqlcipher3_creator(db_path: str, key: bytes):
             conn.execute("SELECT count(*) FROM sqlite_master;")
         except sqlcipher3.DatabaseError:  # pyright: ignore[reportAttributeAccessIssue]
             conn.close()
-            raise ValueError("Wrong key, or the database file is corrupted.") from None
+            raise DatabaseConnectionError(
+                "Wrong key, or the database file is corrupted."
+            ) from None
 
         return conn
 
