@@ -21,6 +21,7 @@ from publisher.api.rest.v1.errors import (
 from publisher.api.rest.v1.routes import router as v1_router
 from publisher.config import ApiDocsConfig, AuthConfig
 from publisher.db import dispose_engine, get_session
+from publisher.db.pagination import InvalidCursorError
 from publisher.log import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -174,8 +175,7 @@ def _bad_request_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=400, content={"error": str(exc)})
 
 
-app.add_exception_handler(ValueError, _bad_request_handler)
-app.add_exception_handler(NotImplementedError, _bad_request_handler)
+app.add_exception_handler(InvalidCursorError, _bad_request_handler)
 
 
 @app.exception_handler(StarletteHTTPException)
