@@ -23,8 +23,11 @@ spec:
         POSTGRES_PASSWORD: __POSTGRES_PASSWORD__
   telemetrykeeper:
     kind: clickhousekeeper
+  # Keep the ingester on the collector release that matches this SigNoz
+  # release. Foundry runs the schema migrator from the ingester image.
   signoz:
     spec:
+      image: signoz/signoz:v0.151.0
       env:
         SIGNOZ_ALERTMANAGER_SIGNOZ_GLOBAL_SMTP__SMARTHOST: "__SMTP_SMARTHOST__"
         SIGNOZ_ALERTMANAGER_SIGNOZ_GLOBAL_SMTP__AUTH__USERNAME: "__SMTP_USERNAME__"
@@ -33,6 +36,7 @@ spec:
         SIGNOZ_ALERTMANAGER_SIGNOZ_EXTERNAL__URL: "__SIGNOZ_EXTERNAL_URL__"
   ingester:
     spec:
+      image: signoz/signoz-otel-collector:v0.144.16
       config:
         data:
           # Points the collector's opamp client at the SigNoz backend.
