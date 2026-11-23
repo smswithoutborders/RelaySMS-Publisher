@@ -139,4 +139,6 @@ See [Observability](../operating/observability.md).
 | `OTEL_TRACES_SAMPLER_ARG` | `1.0` | Fraction of traces kept, `0` to `1` |
 | `OTEL_LOGS_EXPORTER` | `otlp` | `otlp` sends logs to the collector, and `none` turns log export off |
 | `OTEL_PYTHON_LOG_CORRELATION` | `true` | Adds trace and span IDs to log records |
+| `OTEL_PYTHON_FASTAPI_EXCLUDED_URLS` | `^[a-z]+://[^/]+/health$` | Comma-separated regular expressions, each searched for in a REST request's full URL, such as `https://<DOMAIN>/health`. Matching requests are left out of traces. |
+| `OTEL_PYTHON_GRPC_EXCLUDED_SERVICES` | `grpc.health.v1.Health` | Comma-separated gRPC services left out of traces |
 | `UPTIME_KUMA_WORKER_PUSH_URL`, `UPTIME_KUMA_SMTP_PUSH_URL` | None | Uptime Kuma push URLs for the worker and email listener heartbeats. Blank turns them off. |

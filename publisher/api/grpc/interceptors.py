@@ -35,6 +35,7 @@ SERVER_ERRORS = {
     grpc.StatusCode.DATA_LOSS,
     grpc.StatusCode.DEADLINE_EXCEEDED,
 }
+HEALTH_SERVICE_PREFIX = "/grpc.health.v1.Health/"
 REQUIRED_HEADERS = (
     "x-payload-bin",
     "x-public-key-bin",
@@ -61,7 +62,12 @@ class LoggingInterceptor(ServerInterceptor):
         finally:
             code = context.code()  # pyright: ignore[reportAttributeAccessIssue]  (missing from grpc's stubs)
             if code in (None, grpc.StatusCode.OK):
-                logger.info("%s %s - OK -", method_name, self.server_protocol)
+                level = (
+                    logging.DEBUG
+                    if method_name.startswith(HEALTH_SERVICE_PREFIX)
+                    else logging.INFO
+                )
+                logger.log(level, "%s %s - OK -", method_name, self.server_protocol)
             else:
                 level = logging.ERROR if code in SERVER_ERRORS else logging.WARNING
                 details = (context.details() or b"").decode(errors="replace")  # pyright: ignore[reportAttributeAccessIssue]

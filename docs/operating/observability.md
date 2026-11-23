@@ -42,7 +42,7 @@ Open Uptime Kuma through its domain, or through an SSH tunnel at <http://localho
 ssh -L 3001:127.0.0.1:3001 <USER>@<HOST>
 ```
 
-Then add a monitor for each service.
+Then add a monitor for each service. Health checks are left out of traces. Passing ones are also left out of the REST access log, and the gRPC API logs them only when `LOG_LEVEL` is `debug`.
 
 ### REST
 

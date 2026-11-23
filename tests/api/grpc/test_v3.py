@@ -21,7 +21,7 @@ from protos.v3 import publisher_pb2, publisher_pb2_grpc
 from publisher import db, keys
 from publisher.api.grpc import interceptors as grpc_interceptors
 from publisher.api.grpc import server as grpc_server
-from publisher.api.grpc.interceptors import V1AuthInterceptor
+from publisher.api.grpc.interceptors import LoggingInterceptor, V1AuthInterceptor
 from publisher.api.grpc.server import V3_SERVICE, grpc_config, interceptors
 from publisher.api.grpc.v3 import revoke_oauth2_token
 from publisher.api.grpc.v3.servicer import PublisherServicerV3
@@ -391,6 +391,28 @@ def test_unexpected_error_hides_details(stub, monkeypatch):
 
     assert error.code() == grpc.StatusCode.INTERNAL
     assert "internal detail" not in error.details()
+
+
+@pytest.mark.parametrize(
+    ("method_name", "level"),
+    [
+        ("/grpc.health.v1.Health/Check", logging.DEBUG),
+        ("/publisher.v3.Publisher/GetPNBACode", logging.INFO),
+    ],
+)
+def test_passing_calls_log_at_info_and_health_checks_at_debug(
+    caplog, method_name, level
+):
+    caplog.set_level(logging.DEBUG)
+    context = MagicMock()
+    context.code.return_value = None
+
+    LoggingInterceptor().intercept(
+        lambda request, context: None, None, context, method_name
+    )
+
+    [record] = [r for r in caplog.records if " - OK -" in r.getMessage()]
+    assert record.levelno == level
 
 
 def test_other_services_skip_request_auth():
