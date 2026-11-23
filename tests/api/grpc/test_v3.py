@@ -20,6 +20,7 @@ from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from protos.v3 import publisher_pb2, publisher_pb2_grpc
 from publisher import db, keys
 from publisher.api.grpc import interceptors as grpc_interceptors
+from publisher.api.grpc import server as grpc_server
 from publisher.api.grpc.interceptors import V1AuthInterceptor
 from publisher.api.grpc.server import V3_SERVICE, grpc_config, interceptors
 from publisher.api.grpc.v3 import revoke_oauth2_token
@@ -321,10 +322,10 @@ def test_a_request_that_fails_to_decrypt_leaves_its_nonce_unused(stub, adapter):
 
 
 def test_a_full_nonce_cache_refuses_requests_instead_of_forgetting_nonces(
-    monkeypatch, adapter
+    set_config, adapter
 ):
     adapter.results["create_authorization_url"] = {"url": "https://auth.example.org"}
-    monkeypatch.setattr(grpc_interceptors, "NONCE_CACHE_SIZE", 1)
+    set_config(grpc_server, "grpc_config", nonce_cache_size=1)
     with serve() as stub:
         metadata = signed_metadata("GetOAuth2AuthorizationUrl")
         stub.GetOAuth2AuthorizationUrl(AUTH_URL_REQUEST, metadata=metadata)
@@ -393,7 +394,9 @@ def test_unexpected_error_hides_details(stub, monkeypatch):
 
 
 def test_other_services_skip_request_auth():
-    interceptor = V1AuthInterceptor(services=[V3_SERVICE], nonce_ttl_seconds=60)
+    interceptor = V1AuthInterceptor(
+        services=[V3_SERVICE], nonce_ttl_seconds=60, nonce_cache_size=1
+    )
 
     result = interceptor.intercept(
         lambda request, context: "served",

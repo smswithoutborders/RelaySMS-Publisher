@@ -92,6 +92,12 @@ The web client's origin is neither the API's own nor listed in `AUTH_WEB_ORIGINS
 
 nginx rate-limits logins and HTTP Basic requests ([limits](credentials.md#logging-in)). Wait a minute and try again.
 
+## gRPC
+
+### `UNAVAILABLE` `Server is busy. Please try again later.`
+
+The server accepted `NONCE_CACHE_SIZE` gRPC requests within twice `NONCE_TTL_SECONDS`, and refuses new ones until older ones expire. If this happens under normal traffic, raise [`NONCE_CACHE_SIZE`](../configuration/settings.md#server) and run `sudo ./manage.sh restart`.
+
 ## nginx
 
 ### gRPC calls fail through nginx

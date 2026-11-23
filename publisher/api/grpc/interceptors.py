@@ -35,7 +35,6 @@ SERVER_ERRORS = {
     grpc.StatusCode.DATA_LOSS,
     grpc.StatusCode.DEADLINE_EXCEEDED,
 }
-NONCE_CACHE_SIZE = 10000
 REQUIRED_HEADERS = (
     "x-payload-bin",
     "x-public-key-bin",
@@ -105,7 +104,9 @@ def _rejected(reason: str) -> Unauthenticated:
 class V1AuthInterceptor(ServerInterceptor):
     """Verify and decrypt the V1 request headers of RPCs on the given services."""
 
-    def __init__(self, services: list[str], nonce_ttl_seconds: int):
+    def __init__(
+        self, services: list[str], nonce_ttl_seconds: int, nonce_cache_size: int
+    ):
         self._prefixes = tuple(f"/{service}/" for service in services)
         self._ttl = nonce_ttl_seconds
         # Seen nonces don't survive a restart.
@@ -113,7 +114,7 @@ class V1AuthInterceptor(ServerInterceptor):
         # A request ahead of the server's clock stays acceptable for up to
         # twice the window after it arrives.
         self._nonces: TTLCache[bytes, bool] = TTLCache(
-            maxsize=NONCE_CACHE_SIZE, ttl=2 * nonce_ttl_seconds, timer=time.time
+            maxsize=nonce_cache_size, ttl=2 * nonce_ttl_seconds, timer=time.time
         )
         self._nonce_lock = threading.Lock()
 
