@@ -29,7 +29,7 @@ Every RPC needs these headers. Headers ending in `-bin` carry raw binary.
 | `x-public-key-bin` | bytes | Yes | Client ephemeral public key ($eC_{pk}$, 32 bytes) |
 | `x-key-id` | string | Yes | ID of the server identity key used to encrypt the payload |
 | `x-nonce-bin` | bytes | Yes | Request nonce (16 bytes) |
-| `x-timestamp` | string | Yes | Unix timestamp in seconds, within `NONCE_TTL_SECONDS` of the server's clock |
+| `x-timestamp` | string | Yes | Unix timestamp in seconds, within `NONCE_TTL_SECONDS` of the server's clock and not before the server's start |
 
 The examples use `-plaintext` against a local server. Drop it for a server behind TLS on port 443.
 

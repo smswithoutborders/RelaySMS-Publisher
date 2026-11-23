@@ -19,7 +19,7 @@ Settings live in `.env` in the install directory. `template.env` lists each one 
 | `GRPC_MAX_WORKERS` | `10` | gRPC worker threads |
 | `GRPC_TLS_ENABLED` | `false` | Serves TLS on `GRPC_PORT` itself. Leave it off behind nginx ([details](../installation/reverse-proxy.md#grpc-tls-without-nginx)) |
 | `GRPC_TLS_CERT_FILE`, `GRPC_TLS_KEY_FILE` | None | Certificate and key. Required when `GRPC_TLS_ENABLED=true`. |
-| `NONCE_TTL_SECONDS` | `600` | How far a gRPC request's timestamp may be from the server's clock, and how long nonces are remembered to refuse replays |
+| `NONCE_TTL_SECONDS` | `600` | Seconds a gRPC request's timestamp may be from the server's clock |
 
 ## Database
 
