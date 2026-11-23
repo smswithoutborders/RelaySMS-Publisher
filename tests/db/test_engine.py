@@ -55,8 +55,10 @@ def test_failing_sqlcipher_integrity_check_is_not_a_value_error(monkeypatch, tmp
             pass
 
     fake = types.ModuleType("sqlcipher3")
-    fake.connect = lambda *args, **kwargs: FakeConnection()
-    fake.DatabaseError = FakeDatabaseError
+    # setattr keeps pyright happy: arbitrary attributes on ModuleType are not
+    # statically declared, but the import machinery reads them at runtime.
+    setattr(fake, "connect", lambda *args, **kwargs: FakeConnection())
+    setattr(fake, "DatabaseError", FakeDatabaseError)
     monkeypatch.setitem(sys.modules, "sqlcipher3", fake)
 
     connect = db._make_sqlcipher3_creator(str(tmp_path / "encrypted.db"), b"\x01" * 32)
