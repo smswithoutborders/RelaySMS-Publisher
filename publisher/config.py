@@ -278,6 +278,7 @@ class GrpcConfig(Section):
     tls_key_file: str | None
     max_workers: int
     nonce_ttl_seconds: int
+    nonce_cache_size: int
 
     @classmethod
     def load(cls, read: _Reader) -> Self:
@@ -290,6 +291,7 @@ class GrpcConfig(Section):
             tls_key_file=read.get_required("GRPC_TLS_KEY_FILE", tls_enabled),
             max_workers=read.get_int("GRPC_MAX_WORKERS", 10, minimum=1),
             nonce_ttl_seconds=read.get_int("NONCE_TTL_SECONDS", 600, minimum=1),
+            nonce_cache_size=read.get_int("NONCE_CACHE_SIZE", 200000, minimum=1),
         )
 
 

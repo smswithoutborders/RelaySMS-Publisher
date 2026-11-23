@@ -14,7 +14,7 @@
 limit_req_zone $binary_remote_addr zone=publisher_login___REST_PORT__:10m rate=5r/m;
 map $http_authorization $publisher_basic_key___REST_PORT__ {
     default     "";
-    "~*^basic " $binary_remote_addr;
+    "~*^\s*basic " $binary_remote_addr;
 }
 limit_req_zone $publisher_basic_key___REST_PORT__ zone=publisher_basic___REST_PORT__:10m rate=30r/m;
 
@@ -22,9 +22,12 @@ limit_req_zone $publisher_basic_key___REST_PORT__ zone=publisher_basic___REST_PO
 limit_req_zone $server_port zone=publisher_login_global___REST_PORT__:1m rate=2r/s;
 map $http_authorization $publisher_basic_global_key___REST_PORT__ {
     default     "";
-    "~*^basic " "basic";
+    "~*^\s*basic " "basic";
 }
 limit_req_zone $publisher_basic_global_key___REST_PORT__ zone=publisher_basic_global___REST_PORT__:1m rate=10r/s;
+
+# Rate-limit gRPC calls.
+limit_req_zone $binary_remote_addr zone=publisher_rpc___REST_PORT__:10m rate=60r/m;
 
 upstream publisher_rest___REST_PORT__ {
     server 127.0.0.1:__REST_PORT__;
@@ -108,23 +111,11 @@ server {
         error_page 429 = /_errors/429.json;
     }
 
-    location ~ ^/v1/(stats|auth|creds)(/|$) {
+    location / {
         limit_req        zone=publisher_basic___REST_PORT__ burst=20 nodelay;
         limit_req        zone=publisher_basic_global___REST_PORT__ burst=20;
         limit_req_status 429;
         proxy_pass       http://publisher_rest___REST_PORT__;
-
-        error_page 500 = /_errors/500.json;
-        error_page 502 = /_errors/502.json;
-        error_page 503 = /_errors/503.json;
-        error_page 504 = /_errors/504.json;
-        error_page 413 = /_errors/413.json;
-        error_page 494 = /_errors/494.json;
-        error_page 429 = /_errors/429.json;
-    }
-
-    location / {
-        proxy_pass http://publisher_rest___REST_PORT__;
 
         error_page 500 = /_errors/500.json;
         error_page 502 = /_errors/502.json;
@@ -180,6 +171,8 @@ server {
     # grpc_pass ignores proxy_set_header: the gRPC locations set the client IP
     # headers with grpc_set_header.
     location /publisher.v3.Publisher {
+        limit_req            zone=publisher_rpc___REST_PORT__ burst=30 nodelay;
+        limit_req_status     429;
         grpc_pass            grpc://publisher_grpc___REST_PORT__;
         grpc_set_header      Host              $host;
         grpc_set_header      X-Real-IP         $remote_addr;

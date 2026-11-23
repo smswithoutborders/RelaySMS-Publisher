@@ -3,6 +3,7 @@
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import override
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -43,6 +44,21 @@ UNAUTHENTICATED = (
     "No session cookie or Basic credentials, an expired session, or a wrong "
     "username or password."
 )
+
+
+class _PassingHealthChecksFilter(logging.Filter):
+    """Leaves passing /health checks out of uvicorn's access log."""
+
+    @override
+    def filter(self, record: logging.LogRecord) -> bool:
+        # uvicorn's access log args are (client, method, path, HTTP version, status).
+        args = record.args
+        return not (
+            isinstance(args, tuple)
+            and len(args) == 5
+            and args[2] == "/health"
+            and args[4] == 200
+        )
 
 
 def _forbidden_reasons(method: str, security: list[dict[str, list[str]]]) -> str:
@@ -117,6 +133,7 @@ def configure_cors(app: FastAPI, settings: AuthConfig) -> None:
 
 
 setup_logging()
+logging.getLogger("uvicorn.access").addFilter(_PassingHealthChecksFilter())
 api_docs_enabled = ApiDocsConfig.get().enabled
 app = FastAPI(
     title="RelaySMS Publisher",
