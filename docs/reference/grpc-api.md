@@ -347,4 +347,4 @@ grpcurl -plaintext \
 EOF
 ```
 
-Every RPC returns a standard [gRPC status code](https://grpc.github.io/grpc/core/md_doc_statuscodes.html), and `0 OK` is success.
+Every RPC returns a standard [gRPC status code](https://grpc.github.io/grpc/core/md_doc_statuscodes.html), and `0 OK` is success. Calls over the nginx [rate limit](../installation/reverse-proxy.md), or past the server's [`NONCE_CACHE_SIZE`](../configuration/settings.md#server), get `14 UNAVAILABLE`.

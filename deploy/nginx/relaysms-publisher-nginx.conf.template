@@ -26,6 +26,9 @@ map $http_authorization $publisher_basic_global_key___REST_PORT__ {
 }
 limit_req_zone $publisher_basic_global_key___REST_PORT__ zone=publisher_basic_global___REST_PORT__:1m rate=10r/s;
 
+# Rate-limit gRPC calls.
+limit_req_zone $binary_remote_addr zone=publisher_rpc___REST_PORT__:10m rate=60r/m;
+
 upstream publisher_rest___REST_PORT__ {
     server 127.0.0.1:__REST_PORT__;
     keepalive 32;
@@ -180,6 +183,8 @@ server {
     # grpc_pass ignores proxy_set_header: the gRPC locations set the client IP
     # headers with grpc_set_header.
     location /publisher.v3.Publisher {
+        limit_req            zone=publisher_rpc___REST_PORT__ burst=30 nodelay;
+        limit_req_status     429;
         grpc_pass            grpc://publisher_grpc___REST_PORT__;
         grpc_set_header      Host              $host;
         grpc_set_header      X-Real-IP         $remote_addr;

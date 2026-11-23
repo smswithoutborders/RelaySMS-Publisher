@@ -104,6 +104,8 @@ The server accepted `NONCE_CACHE_SIZE` gRPC requests within twice `NONCE_TTL_SEC
 
 gRPC needs HTTP/2 on the HTTPS block. Run `sudo ./manage.sh nginx` to render the site again with it.
 
+Calls over the [gRPC rate limit](../installation/reverse-proxy.md) fail with `UNAVAILABLE` (HTTP `429` from nginx). Wait a minute and try again.
+
 ### `nginx -t` fails after an update
 
 Run `sudo ./manage.sh nginx`: it renders the site from the current template, and restores the previous file if the new one fails.
