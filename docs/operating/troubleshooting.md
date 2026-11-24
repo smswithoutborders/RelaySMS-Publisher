@@ -92,11 +92,19 @@ The web client's origin is neither the API's own nor listed in `AUTH_WEB_ORIGINS
 
 nginx rate-limits logins and HTTP Basic requests ([limits](credentials.md#logging-in)). Wait a minute and try again.
 
+## gRPC
+
+### `UNAVAILABLE` `Server is busy. Please try again later.`
+
+The server accepted `NONCE_CACHE_SIZE` gRPC requests within twice `NONCE_TTL_SECONDS`, and refuses new ones until older ones expire. If this happens under normal traffic, raise [`NONCE_CACHE_SIZE`](../configuration/settings.md#server) and run `sudo ./manage.sh restart`.
+
 ## nginx
 
 ### gRPC calls fail through nginx
 
 gRPC needs HTTP/2 on the HTTPS block. Run `sudo ./manage.sh nginx` to render the site again with it.
+
+Calls over the [gRPC rate limit](../installation/reverse-proxy.md) fail with `UNAVAILABLE` (HTTP `429` from nginx). Wait a minute and try again.
 
 ### `nginx -t` fails after an update
 

@@ -14,6 +14,7 @@ from grpc_interceptor.exceptions import (
     GrpcException,
     Internal,
     Unauthenticated,
+    Unavailable,
     Unimplemented,
 )
 from opentelemetry import trace as otel_trace
@@ -34,6 +35,7 @@ SERVER_ERRORS = {
     grpc.StatusCode.DATA_LOSS,
     grpc.StatusCode.DEADLINE_EXCEEDED,
 }
+HEALTH_SERVICE_PREFIX = "/grpc.health.v1.Health/"
 REQUIRED_HEADERS = (
     "x-payload-bin",
     "x-public-key-bin",
@@ -60,7 +62,12 @@ class LoggingInterceptor(ServerInterceptor):
         finally:
             code = context.code()  # pyright: ignore[reportAttributeAccessIssue]  (missing from grpc's stubs)
             if code in (None, grpc.StatusCode.OK):
-                logger.info("%s %s - OK -", method_name, self.server_protocol)
+                level = (
+                    logging.DEBUG
+                    if method_name.startswith(HEALTH_SERVICE_PREFIX)
+                    else logging.INFO
+                )
+                logger.log(level, "%s %s - OK -", method_name, self.server_protocol)
             else:
                 level = logging.ERROR if code in SERVER_ERRORS else logging.WARNING
                 details = (context.details() or b"").decode(errors="replace")  # pyright: ignore[reportAttributeAccessIssue]
@@ -103,9 +110,18 @@ def _rejected(reason: str) -> Unauthenticated:
 class V1AuthInterceptor(ServerInterceptor):
     """Verify and decrypt the V1 request headers of RPCs on the given services."""
 
-    def __init__(self, services: list[str], nonce_ttl_seconds: int):
+    def __init__(
+        self, services: list[str], nonce_ttl_seconds: int, nonce_cache_size: int
+    ):
         self._prefixes = tuple(f"/{service}/" for service in services)
-        self._nonces = TTLCache(maxsize=10000, ttl=nonce_ttl_seconds)
+        self._ttl = nonce_ttl_seconds
+        # Seen nonces don't survive a restart.
+        self._started_at = int(time.time())
+        # A request ahead of the server's clock stays acceptable for up to
+        # twice the window after it arrives.
+        self._nonces: TTLCache[bytes, bool] = TTLCache(
+            maxsize=nonce_cache_size, ttl=2 * nonce_ttl_seconds, timer=time.time
+        )
         self._nonce_lock = threading.Lock()
 
     @override
@@ -137,15 +153,12 @@ class V1AuthInterceptor(ServerInterceptor):
         except ValueError:
             raise _rejected("x-timestamp is not a valid integer") from None
 
-        if abs(int(time.time()) - timestamp) > self._nonces.ttl:
+        if abs(time.time() - timestamp) >= self._ttl:
             raise _rejected("outdated timestamp detected in request")
+        if timestamp < self._started_at:
+            raise _rejected("request predates the server's start")
 
         nonce = metadata["x-nonce-bin"]
-        with self._nonce_lock:
-            if nonce in self._nonces:
-                raise _rejected("nonce has already been used")
-            self._nonces[nonce] = True
-
         try:
             with get_session() as s:
                 ss_kid = get_private_key(s, key_id).private_bytes_raw()
@@ -165,5 +178,14 @@ class V1AuthInterceptor(ServerInterceptor):
         # Rejects a request replayed against another RPC.
         if request.method_name.decode() != method_name:
             raise _rejected("method name in payload does not match gRPC method")
+
+        with self._nonce_lock:
+            self._nonces.expire()
+            if nonce in self._nonces:
+                raise _rejected("nonce has already been used")
+            # A full cache refuses new nonces instead of evicting live ones.
+            if len(self._nonces) >= self._nonces.maxsize:
+                raise Unavailable("Server is busy. Please try again later.")
+            self._nonces[nonce] = True
 
         return request.payload

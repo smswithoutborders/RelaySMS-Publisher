@@ -34,9 +34,6 @@ sudo ./scripts/setup-observability.sh
 
 Set retention in the SigNoz UI, under Settings > Workspace > Retention Controls.
 
-> [!IMPORTANT]
-> `casting.yaml` is generated only once. To change a running install, edit `observability/signoz/casting.yaml` and run `foundryctl cast -f observability/signoz/casting.yaml` again. It recreates only the `signoz` container; Postgres and ClickHouse keep their data.
-
 ## Uptime Kuma monitors
 
 Open Uptime Kuma through its domain, or through an SSH tunnel at <http://localhost:3001>:
@@ -45,7 +42,7 @@ Open Uptime Kuma through its domain, or through an SSH tunnel at <http://localho
 ssh -L 3001:127.0.0.1:3001 <USER>@<HOST>
 ```
 
-Then add a monitor for each service.
+Then add a monitor for each service. Health checks are left out of traces. Passing ones are also left out of the REST access log, and the gRPC API logs them only when `LOG_LEVEL` is `debug`.
 
 ### REST
 
@@ -123,14 +120,36 @@ sudo ./manage.sh restart
 
 To turn it off, blank `OTEL_EXPORTER_OTLP_ENDPOINT` and restart.
 
+## Changing the SigNoz configuration
+
+`observability/signoz/casting.yaml` is generated only once, so updating the Publisher doesn't change a running SigNoz install. To change it, edit `casting.yaml`, then apply it from the install directory:
+
+```bash
+sudo foundryctl cast -f observability/signoz/casting.yaml
+sudo docker compose \
+  -f pours/deployment/compose.yaml \
+  -f observability/signoz/docker-compose.override.yml \
+  up -d --force-recreate
+```
+
+`cast` alone starts the containers without the override's memory limits and hardening. `--force-recreate` also reloads the config files `cast` rewrote, which Compose doesn't detect. Postgres and ClickHouse keep their data.
+
+## Upgrading SigNoz
+
+1. Check the [upgrade path](https://signoz.io/upgrade-path/) for versions you must upgrade through first, and read the migration notes for each release you cross.
+2. Back up the metastore: `sudo sh -c 'docker exec relaysms-publisher-signoz-metastore-postgres-0 pg_dump -U signoz signoz > /root/signoz-metastore-$(date +%F).sql'`.
+3. Install the foundryctl version that `scripts/setup-observability.sh` sets in `FOUNDRY_VERSION`: `curl -fsSL https://signoz.io/foundry.sh | sudo FOUNDRY_VERSION=<VERSION> FOUNDRY_INSTALL_DIR=/usr/local/bin bash`.
+4. Copy the `image:` lines under `signoz` and `ingester` from `observability/signoz/casting.yaml.template` into `casting.yaml`, adding them if they're missing.
+5. Apply it as in [Changing the SigNoz configuration](#changing-the-signoz-configuration), then check the version under Settings.
+
 ## Setting up by hand
 
 ### SigNoz
 
-Needs Docker Engine with the Compose plugin. Set `<PASSWORD>` to 12 or more characters, with upper and lower case, a number and a symbol.
+Needs Docker Engine with the Compose plugin. Set `<VERSION>` to the `FOUNDRY_VERSION` in `scripts/setup-observability.sh`, and `<PASSWORD>` to 12 or more characters, with upper and lower case, a number and a symbol.
 
 ```bash
-curl -fsSL https://signoz.io/foundry.sh | FOUNDRY_INSTALL_DIR=/usr/local/bin bash
+curl -fsSL https://signoz.io/foundry.sh | sudo FOUNDRY_VERSION=<VERSION> FOUNDRY_INSTALL_DIR=/usr/local/bin bash
 
 sed \
   -e "s/__POSTGRES_DB__/signoz/" -e "s/__POSTGRES_USER__/signoz/" \

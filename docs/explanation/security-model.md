@@ -16,7 +16,7 @@ The app refills a linked account's pools with the gRPC `SyncKeys` call. A failed
 
 - **Payloads from a linked account** are encrypted by the app with a pool key pair combined with an identity key, so the gateway client and the network carry only ciphertext.
 - **Payloads sent without a linked account** are encrypted to an identity key alone, without forward secrecy: anyone who later obtains the identity private keys can decrypt recorded ones.
-- **gRPC requests** carry their payload (`x-payload-bin`) encrypted to an identity key. A request is refused if its nonce was already seen, or if its timestamp is more than `NONCE_TTL_SECONDS` from the server's clock. The other request fields, such as phone numbers, login codes and two-step passwords, rely on TLS, from nginx or `GRPC_TLS_ENABLED`.
+- **gRPC requests** carry their payload (`x-payload-bin`) encrypted to an identity key. A request is refused if its nonce was already seen, if its timestamp is `NONCE_TTL_SECONDS` or more from the server's clock, or if its timestamp is earlier than the server's start, since seen nonces aren't kept across restarts. The other request fields, such as phone numbers, login codes and two-step passwords, rely on TLS, from nginx or `GRPC_TLS_ENABLED`.
 - **The REST API** takes payloads without credentials, and **the email listener** only from [allowed senders](../configuration/smtp-transport.md#allowlist). Either way, a payload only publishes if it decrypts with a linked account's keys, or passes the [offline publishing](../configuration/offline-publishing.md) rules.
 
 ## What the operator can see

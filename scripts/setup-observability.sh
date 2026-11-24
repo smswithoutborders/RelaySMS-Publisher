@@ -25,6 +25,7 @@ SIGNOZ_SMTP_PORT="587"
 SIGNOZ_SMTP_USERNAME=""
 SIGNOZ_SMTP_PASSWORD=""
 SIGNOZ_SMTP_FROM=""
+FOUNDRY_VERSION="v0.5.0"
 
 usage() {
   cat <<'EOF'
@@ -240,7 +241,7 @@ main() {
 
   if ! command -v foundryctl &>/dev/null; then
     log "Installing foundryctl"
-    curl -fsSL https://signoz.io/foundry.sh | FOUNDRY_INSTALL_DIR=/usr/local/bin bash
+    curl -fsSL https://signoz.io/foundry.sh | FOUNDRY_VERSION="$FOUNDRY_VERSION" FOUNDRY_INSTALL_DIR=/usr/local/bin bash
   fi
 
   signoz_external_url="http://localhost:$SIGNOZ_PORT"

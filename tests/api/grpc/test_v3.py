@@ -4,7 +4,9 @@ import base64
 import datetime
 import hashlib
 import logging
+import time
 from concurrent import futures
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -17,8 +19,10 @@ import publisher.models  # noqa: F401  (registers every table on Base.metadata)
 from lib_relaysms_payload_specs.generated import relaysms_spec_payload as rrs
 from protos.v3 import publisher_pb2, publisher_pb2_grpc
 from publisher import db, keys
-from publisher.api.grpc.interceptors import V1AuthInterceptor
-from publisher.api.grpc.server import V3_SERVICE, interceptors
+from publisher.api.grpc import interceptors as grpc_interceptors
+from publisher.api.grpc import server as grpc_server
+from publisher.api.grpc.interceptors import LoggingInterceptor, V1AuthInterceptor
+from publisher.api.grpc.server import V3_SERVICE, grpc_config, interceptors
 from publisher.api.grpc.v3 import revoke_oauth2_token
 from publisher.api.grpc.v3.servicer import PublisherServicerV3
 from publisher.db import Base, get_session
@@ -75,8 +79,8 @@ def adapter(adapter_calls):
     return adapter_calls
 
 
-@pytest.fixture
-def stub():
+@contextmanager
+def serve():
     service = PublisherServicerV3()
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=4), interceptors=interceptors()
@@ -84,15 +88,44 @@ def stub():
     publisher_pb2_grpc.add_PublisherServicer_to_server(service, server)
     port = server.add_insecure_port("127.0.0.1:0")
     server.start()
-    with grpc.insecure_channel(f"127.0.0.1:{port}") as channel:
-        yield publisher_pb2_grpc.PublisherStub(channel)
-    server.stop(None)
+    try:
+        with grpc.insecure_channel(f"127.0.0.1:{port}") as channel:
+            yield publisher_pb2_grpc.PublisherStub(channel)
+    finally:
+        server.stop(None)
 
 
-def signed_metadata(method, payload=None):
+@pytest.fixture
+def stub():
+    with serve() as stub:
+        yield stub
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """The interceptor's clock, set by assigning clock.now."""
+    clock = SimpleNamespace(now=time.time())
+    monkeypatch.setattr(
+        grpc_interceptors, "time", SimpleNamespace(time=lambda: clock.now)
+    )
+    return clock
+
+
+@pytest.fixture
+def clocked_stub(clock, stub):
+    return stub
+
+
+def replace_header(metadata, name, value):
+    return [(key, value if key == name else old) for key, old in metadata]
+
+
+def signed_metadata(method, payload=None, timestamp=None):
     _, _, metadata = client_helpers.build_v1_request_metadata(
         rest_api="", method_name=f"/publisher.v3.Publisher/{method}", payload=payload
     )
+    if timestamp is not None:
+        metadata = replace_header(metadata, "x-timestamp", str(timestamp))
     return metadata
 
 
@@ -239,6 +272,74 @@ def test_replayed_request_is_rejected(stub, adapter):
     assert "nonce has already been used" in error.details()
 
 
+def test_a_nonce_is_kept_while_a_request_ahead_of_the_clock_is_acceptable(
+    clock, clocked_stub, adapter
+):
+    adapter.results["create_authorization_url"] = {"url": "https://auth.example.org"}
+    ttl = grpc_config.nonce_ttl_seconds
+    # A client whose clock is ahead by half the window.
+    metadata = signed_metadata(
+        "GetOAuth2AuthorizationUrl", timestamp=int(clock.now) + ttl // 2
+    )
+    clocked_stub.GetOAuth2AuthorizationUrl(AUTH_URL_REQUEST, metadata=metadata)
+    clock.now += ttl
+
+    error = rpc_error(
+        clocked_stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST, metadata=metadata
+    )
+
+    assert error.code() == grpc.StatusCode.UNAUTHENTICATED
+    assert "nonce has already been used" in error.details()
+
+
+def test_a_request_from_before_the_server_started_is_rejected(clock, clocked_stub):
+    metadata = signed_metadata(
+        "GetOAuth2AuthorizationUrl", timestamp=int(clock.now) - 1
+    )
+
+    error = rpc_error(
+        clocked_stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST, metadata=metadata
+    )
+
+    assert error.code() == grpc.StatusCode.UNAUTHENTICATED
+    assert "predates the server's start" in error.details()
+
+
+def test_a_request_that_fails_to_decrypt_leaves_its_nonce_unused(stub, adapter):
+    adapter.results["create_authorization_url"] = {"url": "https://auth.example.org"}
+    metadata = signed_metadata("GetOAuth2AuthorizationUrl")
+    [ciphertext] = [value for key, value in metadata if key == "x-payload-bin"]
+    tampered = bytes([ciphertext[0] ^ 1]) + ciphertext[1:]
+    error = rpc_error(
+        stub,
+        "GetOAuth2AuthorizationUrl",
+        AUTH_URL_REQUEST,
+        metadata=replace_header(metadata, "x-payload-bin", tampered),
+    )
+    assert "decryption failed" in error.details()
+
+    stub.GetOAuth2AuthorizationUrl(AUTH_URL_REQUEST, metadata=metadata)
+
+
+def test_a_full_nonce_cache_refuses_requests_instead_of_forgetting_nonces(
+    set_config, adapter
+):
+    adapter.results["create_authorization_url"] = {"url": "https://auth.example.org"}
+    set_config(grpc_server, "grpc_config", nonce_cache_size=1)
+    with serve() as stub:
+        metadata = signed_metadata("GetOAuth2AuthorizationUrl")
+        stub.GetOAuth2AuthorizationUrl(AUTH_URL_REQUEST, metadata=metadata)
+
+        full = rpc_error(stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST)
+        replay = rpc_error(
+            stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST, metadata=metadata
+        )
+
+    assert full.code() == grpc.StatusCode.UNAVAILABLE
+    assert replay.code() == grpc.StatusCode.UNAUTHENTICATED
+    assert "nonce has already been used" in replay.details()
+
+
 def test_request_signed_for_another_method_is_rejected(stub):
     metadata = signed_metadata("GetPNBACode")
 
@@ -292,8 +393,32 @@ def test_unexpected_error_hides_details(stub, monkeypatch):
     assert "internal detail" not in error.details()
 
 
+@pytest.mark.parametrize(
+    ("method_name", "level"),
+    [
+        ("/grpc.health.v1.Health/Check", logging.DEBUG),
+        ("/publisher.v3.Publisher/GetPNBACode", logging.INFO),
+    ],
+)
+def test_passing_calls_log_at_info_and_health_checks_at_debug(
+    caplog, method_name, level
+):
+    caplog.set_level(logging.DEBUG)
+    context = MagicMock()
+    context.code.return_value = None
+
+    LoggingInterceptor().intercept(
+        lambda request, context: None, None, context, method_name
+    )
+
+    [record] = [r for r in caplog.records if " - OK -" in r.getMessage()]
+    assert record.levelno == level
+
+
 def test_other_services_skip_request_auth():
-    interceptor = V1AuthInterceptor(services=[V3_SERVICE], nonce_ttl_seconds=60)
+    interceptor = V1AuthInterceptor(
+        services=[V3_SERVICE], nonce_ttl_seconds=60, nonce_cache_size=1
+    )
 
     result = interceptor.intercept(
         lambda request, context: "served",

@@ -1,6 +1,6 @@
 # Reverse proxy and TLS
 
-The services listen on `127.0.0.1`. nginx serves them on port 443 with a Let's Encrypt certificate, from [the site template](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/deploy/nginx/relaysms-publisher-nginx.conf.template). It sends `/publisher.v3.Publisher` and `/grpc.health.v1.Health` to gRPC on `GRPC_PORT`, and everything else to REST on `PORT`. It rate-limits logins and HTTP Basic requests ([limits](../operating/credentials.md#logging-in)).
+The services listen on `127.0.0.1`. nginx serves them on port 443 with a Let's Encrypt certificate, from [the site template](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/deploy/nginx/relaysms-publisher-nginx.conf.template). It sends `/publisher.v3.Publisher` and `/grpc.health.v1.Health` to gRPC on `GRPC_PORT`, and everything else to REST on `PORT`. It rate-limits logins and HTTP Basic requests ([limits](../operating/credentials.md#logging-in)), and allows 60 `Publisher` calls a minute per IP address.
 
 ## With the installer
 

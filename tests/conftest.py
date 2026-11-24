@@ -18,6 +18,9 @@ os.environ.update(
 # at this checkout.
 for name in [name for name in os.environ if name.startswith("GIT_")]:
     del os.environ[name]
+# Test repos ignore the global and system git config.
+os.environ["GIT_CONFIG_GLOBAL"] = os.devnull
+os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
 
 pytest_plugins = ["tests.fixtures"]
 

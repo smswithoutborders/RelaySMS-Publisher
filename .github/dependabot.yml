@@ -9,10 +9,6 @@ updates:
       default-days: 3
     labels:
       - "dependencies"
-    ignore:
-      # kombu[sqlalchemy] (via celery) pins sqlalchemy<2.1 until kombu 5.7
-      - dependency-name: "sqlalchemy"
-        versions: [">=2.1"]
     groups:
       python:
         patterns:

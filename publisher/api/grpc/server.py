@@ -36,6 +36,7 @@ def interceptors() -> list[grpc.ServerInterceptor]:
         V1AuthInterceptor(
             services=[V3_SERVICE],
             nonce_ttl_seconds=grpc_config.nonce_ttl_seconds,
+            nonce_cache_size=grpc_config.nonce_cache_size,
         ),
     ]
 

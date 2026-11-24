@@ -29,7 +29,7 @@ Every RPC needs these headers. Headers ending in `-bin` carry raw binary.
 | `x-public-key-bin` | bytes | Yes | Client ephemeral public key ($eC_{pk}$, 32 bytes) |
 | `x-key-id` | string | Yes | ID of the server identity key used to encrypt the payload |
 | `x-nonce-bin` | bytes | Yes | Request nonce (16 bytes) |
-| `x-timestamp` | string | Yes | Unix timestamp in seconds, within `NONCE_TTL_SECONDS` of the server's clock |
+| `x-timestamp` | string | Yes | Unix timestamp in seconds, within `NONCE_TTL_SECONDS` of the server's clock and not before the server's start |
 
 The examples use `-plaintext` against a local server. Drop it for a server behind TLS on port 443.
 
@@ -347,4 +347,4 @@ grpcurl -plaintext \
 EOF
 ```
 
-Every RPC returns a standard [gRPC status code](https://grpc.github.io/grpc/core/md_doc_statuscodes.html), and `0 OK` is success.
+Every RPC returns a standard [gRPC status code](https://grpc.github.io/grpc/core/md_doc_statuscodes.html), and `0 OK` is success. Calls over the nginx [rate limit](../installation/reverse-proxy.md), or past the server's [`NONCE_CACHE_SIZE`](../configuration/settings.md#server), get `14 UNAVAILABLE`.

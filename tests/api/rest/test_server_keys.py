@@ -3,8 +3,10 @@
 import base64
 
 import pytest
+from fastapi.testclient import TestClient
 
 from publisher import keys
+from publisher.api.rest.v1 import server_keys
 from publisher.db import get_session
 from publisher.models.server_identity_key import get_private_key
 
@@ -35,3 +37,15 @@ def test_get_returns_the_public_half_of_the_identity_key(client):
 @pytest.mark.parametrize("key_id", ["256", "-1", "abc"])
 def test_get_rejects_ids_outside_0_255(client, key_id):
     assert client.get(f"/v1/server-keys/{key_id}").status_code == 422
+
+
+def test_a_database_fault_is_a_500_that_hides_its_message(app, monkeypatch):
+    def wrong_key(db):
+        raise ValueError("Wrong key, or the database file is corrupted.")
+
+    monkeypatch.setattr(server_keys, "get_public_keys", wrong_key)
+
+    response = TestClient(app, raise_server_exceptions=False).get("/v1/server-keys")
+
+    assert response.status_code == 500
+    assert "Wrong key" not in response.text
