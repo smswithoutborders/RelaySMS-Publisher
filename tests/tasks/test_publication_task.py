@@ -246,3 +246,63 @@ def test_records_no_trace_id_without_a_sampled_trace(monkeypatch, span):
         publication_task.publish_message("text", "sender", "https")
 
     assert publication_task.record_publication.call_args.kwargs["trace_id"] is None
+
+
+@pytest.fixture
+def fake_span(monkeypatch):
+    span = MagicMock()
+    span.get_span_context.return_value = otel_trace.INVALID_SPAN_CONTEXT
+    monkeypatch.setattr(otel_trace, "get_current_span", lambda: span)
+    return span
+
+
+def _span_attributes(span):
+    return {c.args[0]: c.args[1] for c in span.set_attribute.call_args_list}
+
+
+def test_a_failed_publication_marks_its_span_as_an_error(monkeypatch, fake_span):
+    _run_with_publish_error(
+        monkeypatch, PayloadMalformedError("bad", platform_name="gmail")
+    )
+
+    assert _span_attributes(fake_span) == {
+        "publication.status": "failed",
+        "publication.platform": "gmail",
+        "publication.failure_reason": "payload_malformed",
+    }
+    fake_span.set_status.assert_called_once_with(
+        otel_trace.StatusCode.ERROR, "payload_malformed"
+    )
+
+
+@pytest.mark.parametrize(
+    "error, status", [(None, "published"), (ProtocolNotAllowedError("no"), "rejected")]
+)
+def test_published_and_rejected_spans_are_not_errors(
+    monkeypatch, fake_span, error, status
+):
+    _stub_publications(monkeypatch, prepare_error=error)
+
+    publication_task.publish_message("text", "sender", "https")
+
+    assert _span_attributes(fake_span)["publication.status"] == status
+    fake_span.set_status.assert_not_called()
+
+
+def test_an_unexpected_error_is_recorded_on_the_span(monkeypatch, fake_span):
+    error = RuntimeError("boom")
+    _run_with_publish_error(monkeypatch, error)
+
+    fake_span.record_exception.assert_called_once_with(error)
+
+
+def test_a_payload_failure_logs_its_cause(monkeypatch, caplog):
+    error = PayloadMalformedError("Payload is not valid base64.")
+    error.__cause__ = ValueError("Incorrect padding")
+
+    _run_with_publish_error(monkeypatch, error)
+
+    [record] = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert record.getMessage() == (
+        "Failed to process payload: Payload is not valid base64. (Incorrect padding)"
+    )

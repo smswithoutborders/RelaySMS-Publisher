@@ -35,7 +35,7 @@ from relaysms_adapter_sdk.errors import (
 
 logger = logging.getLogger(__name__)
 
-# Fixed failure codes for the stats. Error messages go only to the logs.
+# Fixed failure codes for the stats and traces.
 _FAILURE_REASONS = {
     PayloadMalformedError: "payload_malformed",
     PayloadNotSupportedError: "payload_not_supported",
@@ -84,6 +84,19 @@ def _trace_id() -> str | None:
     return otel_trace.format_trace_id(context.trace_id)
 
 
+def _annotate_span(
+    status: str, platform_name: str | None, failure_reason: str | None
+) -> None:
+    span = otel_trace.get_current_span()
+    span.set_attribute("publication.status", status)
+    if platform_name:
+        span.set_attribute("publication.platform", platform_name)
+    if failure_reason:
+        span.set_attribute("publication.failure_reason", failure_reason)
+    if status == "failed":
+        span.set_status(otel_trace.StatusCode.ERROR, failure_reason)
+
+
 @worker_shutdown.connect
 def _on_worker_shutdown(**kwargs):
     dispose_engine()
@@ -130,9 +143,11 @@ def publish_message(
         refreshed_token = exc.token
     except Exception as exc:
         logger.exception("An unexpected error occurred during task processing.")
+        otel_trace.get_current_span().record_exception(exc)
         platform_name = delivery.platform if delivery else None
         failure_reason = _failure_reason(exc)
     else:
+        _annotate_span("published", delivery.platform, None)
         try:
             with get_session() as db:
                 publications.finish(db, delivery, new_token)
@@ -150,6 +165,7 @@ def publish_message(
             )
         return
 
+    _annotate_span(status, platform_name, failure_reason)
     with get_session() as db:
         if delivery and refreshed_token:
             publications.store_token(db, delivery, refreshed_token)
