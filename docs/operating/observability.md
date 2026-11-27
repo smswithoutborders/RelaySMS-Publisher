@@ -142,7 +142,7 @@ SigNoz keeps traces and logs for 15 days by default. Links on older stats open a
 `observability/signoz/casting.yaml` is generated only once, so updating the Publisher doesn't change a running SigNoz install. To change it, edit `casting.yaml`, then apply it from the install directory:
 
 ```bash
-sudo foundryctl cast -f observability/signoz/casting.yaml
+sudo foundryctl cast --no-ledger --no-updater -f observability/signoz/casting.yaml
 sudo docker compose \
   -f pours/deployment/compose.yaml \
   -f observability/signoz/docker-compose.override.yml \
@@ -176,7 +176,7 @@ sed \
   -e "s|__SIGNOZ_EXTERNAL_URL__|http://localhost:8090|" \
   observability/signoz/casting.yaml.template > observability/signoz/casting.yaml
 
-foundryctl cast -f observability/signoz/casting.yaml
+foundryctl cast --no-ledger --no-updater -f observability/signoz/casting.yaml
 docker compose \
   -f pours/deployment/compose.yaml \
   -f observability/signoz/docker-compose.override.yml \

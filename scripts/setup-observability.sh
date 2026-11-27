@@ -272,7 +272,7 @@ main() {
     log "SigNoz already running, skipping"
   else
     log "Starting SigNoz"
-    foundryctl cast -f observability/signoz/casting.yaml
+    foundryctl cast --no-ledger --no-updater -f observability/signoz/casting.yaml
     docker compose \
       -f pours/deployment/compose.yaml \
       -f observability/signoz/docker-compose.override.yml \
