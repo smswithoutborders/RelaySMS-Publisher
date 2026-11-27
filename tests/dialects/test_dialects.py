@@ -370,6 +370,10 @@ def _consume_slot(session, token_id):
     return slot.server_key.public_key, slot.client_key.public_key
 
 
+def test_engines_leave_query_parameters_out_of_errors():
+    assert db.get_engine().hide_parameters
+
+
 def test_a_key_slot_can_be_used_once():
     token_id, public_keys = _token_with_key_pools()
 
