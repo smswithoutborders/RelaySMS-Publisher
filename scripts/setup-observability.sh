@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# Brings up SigNoz + Uptime Kuma and turns on OTel tracing. Re-runnable.
+# Brings up SigNoz + Uptime Kuma, turns on OTel tracing, and can create the
+# SigNoz dashboard and alerts. Re-runnable.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +26,8 @@ SIGNOZ_SMTP_PORT="587"
 SIGNOZ_SMTP_USERNAME=""
 SIGNOZ_SMTP_PASSWORD=""
 SIGNOZ_SMTP_FROM=""
+SIGNOZ_WEBHOOK_URL=""
+SIGNOZ_ALERT_EMAIL=""
 FOUNDRY_VERSION="v0.5.0"
 
 usage() {
@@ -39,13 +42,15 @@ Usage: setup-observability.sh [OPTIONS]
   --skip-tracing            Don't install requirements-observability.txt or turn on OTEL_EXPORTER_OTLP_ENDPOINT
   --signoz-port PORT        Host port for the SigNoz UI (default: 8090)
   --kuma-port PORT          Host port for Uptime Kuma (default: 3001)
-  --signoz-email EMAIL      Admin account email for SigNoz's first-run setup (default: admin@relaysms.local)
-  --signoz-password PASS    Admin account password (default: randomly generated)
-  --signoz-smtp-host HOST   SMTP relay host for SigNoz email alerts (optional; Email channel won't work without it)
+  --signoz-email EMAIL      SigNoz admin account email (default: admin@relaysms.local)
+  --signoz-password PASS    SigNoz admin account password (default: randomly generated on the first run)
+  --signoz-smtp-host HOST   SMTP relay host for SigNoz email alerts (optional, first run only; email notification channels won't work without it)
   --signoz-smtp-port PORT   SMTP relay port (default: 587)
   --signoz-smtp-username U  SMTP relay username
   --signoz-smtp-password P  SMTP relay password
   --signoz-smtp-from EMAIL  From address for SigNoz email alerts
+  --signoz-webhook-url URL  Slack or Mattermost webhook (optional; creates any missing SigNoz dashboard, notification channel and alert rules)
+  --signoz-alert-email ADDR Email address for alerts (optional; like --signoz-webhook-url, but with an email notification channel)
   -h, --help                Show this help and exit
 EOF
 }
@@ -114,6 +119,14 @@ parse_args() {
       SIGNOZ_SMTP_FROM="$2"
       shift 2
       ;;
+    --signoz-webhook-url)
+      SIGNOZ_WEBHOOK_URL="$2"
+      shift 2
+      ;;
+    --signoz-alert-email)
+      SIGNOZ_ALERT_EMAIL="$2"
+      shift 2
+      ;;
     -h | --help)
       usage
       exit 0
@@ -175,6 +188,15 @@ setup_reverse_proxy() {
   fi
 }
 
+provision_signoz() {
+  [ "$SIGNOZ_EMAIL_SET" = "1" ] || prompt SIGNOZ_EMAIL "SigNoz admin email [$SIGNOZ_EMAIL]: " "$SIGNOZ_EMAIL"
+  [ -n "$SIGNOZ_PASSWORD" ] || prompt_secret SIGNOZ_PASSWORD "SigNoz admin password: "
+  log "Creating the SigNoz dashboard and alerts"
+  SIGNOZ_URL="http://127.0.0.1:$SIGNOZ_PORT" SIGNOZ_EMAIL="$SIGNOZ_EMAIL" SIGNOZ_PASSWORD="$SIGNOZ_PASSWORD" \
+    SIGNOZ_WEBHOOK_URL="$SIGNOZ_WEBHOOK_URL" SIGNOZ_ALERT_EMAIL="$SIGNOZ_ALERT_EMAIL" venv/bin/python scripts/provision_signoz.py ||
+    error "Creating the SigNoz dashboard and alerts failed"
+}
+
 main() {
   parse_args "$@"
   require_root
@@ -190,6 +212,10 @@ main() {
     error "--signoz-smtp-username contains unsupported characters"
   [ -z "$SIGNOZ_SMTP_FROM" ] || [[ "$SIGNOZ_SMTP_FROM" =~ ^[A-Za-z0-9@_.,!?+=~^-]+$ ]] ||
     error "--signoz-smtp-from contains unsupported characters"
+  [ -z "$SIGNOZ_WEBHOOK_URL" ] || [[ "$SIGNOZ_WEBHOOK_URL" =~ ^https?://[^[:space:]]+$ ]] ||
+    error "--signoz-webhook-url must be an http or https URL"
+  [ -z "$SIGNOZ_ALERT_EMAIL" ] || [[ "$SIGNOZ_ALERT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] ||
+    error "--signoz-alert-email must be an email address"
   cd "$INSTALL_DIR"
 
   if ! command -v docker &>/dev/null; then
@@ -296,10 +322,12 @@ main() {
     fi
     case "$create_admin" in
     n | N | no | NO)
-      log "Skipping SigNoz admin account. OTLP ingestion stays blocked until one is created, see docs/operating/observability.md"
+      log "Skipping SigNoz admin account, dashboard and alerts. OTLP ingestion stays blocked until the account is created, see docs/operating/observability.md"
+      SIGNOZ_WEBHOOK_URL="" SIGNOZ_ALERT_EMAIL=""
       ;;
     *)
       [ "$SIGNOZ_EMAIL_SET" = "1" ] || prompt SIGNOZ_EMAIL "SigNoz admin email [$SIGNOZ_EMAIL]: " "$SIGNOZ_EMAIL"
+      SIGNOZ_EMAIL_SET=1
       if [ -z "$SIGNOZ_PASSWORD" ]; then
         prompt_secret SIGNOZ_PASSWORD "SigNoz admin password (blank to auto-generate): "
         [ -n "$SIGNOZ_PASSWORD" ] || SIGNOZ_PASSWORD="$(openssl rand -hex 16)Aa1!"
@@ -344,6 +372,8 @@ main() {
     log "Restarting services"
     "$INSTALL_DIR/manage.sh" restart
   fi
+
+  [ -z "$SIGNOZ_WEBHOOK_URL$SIGNOZ_ALERT_EMAIL" ] || provision_signoz
 
   log "SigNoz: http://localhost:$SIGNOZ_PORT  Uptime Kuma: http://localhost:$KUMA_PORT"
   [ -n "$SITE_NAME" ] && [ "$SKIP_NGINX" != "1" ] && log "SigNoz reverse proxy: $signoz_external_url"

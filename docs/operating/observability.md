@@ -22,6 +22,8 @@ sudo ./scripts/setup-observability.sh
 | `--observability-kuma-site-name <DOMAIN>` | `--kuma-site-name <DOMAIN>` | The same for Uptime Kuma, on a different domain |
 | None | `--signoz-email`, `--signoz-password` | SigNoz admin account |
 | None | `--signoz-smtp-host`, `--signoz-smtp-port`, `--signoz-smtp-username`, `--signoz-smtp-password`, `--signoz-smtp-from` | SMTP relay for SigNoz's email alerts |
+| None | `--signoz-webhook-url <URL>` | Creates the [dashboard](#dashboard), and [alerts](#alerts) sent to this Slack or Mattermost webhook |
+| None | `--signoz-alert-email <ADDRESS>` | The same, with alerts sent to this address through the SMTP relay |
 | None | `--skip-tracing` | Leaves tracing off |
 
 `scripts/setup-observability.sh --help` lists every flag. The script:
@@ -30,9 +32,16 @@ sudo ./scripts/setup-observability.sh
 - writes `observability/signoz/casting.yaml` from its template, binds the SigNoz UI and OTLP ports to `127.0.0.1`, starts SigNoz and creates the admin account;
 - starts Uptime Kuma on `127.0.0.1:3001`, or the port you choose;
 - installs `requirements-observability.txt` and sets `OTEL_EXPORTER_OTLP_ENDPOINT`, unless given `--skip-tracing`;
-- with `--site-name` or `--kuma-site-name`, writes and enables the nginx sites and runs Certbot.
+- with `--site-name` or `--kuma-site-name`, writes and enables the nginx sites and runs Certbot;
+- with `--signoz-webhook-url` or `--signoz-alert-email`, creates the dashboard, notification channels and alert rules that SigNoz lacks.
 
-Set retention in the SigNoz UI, under Settings > Workspace > Retention Controls.
+Open SigNoz through its domain, or through an SSH tunnel at <http://localhost:8090>:
+
+```bash
+ssh -L 8090:127.0.0.1:8090 <USER>@<HOST>
+```
+
+Log in with the admin account, then set retention under Settings > Workspace > Retention Controls.
 
 ## Uptime Kuma monitors
 
@@ -92,20 +101,172 @@ Monitor Type "Push", interval just over 60s. Set `UPTIME_KUMA_WORKER_PUSH_URL` i
 
 As for the worker, with an interval just over 20s and `UPTIME_KUMA_SMTP_PUSH_URL`.
 
+## Dashboard
+
+[`dashboard.json`](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/observability/signoz/dashboard.json) charts publications, requests, and logged warnings and errors. Its last two panels use logs. The others use [sampled](../configuration/settings.md#logging-and-monitoring) traces only.
+
+The dashboard and the alerts below are made for the SigNoz version that [`casting.yaml.template`](https://github.com/smswithoutborders/RelaySMS-Publisher/blob/main/observability/signoz/casting.yaml.template) sets. [Upgrade](#upgrading-signoz) an older install first.
+
+The [alert setup](#alerts) also imports the dashboard. To import it by hand:
+
+1. Download the file, or copy its content.
+2. In SigNoz, open Dashboards > New dashboard > Import JSON.
+3. Upload the file or paste its content, then click Import and Next.
+
+   ![The Import JSON tab with dashboard.json loaded](../images/observability/import-dashboard.png)
+
+![The top of the imported dashboard](../images/observability/dashboard.png)
+
+To import a newer version, delete the dashboard first. SigNoz refuses a second one with the same name.
+
 ## Alerts
 
-In the SigNoz UI, go to Alerts > New Alert > Logs, paste a filter below into the search bar, set the threshold to count > 0 over a rolling window, and attach a notification channel. Keep the parentheses: `AND` binds tighter than `OR`.
+Create an incoming webhook for the Slack or Mattermost channel that gets the alerts:
 
-Publish failures, adapter errors included:
+- Slack: [on your Slack app](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
+- Mattermost: under Product menu > Integrations > Incoming Webhooks
 
+Then create the SigNoz notification channel, the [rules](#rules) and the dashboard, from the install directory:
+
+```bash
+sudo ./scripts/setup-observability.sh --signoz-webhook-url <URL>
 ```
-service.name = 'relaysms-publisher-worker' AND (body CONTAINS 'Failed to process payload' OR body CONTAINS 'Failed to publish message' OR body CONTAINS 'An unexpected error occurred during task processing')
+
+Add `--signoz-alert-email <ADDRESS>` to also send the alerts by email, or use it instead of `--signoz-webhook-url`. Email needs an SMTP relay and From address in SigNoz: pass the `--signoz-smtp-*` flags the first time you run [the setup](#set-up). Later runs ignore them. To add or change the relay afterwards, fill in the `SIGNOZ_ALERTMANAGER_SIGNOZ_GLOBAL_SMTP__*` values in `casting.yaml` and [apply it](#changing-the-signoz-configuration).
+
+To check a notification channel, open `Publisher alerts` or `Publisher email` under Alerts > Configuration and click Test.
+
+Alerts arrive like this in Mattermost:
+
+![Two alerts in a Mattermost channel](../images/observability/mattermost.png)
+
+When SigNoz already has its admin account, the script asks for its email and password unless given `--signoz-email` and `--signoz-password`. It skips each notification channel, rule and dashboard whose name already exists. The rules it creates send to the channels for the webhook and address given in that run. To change a webhook or address later, edit its channel in SigNoz. To add a notification channel to an existing rule, edit the rule there.
+
+Links in alerts start with `SIGNOZ_ALERTMANAGER_SIGNOZ_EXTERNAL__URL`. The first setup sets it to `https://<DOMAIN>` if given `--site-name` without `--skip-nginx`, or else to the SigNoz UI's `http://localhost:<PORT>`. To change it, edit `casting.yaml` and [apply it](#changing-the-signoz-configuration).
+
+To set up by hand, follow the steps below.
+
+### Notification channels
+
+For Slack or Mattermost:
+
+1. In SigNoz, open Alerts > Configuration > Notification Channels > New Channel.
+2. Fill in Name, keep Type on Slack (Mattermost uses it too), and paste the webhook URL. Leave Recipient blank to post to the webhook's own channel.
+3. Replace Title with:
+
+   ```text
+   [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})
+   ```
+
+4. Replace Description with:
+
+   ```text
+   {{ range .Alerts -}}
+   {{ .Annotations.description }}
+   {{ template "signoz.relatedLinks.slack" . }}
+   {{ end }}
+   ```
+
+   ![The New channel form for Mattermost](../images/observability/channel.png)
+
+5. Click Test, then Save once the message arrives.
+
+For email, set Type to Email and fill in To. SigNoz needs an [SMTP relay and From address](#alerts).
+
+### Add a rule
+
+1. Open Alerts > Alert Rules > New Alert Rule and choose the rule's type from the table below.
+2. Name the rule, paste its filter into the search bar, then set the aggregation and Group By. For a rule whose threshold is in seconds, set the chart's unit to Nanoseconds, the unit of `duration_nano`.
+3. Under Set alert conditions, choose ABOVE, the match and window, then set the severity in the first box, the threshold and the notification channel. Give a threshold in seconds the unit Seconds.
+
+   ![The query and alert conditions of Slow requests](../images/observability/rule.png)
+
+4. Under Notification settings, paste the rule's message and set Group alerts by to the same fields as Group By.
+
+   ![The notification settings of Slow requests](../images/observability/rule-message.png)
+
+5. Click Save Alert Rule.
+
+### Rules
+
+| Rule | Type | Aggregation | Group By | Match and window | Severity and threshold |
+| --- | --- | --- | --- | --- | --- |
+| [Publisher errors](#publisher-errors) | Log-based | `count()` | `service.name` | IN TOTAL, 5 minutes | critical, 0 |
+| [Publish failure spike](#publish-failure-spike) | Trace-based | `count()` | `publication.failure_reason` | IN TOTAL, 15 minutes | warning, 10 |
+| [Refused requests](#refused-requests) | Log-based | `count()` | `service.name` | IN TOTAL, 15 minutes | warning, 20 |
+| [Slow requests](#slow-requests) | Trace-based | `p95(duration_nano)` | `service.name`, `name` | AT LEAST ONCE, 15 minutes | warning, 5 seconds |
+| [Slow publishing](#slow-publishing) | Trace-based | `p95(duration_nano)` | `publication.platform` | AT LEAST ONCE, 15 minutes | warning, 30 seconds |
+
+The warning thresholds are starting points. Raise any that the rule's chart passes on a normal day. Trace-based rules use sampled traces only.
+
+#### Publisher errors
+
+Errors from the services and their adapters. Most senders' mistakes, such as a payload that doesn't decrypt, log as warnings and don't count.
+
+```text
+service.name LIKE 'relaysms-publisher-%' AND severity_number >= 17
 ```
 
-Key management failures:
+Message:
 
+```text
+Errors logged by $service.name in 5 minutes: {{$value}}. Read the related logs.
 ```
-body CONTAINS 'Failed to generate server identity keys' OR body CONTAINS 'Token hash missing'
+
+#### Publish failure spike
+
+Failed publish attempts, senders' mistakes included, grouped by the same codes as the stats' `failure_reason`.
+
+```text
+name = 'run/tasks.publication_task.publish_message' AND publication.status = 'failed'
+```
+
+Message:
+
+```text
+Publications failed with $publication.failure_reason in 15 minutes: {{$value}}. Open the related traces to see which platform.
+```
+
+#### Refused requests
+
+Warnings that can mean replayed requests or guessed secrets, such as rejected gRPC requests, wrong passwords, missing scopes and payloads that don't decrypt.
+
+```text
+service.name LIKE 'relaysms-publisher-%' AND severity_number = 13 AND body REGEXP 'Request rejected|refused:|Invalid username or password|Missing scope|Invalid tag|used or missing|consumed by another worker|payload decryption failed'
+```
+
+Message:
+
+```text
+Requests refused by $service.name in 15 minutes: {{$value}}. Read the related logs for replayed requests or guessed secrets.
+```
+
+#### Slow requests
+
+REST and gRPC requests that are slow to answer.
+
+```text
+service.name LIKE 'relaysms-publisher-%' AND kind_string = 'Server'
+```
+
+Message:
+
+```text
+$name on $service.name took {{$value}} (95th percentile). Open a related trace to see which step is slow.
+```
+
+#### Slow publishing
+
+Successful publications that are slow to reach their platform.
+
+```text
+name = 'run/tasks.publication_task.publish_message' AND publication.status = 'published'
+```
+
+Message:
+
+```text
+Publishing to $publication.platform took {{$value}} (95th percentile). The platform or its adapter is slow.
 ```
 
 ## Turning tracing on and off
@@ -199,7 +360,7 @@ docker compose -f observability/uptime-kuma/docker-compose.yml up -d
 ### Reverse proxy
 
 ```bash
-sed -e "s/__SERVER_NAME__/<OPS_DOMAIN>/g" \
+sed -e "s/__SERVER_NAME__/<OPS_DOMAIN>/g" -e "s/127.0.0.1:8080/127.0.0.1:8090/" \
     observability/nginx-observability.conf.template |
     sudo tee /etc/nginx/sites-available/<OPS_DOMAIN>.conf >/dev/null
 sudo ln -s /etc/nginx/sites-available/<OPS_DOMAIN>.conf /etc/nginx/sites-enabled/
