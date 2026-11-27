@@ -159,6 +159,9 @@ class V1AuthInterceptor(ServerInterceptor):
             raise _rejected("request predates the server's start")
 
         nonce = metadata["x-nonce-bin"]
+        if len(metadata["x-public-key-bin"]) != 32 or len(nonce) != 12:
+            raise _rejected("x-public-key-bin or x-nonce-bin has the wrong length")
+
         try:
             with get_session() as s:
                 ss_kid = get_private_key(s, key_id).private_bytes_raw()

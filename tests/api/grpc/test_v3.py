@@ -259,6 +259,23 @@ def test_missing_auth_headers_are_rejected(stub):
     assert "missing required headers" in error.details()
 
 
+@pytest.mark.parametrize(
+    ("header", "value"),
+    [("x-public-key-bin", b"short"), ("x-nonce-bin", b"\x00" * 24)],
+)
+def test_a_wrong_sized_key_or_nonce_is_rejected(stub, header, value):
+    metadata = replace_header(
+        signed_metadata("GetOAuth2AuthorizationUrl"), header, value
+    )
+
+    error = rpc_error(
+        stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST, metadata=metadata
+    )
+
+    assert error.code() == grpc.StatusCode.UNAUTHENTICATED
+    assert "wrong length" in error.details()
+
+
 def test_replayed_request_is_rejected(stub, adapter):
     adapter.results["create_authorization_url"] = {"url": "https://auth.example.org"}
     metadata = signed_metadata("GetOAuth2AuthorizationUrl")
