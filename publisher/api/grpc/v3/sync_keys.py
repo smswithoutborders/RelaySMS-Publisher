@@ -27,7 +27,8 @@ def sync_keys(request, payload: bytes) -> publisher_pb2.SyncKeysResponse:
     with get_session() as s:
         try:
             token = keys.redeem_token(s, request.token_id, request.key_id, payload)
-        except keys.KeyManagementError:
+        except keys.KeyManagementError as exc:
+            logger.warning("Key sync refused: %s", exc)
             raise Unauthenticated("sync failed") from None
 
         mark_key_used(s, request.key_id)

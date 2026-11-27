@@ -188,7 +188,7 @@ def health():
 
 
 def _bad_request_handler(request: Request, exc: Exception):
-    logger.error("request: %s, error: %s", request.url.path, str(exc))
+    logger.warning("request: %s, error: %s", request.url.path, str(exc))
     return JSONResponse(status_code=400, content={"error": str(exc)})
 
 
@@ -198,7 +198,8 @@ app.add_exception_handler(InvalidCursorError, _bad_request_handler)
 @app.exception_handler(StarletteHTTPException)
 def http_error_handler(request: Request, exc: StarletteHTTPException):
     log = getattr(exc, "log", None)
-    logger.error(
+    logger.log(
+        logging.ERROR if exc.status_code >= 500 else logging.WARNING,
         "request: %s, error: %s%s",
         request.url.path,
         exc.detail,
@@ -214,7 +215,7 @@ def http_error_handler(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(RequestValidationError)
 def validation_error_handler(request: Request, exc: RequestValidationError):
     error = "; ".join(_validation_message(e) for e in exc.errors())
-    logger.error("request: %s, error: %s", request.url.path, error)
+    logger.warning("request: %s, error: %s", request.url.path, error)
     return JSONResponse(status_code=422, content={"error": error})
 
 

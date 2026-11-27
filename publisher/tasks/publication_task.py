@@ -54,6 +54,13 @@ _ADAPTER_FAILURE_REASONS = {
     UpstreamError.code: "adapter_upstream",
     INTERNAL_ERROR: "adapter_internal",
 }
+# Adapter failures usually caused by the sender or their account, logged as
+# warnings.
+_SENDER_FAILURES = {
+    "adapter_invalid_params",
+    "adapter_auth_failed",
+    "adapter_token_invalid",
+}
 
 
 def _failure_reason(exc: Exception) -> str:
@@ -64,6 +71,10 @@ def _failure_reason(exc: Exception) -> str:
         if cls in _FAILURE_REASONS:
             return _FAILURE_REASONS[cls]
     return "unexpected_error"
+
+
+def _with_cause(exc: Exception) -> str:
+    return f"{exc} ({exc.__cause__})" if exc.__cause__ else str(exc)
 
 
 def _trace_id() -> str | None:
@@ -110,11 +121,12 @@ def publish_message(
         status = "rejected"
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
     except (PayloadMalformedError, PayloadNotSupportedError, KeyManagementError) as exc:
-        logger.error("Failed to process payload: %s", exc)
+        logger.warning("Failed to process payload: %s", _with_cause(exc))
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
     except AdapterIntegrationError as exc:
-        logger.error("Failed to publish message: %s", exc)
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
+        level = logging.WARNING if failure_reason in _SENDER_FAILURES else logging.ERROR
+        logger.log(level, "Failed to publish message: %s", exc)
         refreshed_token = exc.token
     except Exception as exc:
         logger.exception("An unexpected error occurred during task processing.")

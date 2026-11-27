@@ -135,10 +135,10 @@ def sender_country(address: str, dialing_code: str | None = None) -> str | None:
         return None
 
 
-def _recipient(content: rrs.V1ContentsContainer) -> str:
+def _recipient(content: rrs.V1ContentsContainer, platform: str) -> str:
     to = content.get_to()
     if to is None:
-        raise PayloadMalformedError("Content has no recipient.")
+        raise PayloadMalformedError("Content has no recipient.", platform_name=platform)
     return to.decode()
 
 
@@ -147,13 +147,11 @@ def validate(text_payload: str) -> tuple[bytes, bytes, rrs.V1PayloadsTypes]:
     try:
         payload_bytes = base64.b64decode(text_payload)
     except Exception as exc:
-        logger.error("Failed to decode base64 payload: %s", exc)
         raise PayloadMalformedError("Payload is not valid base64.") from exc
 
     try:
         payload_type = rrs.v1_get_payload_type(payload_bytes)
     except Exception as exc:
-        logger.exception("Failed to read payload type header.")
         raise PayloadMalformedError("Invalid payload structure.") from exc
 
     return payload_bytes, text_payload.encode(), payload_type
@@ -198,7 +196,6 @@ def _assemble(
             try:
                 return rrs.V1Payloads.deserialize_without_attachment(payload_raw)
             except Exception as exc:
-                logger.exception("Failed to deserialize standalone payload.")
                 raise PayloadMalformedError("Deserialization failed.") from exc
 
         case (
@@ -213,7 +210,6 @@ def _assemble(
             )
 
         case _:
-            logger.error("Payload type not supported: %r", payload_type)
             raise PayloadNotSupportedError(f"Unsupported type: {payload_type!r}")
 
 
@@ -230,21 +226,12 @@ def _dispatch(
             offline_config.allowed_protocols
             and protocol not in offline_config.allowed_protocols
         ):
-            logger.warning(
-                "Discarding offline payload from disallowed protocol %r (allowed: %s).",
-                protocol,
-                offline_config.allowed_protocols,
-            )
             raise ProtocolNotAllowedError(
                 f"Protocol {protocol!r} is not allowed to publish offline content."
             )
 
         if protocol == "https" and offline_config.shared_secret:
             if not tag:
-                logger.warning(
-                    "Discarding offline payload with missing tag (protocol=%r).",
-                    protocol,
-                )
                 raise OfflineTagMissingError(
                     "Tag is required for offline content over https."
                 )
@@ -252,10 +239,6 @@ def _dispatch(
             if not secrets.compare_digest(
                 tag.encode(), offline_config.shared_secret.encode()
             ):
-                logger.warning(
-                    "Discarding offline payload with invalid tag (protocol=%r).",
-                    protocol,
-                )
                 raise OfflineTagInvalidError("Invalid tag for offline content.")
 
         return _publish_offline_content(
@@ -294,42 +277,41 @@ def _publish_online_content(
             received_payload=content_ciphertext,
         )
     except Exception as exc:
-        logger.exception(
-            "Decryption failed for token %d with key %d.", token_id, key_id
-        )
         raise PayloadMalformedError(
-            "Online payload decryption failed.", platform_name=token.platform
+            f"Online payload decryption failed for token {token_id} with key {key_id}.",
+            platform_name=token.platform,
         ) from exc
     consume_token_slot(session, slot)
 
     try:
         cat_id = rrs.v1_content_category_from_u8(token.cat_id)
-    except Exception:
-        logger.exception(
-            "Unknown content category %r on token %d.", token.cat_id, token_id
-        )
-        raise
+    except Exception as exc:
+        raise ValueError(
+            f"Unknown content category {token.cat_id!r} on token {token_id}."
+        ) from exc
 
     try:
         content = rrs.V1ContentsContainer.deserialize(
             data=content_bytes, cat_id=cat_id, len_att=len_att
         )
     except Exception as exc:
-        logger.exception("Failed to deserialize content for token %d.", token_id)
         raise PayloadMalformedError(
-            "Online content deserialization failed.", platform_name=token.platform
+            f"Online content deserialization failed for token {token_id}.",
+            platform_name=token.platform,
         ) from exc
 
     try:
         rrs.v1_payload_support_protocols_from_u8(token.proto_id)
-    except Exception:
-        logger.exception("Unknown protocol %r on token %d.", token.proto_id, token_id)
-        raise
+    except Exception as exc:
+        raise ValueError(
+            f"Unknown protocol {token.proto_id!r} on token {token_id}."
+        ) from exc
 
     adapter = platform_adapters.get_for_protocol(
         session, token.platform, token.proto_id
     )
-    request = SendRequest(message=_message(content), account=tokens.account(token))
+    message = _message(content, token.platform)
+    request = SendRequest(message=message, account=tokens.account(token))
     return Delivery(adapter, request, key_id=key_id, token_id=token.id)
 
 
@@ -381,9 +363,8 @@ def _publish_offline_content(
         offline_first = rrs.OfflineFirst.deserialize(content_ciphertext)
         content_obj = rrs.OfflineFirst.decrypt(ss=ss_kid, offline_first=offline_first)
     except Exception as exc:
-        logger.exception("Failed to decrypt offline payload with key %d.", key_id)
         raise PayloadMalformedError(
-            "Offline payload decryption failed.",
+            f"Offline payload decryption failed with key {key_id}.",
             platform_name=OFFLINE_CONTENT_PLATFORM,
         ) from exc
 
@@ -393,7 +374,6 @@ def _publish_offline_content(
             data=content_obj.get_payload(), cat_id=cat_id, len_att=len_att
         )
     except Exception as exc:
-        logger.exception("Failed to deserialize offline content")
         raise PayloadMalformedError(
             "Offline content deserialization failed.",
             platform_name=OFFLINE_CONTENT_PLATFORM,
@@ -402,7 +382,8 @@ def _publish_offline_content(
     adapter = platform_adapters.get_for_protocol(
         session, OFFLINE_CONTENT_PLATFORM, PNBA
     )
-    return Delivery(adapter, SendRequest(message=_message(content)), key_id=key_id)
+    message = _message(content, OFFLINE_CONTENT_PLATFORM)
+    return Delivery(adapter, SendRequest(message=message), key_id=key_id)
 
 
 def _store_segment_and_try_join(
@@ -440,7 +421,7 @@ def _store_segment_and_try_join(
     return joined
 
 
-def _message(content: rrs.V1ContentsContainer) -> Message:
+def _message(content: rrs.V1ContentsContainer, platform: str) -> Message:
     attachments = ()
     data = content.get_attachment()
     if data:
@@ -455,21 +436,29 @@ def _message(content: rrs.V1ContentsContainer) -> Message:
         filename = f"{uuid.uuid4().hex}.{extension}"
         attachments = (Attachment(data=data, filename=filename, mimetype=mimetype),)
 
-    body = content.get_body().decode()
     cat_id = content.get_cat_id()
-    match cat_id:
-        case rrs.V1ContentCategories.TEXT:
-            return Message(body=body, attachments=attachments)
-        case rrs.V1ContentCategories.MESSAGE:
-            return Message(
-                body=body, recipient=_recipient(content), attachments=attachments
-            )
-        case rrs.V1ContentCategories.EMAIL:
-            return Message(
-                body=body,
-                recipient=_recipient(content),
-                subject=(content.get_subject() or b"").decode(),
-                attachments=attachments,
-            )
-    logger.error("Content category not supported: %r", cat_id)
-    raise PayloadNotSupportedError(f"Unsupported content category: {cat_id!r}")
+    try:
+        body = content.get_body().decode()
+        match cat_id:
+            case rrs.V1ContentCategories.TEXT:
+                return Message(body=body, attachments=attachments)
+            case rrs.V1ContentCategories.MESSAGE:
+                return Message(
+                    body=body,
+                    recipient=_recipient(content, platform),
+                    attachments=attachments,
+                )
+            case rrs.V1ContentCategories.EMAIL:
+                return Message(
+                    body=body,
+                    recipient=_recipient(content, platform),
+                    subject=(content.get_subject() or b"").decode(),
+                    attachments=attachments,
+                )
+    except UnicodeDecodeError:
+        raise PayloadMalformedError(
+            "Content is not valid UTF-8.", platform_name=platform
+        ) from None
+    raise PayloadNotSupportedError(
+        f"Unsupported content category: {cat_id!r}", platform_name=platform
+    )

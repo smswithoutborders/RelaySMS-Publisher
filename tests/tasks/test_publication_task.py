@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import logging
 from contextlib import contextmanager, nullcontext
 from unittest.mock import MagicMock
 
@@ -16,7 +17,13 @@ from publisher.publications import (
     ProtocolNotAllowedError,
 )
 from publisher.tasks import publication_task
-from relaysms_adapter_sdk.errors import RateLimitedError, UpstreamError
+from relaysms_adapter_sdk.errors import (
+    AuthenticationError,
+    InvalidParamsError,
+    RateLimitedError,
+    TokenInvalidError,
+    UpstreamError,
+)
 
 EVENTS = []
 
@@ -76,7 +83,8 @@ def _run_with_publish_error(monkeypatch, error):
 def test_pipeline_errors_are_recorded_as_failed(monkeypatch, caplog, error, reason):
     _run_with_publish_error(monkeypatch, error)
 
-    assert "Failed to process payload" in caplog.text
+    [record] = [r for r in caplog.records if "Failed to process payload" in r.message]
+    assert record.levelno == logging.WARNING
     publication_task.record_publication.assert_called_once()
     kwargs = publication_task.record_publication.call_args.kwargs
     assert kwargs["status"] == "failed"
@@ -110,13 +118,19 @@ def test_a_subclass_of_a_mapped_error_keeps_its_code(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "code, reason",
+    "code, reason, level",
     [
-        (RateLimitedError.code, "adapter_rate_limited"),
-        (-32099, "adapter_error"),
+        (RateLimitedError.code, "adapter_rate_limited", logging.ERROR),
+        (UpstreamError.code, "adapter_upstream", logging.ERROR),
+        (-32099, "adapter_error", logging.ERROR),
+        (InvalidParamsError.code, "adapter_invalid_params", logging.WARNING),
+        (AuthenticationError.code, "adapter_auth_failed", logging.WARNING),
+        (TokenInvalidError.code, "adapter_token_invalid", logging.WARNING),
     ],
 )
-def test_adapter_failures_record_a_code_not_the_message(monkeypatch, code, reason):
+def test_adapter_failures_record_a_code_and_log_by_reason(
+    monkeypatch, caplog, code, reason, level
+):
     error = AdapterIntegrationError("Google returned 400: to=a@b.c", code=code)
     _stub_publications(monkeypatch, send_error=error)
 
@@ -124,6 +138,8 @@ def test_adapter_failures_record_a_code_not_the_message(monkeypatch, code, reaso
 
     kwargs = publication_task.record_publication.call_args.kwargs
     assert kwargs["failure_reason"] == reason
+    [record] = [r for r in caplog.records if "Failed to publish message" in r.message]
+    assert record.levelno == level
 
 
 def test_a_failed_send_keeps_the_refreshed_token(monkeypatch, caplog):
