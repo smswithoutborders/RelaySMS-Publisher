@@ -186,7 +186,7 @@ Tests run against in-memory SQLite. `tests/conftest.py` sets the environment bef
 | Directory | Covers | Run with |
 | --- | --- | --- |
 | `tests/` (mirroring `publisher/`) | The Python package | `make test` |
-| `tests/scripts` | The shell scripts | `make test` |
+| `tests/scripts` | Scripts in `scripts/` and the repository root | `make test` |
 | `tests/dialects` | Migrations and queries on SQLite, SQLCipher, Postgres, MySQL and MariaDB | `make test-dialects` |
 | `tests/e2e` | Install, update and uninstall on Ubuntu 24.04 and Debian 13 | `make test-e2e` |
 
@@ -237,7 +237,7 @@ make build test PYTHON=.venv312/bin/python
 | `migrations/` | Alembic migrations |
 | `protos/` | gRPC service definitions |
 | `deploy/` | systemd units and nginx templates |
-| `scripts/` | Shell scripts for installing, running and maintaining the Publisher, and the shared `lib.sh` |
+| `scripts/` | Scripts for installing, running and maintaining the Publisher, and the shared `lib.sh` |
 | `tools/` | The reference client |
 | `data/` | Runtime data, not tracked |
 

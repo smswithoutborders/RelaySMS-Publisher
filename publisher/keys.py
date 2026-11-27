@@ -178,8 +178,7 @@ def get_token_slot(session: Session, token_id: int, key_id: int) -> TokenSlot:
     or slot exists.
     """
     if not 0 <= key_id <= 255:
-        logger.warning("Key ID out of range: token_id=%s, kid=%s", token_id, key_id)
-        raise KeyUnavailableError("Ephemeral key already used or missing")
+        raise KeyUnavailableError(f"Key ID out of range for token {token_id}: {key_id}")
 
     ss_kid = get_private_key(session, key_id).private_bytes_raw()
     query = (
@@ -195,22 +194,19 @@ def get_token_slot(session: Session, token_id: int, key_id: int) -> TokenSlot:
     row = session.execute(query).first()
 
     if row is None:
-        logger.error("Token not found: token_id=%s", token_id)
-        raise KeyNotFoundError("Token not found")
+        raise KeyNotFoundError(f"Token {token_id} not found")
 
     token, server_key, client_key = row
     if token.token_hash is None:
         logger.error("Token hash missing for token_id=%s", token_id)
-        raise KeyNotFoundError("Token hash not found", platform_name=token.platform)
+        raise KeyNotFoundError(
+            f"Token {token_id} has no token hash", platform_name=token.platform
+        )
 
     if server_key is None or client_key is None:
-        logger.error(
-            "Ephemeral key unavailable: token_hash_id=%s, kid=%s",
-            token.token_hash.id,
-            key_id,
-        )
         raise KeyUnavailableError(
-            "Ephemeral key already used or missing", platform_name=token.platform
+            f"Ephemeral key {key_id} of token {token_id} is already used or missing",
+            platform_name=token.platform,
         )
     return TokenSlot(token, ss_kid, server_key, client_key)
 
@@ -223,13 +219,9 @@ def consume_token_slot(session: Session, slot: TokenSlot) -> None:
             CursorResult, session.execute(delete(model).where(model.id == row.id))
         )
         if not deleted.rowcount:
-            logger.error(
-                "Ephemeral key consumed by another worker: token_hash_id=%s, kid=%s",
-                row.token_hash_id,
-                row.key_index,
-            )
             raise KeyUnavailableError(
-                "Ephemeral key already used or missing",
+                f"Ephemeral key {row.key_index} of token {slot.token.token_id} was "
+                "consumed by another worker",
                 platform_name=slot.token.platform,
             )
     logger.debug(
@@ -279,9 +271,9 @@ def redeem_token(
         ciphertext,
         slot.token.token_hash.token_hash,
     ):
-        logger.warning("Token verification failed: kid=%s", key_id)
         raise TokenVerificationError(
-            "Token verification failed", platform_name=slot.token.platform
+            f"Token {token_id} verification failed with key {key_id}",
+            platform_name=slot.token.platform,
         )
 
     consume_token_slot(session, slot)

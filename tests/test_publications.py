@@ -79,11 +79,12 @@ def test_country_comes_from_dialing_code_or_number(address, dialing_code, countr
     assert publications.sender_country(address, dialing_code) == country
 
 
-def test_https_offline_rejects_wrong_tag(set_config, offline):
+def test_https_offline_rejects_wrong_tag(set_config, offline, caplog):
     set_config(publications, "offline_config", shared_secret="s3cret")
 
     with pytest.raises(OfflineTagInvalidError):
         _dispatch(_payload(), protocol="https", tag="wrong")
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
 @pytest.mark.parametrize("tag", [None, ""])
@@ -199,13 +200,12 @@ def account(test_db):
         )
 
 
-def _email(attachment=None):
+def _email(attachment=None, **fields):
+    defaults = {"body": b"Hello", "to": b"friend@example.org", "subject": b"Hi"}
     return rrs.V1ContentsContainer(
         cat_id=rrs.V1ContentCategories.EMAIL,
-        body=b"Hello",
-        to=b"friend@example.org",
-        subject=b"Hi",
         attachment=attachment,
+        **(defaults | fields),
     ).serialize()
 
 
@@ -281,9 +281,10 @@ def _stored_token(account):
 
 
 @pytest.mark.parametrize("text", ["not base64!", base64.b64encode(b"\xff").decode()])
-def test_validate_rejects_text_that_is_not_a_payload(text):
+def test_validate_rejects_text_that_is_not_a_payload(caplog, text):
     with pytest.raises(PayloadMalformedError):
         publications.validate(text)
+    assert caplog.records == []
 
 
 def test_publish_sends_the_decrypted_email_to_the_adapter(account, adapter):
@@ -304,13 +305,27 @@ def test_publish_sends_the_decrypted_email_to_the_adapter(account, adapter):
     assert _stored_token(account)[1] is not None
 
 
-def test_publish_rejects_a_tampered_payload(account, adapter):
+def test_publish_rejects_a_tampered_payload(account, adapter, caplog):
     contents = bytearray(_encrypt(account, account.slot, _email()))
     contents[-1] ^= 1
     [text] = _sms(bytes(contents), slot=account.slot, token_id=account.token_id)
 
-    with pytest.raises(PayloadMalformedError):
+    with pytest.raises(PayloadMalformedError) as error:
         _publish(text)
+    assert adapter.calls == []
+    assert f"token {account.token_id} with key {account.slot}" in str(error.value)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+@pytest.mark.parametrize("field", ["body", "to", "subject"])
+def test_content_that_is_not_utf8_is_malformed(account, adapter, field):
+    contents = _encrypt(account, account.slot, _email(**{field: b"\xff"}))
+    [text] = _sms(contents, slot=account.slot, token_id=account.token_id)
+
+    with pytest.raises(PayloadMalformedError) as error:
+        _publish(text)
+    assert error.value.platform_name == "gmail"
+    assert error.value.__cause__ is None
     assert adapter.calls == []
 
 
@@ -382,6 +397,16 @@ def test_a_segment_delivered_twice_is_joined_once(account, adapter):
 
     assert results[-1] == "gmail"
     assert len(adapter.calls) == 1
+
+
+def test_an_offline_payload_that_does_not_decrypt_is_malformed(test_db, adapter):
+    with get_session() as s:
+        keys.initialize_server_identity_keys(s)
+    [text] = _sms(bytes(64), slot=3)
+
+    with pytest.raises(PayloadMalformedError, match="payload decryption failed"):
+        _publish(text, protocol="smtp")
+    assert adapter.calls == []
 
 
 def test_offline_payload_goes_to_the_offline_adapter(test_db, adapter):

@@ -85,6 +85,16 @@ class PublicationStat(BaseModel):
         description="Why it failed or was rejected, as a short code such as "
         "payload_malformed or offline_tag_invalid.",
     )
+    trace_id: str | None = Field(
+        None, description="OpenTelemetry trace ID, if the attempt's trace was sampled."
+    )
+    trace_url: str | None = Field(
+        None, description="Link to the trace, if the server has trace links set up."
+    )
+    trace_logs_url: str | None = Field(
+        None,
+        description="Link to the trace's logs, if the server has log links set up.",
+    )
     created_at: datetime.datetime
 
 

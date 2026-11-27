@@ -3,6 +3,7 @@
 import logging
 
 from celery.signals import worker_shutdown
+from opentelemetry import trace as otel_trace
 
 from publisher import publications
 from publisher.db import dispose_engine, get_session
@@ -34,7 +35,7 @@ from relaysms_adapter_sdk.errors import (
 
 logger = logging.getLogger(__name__)
 
-# Fixed failure codes for the stats. Error messages go only to the logs.
+# Fixed failure codes for the stats and traces.
 _FAILURE_REASONS = {
     PayloadMalformedError: "payload_malformed",
     PayloadNotSupportedError: "payload_not_supported",
@@ -53,6 +54,13 @@ _ADAPTER_FAILURE_REASONS = {
     UpstreamError.code: "adapter_upstream",
     INTERNAL_ERROR: "adapter_internal",
 }
+# Adapter failures usually caused by the sender or their account, logged as
+# warnings.
+_SENDER_FAILURES = {
+    "adapter_invalid_params",
+    "adapter_auth_failed",
+    "adapter_token_invalid",
+}
 
 
 def _failure_reason(exc: Exception) -> str:
@@ -63,6 +71,30 @@ def _failure_reason(exc: Exception) -> str:
         if cls in _FAILURE_REASONS:
             return _FAILURE_REASONS[cls]
     return "unexpected_error"
+
+
+def _with_cause(exc: Exception) -> str:
+    return f"{exc} ({exc.__cause__})" if exc.__cause__ else str(exc)
+
+
+def _trace_id() -> str | None:
+    context = otel_trace.get_current_span().get_span_context()
+    if not context.trace_flags.sampled:
+        return None
+    return otel_trace.format_trace_id(context.trace_id)
+
+
+def _annotate_span(
+    status: str, platform_name: str | None, failure_reason: str | None
+) -> None:
+    span = otel_trace.get_current_span()
+    span.set_attribute("publication.status", status)
+    if platform_name:
+        span.set_attribute("publication.platform", platform_name)
+    if failure_reason:
+        span.set_attribute("publication.failure_reason", failure_reason)
+    if status == "failed":
+        span.set_status(otel_trace.StatusCode.ERROR, failure_reason)
 
 
 @worker_shutdown.connect
@@ -102,17 +134,20 @@ def publish_message(
         status = "rejected"
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
     except (PayloadMalformedError, PayloadNotSupportedError, KeyManagementError) as exc:
-        logger.error("Failed to process payload: %s", exc)
+        logger.warning("Failed to process payload: %s", _with_cause(exc))
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
     except AdapterIntegrationError as exc:
-        logger.error("Failed to publish message: %s", exc)
         platform_name, failure_reason = exc.platform_name, _failure_reason(exc)
+        level = logging.WARNING if failure_reason in _SENDER_FAILURES else logging.ERROR
+        logger.log(level, "Failed to publish message: %s", exc)
         refreshed_token = exc.token
     except Exception as exc:
         logger.exception("An unexpected error occurred during task processing.")
+        otel_trace.get_current_span().record_exception(exc)
         platform_name = delivery.platform if delivery else None
         failure_reason = _failure_reason(exc)
     else:
+        _annotate_span("published", delivery.platform, None)
         try:
             with get_session() as db:
                 publications.finish(db, delivery, new_token)
@@ -122,6 +157,7 @@ def publish_message(
                     status="published",
                     platform_name=delivery.platform,
                     country_code=country_code,
+                    trace_id=_trace_id(),
                 )
         except Exception:
             logger.exception(
@@ -129,6 +165,7 @@ def publish_message(
             )
         return
 
+    _annotate_span(status, platform_name, failure_reason)
     with get_session() as db:
         if delivery and refreshed_token:
             publications.store_token(db, delivery, refreshed_token)
@@ -139,6 +176,7 @@ def publish_message(
             platform_name=platform_name,
             country_code=country_code,
             failure_reason=failure_reason,
+            trace_id=_trace_id(),
         )
 
 

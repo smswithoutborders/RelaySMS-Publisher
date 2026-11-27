@@ -23,11 +23,12 @@ The app refills a linked account's pools with the gRPC `SyncKeys` call. A failed
 
 | Data | Stored as |
 | --- | --- |
-| Platform tokens | Encrypted with `DATABASE_FIELD_ENCRYPTION_KEY` while `DATABASE_FIELD_ENCRYPTION_ENABLED` is on, as `template.env` sets it |
+| Account identifiers and platform tokens | Encrypted with `DATABASE_FIELD_ENCRYPTION_KEY` while `DATABASE_FIELD_ENCRYPTION_ENABLED` is on, as `template.env` sets it |
 | Private keys | Encrypted with `DATA_ENCRYPTION_KEY` |
-| Sender phone numbers | Replaced with a keyed hash before anything is stored |
-| Message content | Ciphertext while queued, and while a multi-part payload waits for its segments. Decrypted only in memory, in the worker and the adapter process it hands it to |
-| Publication stats | Platform, protocol, status, country code, failure reason and time |
+| Payload senders' phone numbers | Replaced with a keyed hash before anything is stored |
+| Message content | Ciphertext while queued, and while a multi-part payload waits for its segments. Decrypted in memory by the worker, which hands it to the adapter process |
+| Publication stats | Platform, protocol, status, country code, failure reason, trace ID and time |
+| Logs and traces | Request paths, client IP addresses, platforms and record IDs, among others. Adapters' log lines and errors are kept as they are, and can name an account or a recipient |
 
 ## Adapters
 

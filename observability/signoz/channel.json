@@ -1,0 +1,10 @@
+{
+  "name": "Publisher alerts",
+  "slack_configs": [
+    {
+      "send_resolved": true,
+      "title": "[{{ .Status | toUpper }}{{ if eq .Status \"firing\" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})",
+      "text": "{{ range .Alerts -}}\n{{ .Annotations.description }}\n{{ template \"signoz.relatedLinks.slack\" . }}\n{{ end }}"
+    }
+  ]
+}

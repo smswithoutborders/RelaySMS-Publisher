@@ -1,0 +1,450 @@
+{
+  "schemaVersion": "v6",
+  "image": "",
+  "name": "relaysms-publisher",
+  "tags": [],
+  "spec": {
+    "display": {
+      "name": "RelaySMS Publisher"
+    },
+    "variables": [],
+    "panels": {
+      "outcomes": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Publications by outcome"
+          },
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "axes": {
+                "softMin": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                      "expression": "name = 'run/tasks.publication_task.publish_message' AND publication.status EXISTS"
+                    },
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "publication.status"
+                      }
+                    ],
+                    "legend": "{{publication.status}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "failures": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Failures by reason"
+          },
+          "plugin": {
+            "kind": "signoz/TablePanel",
+            "spec": {}
+          },
+          "queries": [
+            {
+              "kind": "scalar",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                      "expression": "name = 'run/tasks.publication_task.publish_message' AND publication.status = 'failed'"
+                    },
+                    "aggregations": [
+                      {
+                        "expression": "count()",
+                        "alias": "Failures"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "publication.failure_reason"
+                      },
+                      {
+                        "name": "publication.platform"
+                      }
+                    ],
+                    "legend": "{{publication.failure_reason}} {{publication.platform}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "publish-time": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Publishing time by platform (p95)"
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "formatting": {
+                "unit": "ns"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                      "expression": "name = 'run/tasks.publication_task.publish_message' AND publication.status = 'published'"
+                    },
+                    "aggregations": [
+                      {
+                        "expression": "p95(duration_nano)"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "publication.platform"
+                      }
+                    ],
+                    "legend": "{{publication.platform}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "request-time": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Request time (p95)"
+          },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "formatting": {
+                "unit": "ns"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                      "expression": "service.name LIKE 'relaysms-publisher-%' AND kind_string = 'Server'"
+                    },
+                    "aggregations": [
+                      {
+                        "expression": "p95(duration_nano)"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "name"
+                      }
+                    ],
+                    "legend": "{{name}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "requests": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Requests"
+          },
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "axes": {
+                "softMin": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                      "expression": "service.name LIKE 'relaysms-publisher-%' AND kind_string = 'Server'"
+                    },
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "service.name"
+                      }
+                    ],
+                    "legend": "{{service.name}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "request-errors": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Failed requests"
+          },
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "axes": {
+                "softMin": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "traces",
+                    "filter": {
+                      "expression": "service.name LIKE 'relaysms-publisher-%' AND kind_string = 'Server' AND has_error = true"
+                    },
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "name"
+                      }
+                    ],
+                    "legend": "{{name}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "logs": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Errors and warnings logged"
+          },
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "axes": {
+                "softMin": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "logs",
+                    "filter": {
+                      "expression": "service.name LIKE 'relaysms-publisher-%' AND severity_number >= 13"
+                    },
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "severity_text"
+                      },
+                      {
+                        "name": "service.name"
+                      }
+                    ],
+                    "legend": "{{severity_text}} {{service.name}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "refused": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Refused requests"
+          },
+          "plugin": {
+            "kind": "signoz/BarChartPanel",
+            "spec": {
+              "axes": {
+                "softMin": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/BuilderQuery",
+                  "spec": {
+                    "name": "A",
+                    "signal": "logs",
+                    "filter": {
+                      "expression": "service.name LIKE 'relaysms-publisher-%' AND severity_number = 13 AND body REGEXP 'Request rejected|refused:|Invalid username or password|Missing scope|Invalid tag|used or missing|consumed by another worker|payload decryption failed'"
+                    },
+                    "aggregations": [
+                      {
+                        "expression": "count()"
+                      }
+                    ],
+                    "groupBy": [
+                      {
+                        "name": "service.name"
+                      }
+                    ],
+                    "legend": "{{service.name}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/outcomes"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/failures"
+              }
+            },
+            {
+              "x": 0,
+              "y": 6,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/publish-time"
+              }
+            },
+            {
+              "x": 6,
+              "y": 6,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/request-time"
+              }
+            },
+            {
+              "x": 0,
+              "y": 12,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/requests"
+              }
+            },
+            {
+              "x": 6,
+              "y": 12,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/request-errors"
+              }
+            },
+            {
+              "x": 0,
+              "y": 18,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/logs"
+              }
+            },
+            {
+              "x": 6,
+              "y": 18,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/refused"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

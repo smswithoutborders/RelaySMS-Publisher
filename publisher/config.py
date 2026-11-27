@@ -496,6 +496,25 @@ class ApiDocsConfig(Section):
         return cls(enabled=read.get_bool("API_DOCS_ENABLED", False))
 
 
+@dataclass(frozen=True)
+class TraceLinksConfig(Section):
+    trace_url_template: str | None
+    logs_url_template: str | None
+
+    @classmethod
+    def load(cls, read: _Reader) -> Self:
+        def template(name: str) -> str | None:
+            value = read.get_url(name)
+            if value and "{trace_id}" not in value:
+                read.fail(name, "must contain {trace_id}")
+            return value
+
+        return cls(
+            trace_url_template=template("TRACE_URL_TEMPLATE"),
+            logs_url_template=template("TRACE_LOGS_URL_TEMPLATE"),
+        )
+
+
 def check(env: Mapping[str, str] | None = None) -> list[str]:
     """Return every configuration error across all sections."""
     errors = []

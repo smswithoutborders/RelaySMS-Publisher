@@ -17,6 +17,7 @@ from publisher.api.rest.v1.auth import AuthContext, authorize, require_scopes
 from publisher.api.rest.v1.errors import PAGE_QUERY_ERRORS, error_responses
 from publisher.api.rest.v1.params import (
     FilterValue,
+    TraceIdValue,
     check_time_range,
     filter_list_query,
     page_link,
@@ -28,6 +29,7 @@ from publisher.api.rest.v1.schemas import (
     StatsGroupBy,
     StatsInterval,
 )
+from publisher.config import TraceLinksConfig
 from publisher.db import get_db, pagination
 from publisher.db.types import utc_now
 from publisher.models import publication_stats
@@ -36,6 +38,12 @@ from publisher.models.credential import Scope
 router = APIRouter(prefix="/stats", tags=["Stats"])
 
 STATS_SUMMARY_DEFAULT_WINDOW = datetime.timedelta(days=30)
+
+trace_links = TraceLinksConfig.get()
+
+
+def _trace_link(template: str | None, trace_id: str) -> str | None:
+    return template.replace("{trace_id}", trace_id) if template else None
 
 
 def stats_filters(
@@ -54,6 +62,9 @@ def stats_filters(
     exclude_country_code: tuple[FilterValue, ...] = filter_list_query(
         "Leave out these ISO country codes. Rows with no country are kept"
     ),
+    trace_id: tuple[TraceIdValue, ...] = filter_list_query(
+        "Filter by any of these trace IDs. Needs stats:publications:reasons"
+    ),
     since: datetime.datetime | None = Query(
         None,
         description="Created at or after (ISO-8601, UTC if no offset)",
@@ -70,6 +81,7 @@ def stats_filters(
         protocol=protocol,
         country_code=tuple(code.upper() for code in country_code),
         exclude_country_code=tuple(code.upper() for code in exclude_country_code),
+        trace_id=trace_id,
         since=since,
         until=until,
     )
@@ -79,7 +91,10 @@ def stats_filters(
     "/publications",
     response_model=PublicationStatsPage,
     summary="List publications",
-    responses=error_responses(PAGE_QUERY_ERRORS),
+    responses=error_responses(
+        PAGE_QUERY_ERRORS,
+        {403: "Also when filtering by trace_id without stats:publications:reasons."},
+    ),
 )
 def list_publication_stats(
     request: Request,
@@ -93,8 +108,10 @@ def list_publication_stats(
 ) -> PublicationStatsPage:
     """Newest first. Scope: stats:publications:read.
 
-    `failure_reason` is null without stats:publications:reasons.
+    `failure_reason` and the trace fields are null without stats:publications:reasons.
     """
+    if filters.trace_id:
+        require_scopes(context, Scope.STATS_PUBLICATIONS_REASONS)
     decoded_cursor = pagination.decode_cursor(cursor) if cursor else None
 
     page = publication_stats.list_stats(
@@ -107,9 +124,15 @@ def list_publication_stats(
             "prev": page_link(request, page.prev_cursor),
         }
     )
-    if Scope.STATS_PUBLICATIONS_REASONS not in context.credential.scopes:
-        for item in result.data:
-            item.failure_reason = None
+    can_see_reasons = Scope.STATS_PUBLICATIONS_REASONS in context.credential.scopes
+    for item in result.data:
+        if not can_see_reasons:
+            item.failure_reason = item.trace_id = None
+        elif item.trace_id:
+            item.trace_url = _trace_link(trace_links.trace_url_template, item.trace_id)
+            item.trace_logs_url = _trace_link(
+                trace_links.logs_url_template, item.trace_id
+            )
     return result
 
 
@@ -120,8 +143,8 @@ def list_publication_stats(
     responses=error_responses(
         {
             400: "'since' isn't before 'until'.",
-            403: "Also when grouping by failure_reason without "
-            "stats:publications:reasons.",
+            403: "Also when grouping by failure_reason or filtering by trace_id "
+            "without stats:publications:reasons.",
         }
     ),
 )
@@ -143,7 +166,7 @@ def summarize_publication_stats(
     period, then count, highest first. Periods with no rows are left out.
     """
     columns = list(dict.fromkeys(item.value for item in group_by))
-    if "failure_reason" in columns:
+    if "failure_reason" in columns or filters.trace_id:
         require_scopes(context, Scope.STATS_PUBLICATIONS_REASONS)
     unit = interval.value if interval else None
     until = filters.until or utc_now()

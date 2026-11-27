@@ -135,6 +135,7 @@ def _create_engine() -> Engine:
             "sqlite:///:memory:",
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
+            hide_parameters=True,
         )
 
     sql_echo = LoggingConfig.get().log_level == "DEBUG"
@@ -156,7 +157,10 @@ def _create_engine() -> Engine:
 
     if database.dialect != "sqlite":
         engine = create_engine(
-            build_url(database), pool_pre_ping=True, pool_recycle=3600
+            build_url(database),
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            hide_parameters=True,
         )
     else:
         _ensure_sqlite_parent_dir(database.sqlite_path)
@@ -177,6 +181,7 @@ def _create_engine() -> Engine:
                 poolclass=QueuePool,
                 pool_size=5,
                 pool_pre_ping=True,
+                hide_parameters=True,
             )
         else:
             engine = create_engine(
@@ -186,6 +191,7 @@ def _create_engine() -> Engine:
                 poolclass=QueuePool,
                 pool_size=5,
                 pool_pre_ping=True,
+                hide_parameters=True,
             )
 
         @event.listens_for(engine, "connect")

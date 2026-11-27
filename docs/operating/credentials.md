@@ -18,8 +18,8 @@ Usernames are 3 to 32 lowercase letters, digits, `.`, `_` or `-`, starting with 
 
 | Scope | Allows |
 | --- | --- |
-| `stats:publications:read` | Read publication stats, without failure reasons |
-| `stats:publications:reasons` | See failure reasons in publication stats |
+| `stats:publications:read` | Read publication stats, without failure reasons or trace IDs |
+| `stats:publications:reasons` | See failure reasons and trace IDs in publication stats |
 | `gc:read` | List gateway clients |
 | `gc:write` | Add, change and remove gateway clients |
 | `platforms:read` | List platform adapters |

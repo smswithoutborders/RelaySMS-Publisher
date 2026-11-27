@@ -1,0 +1,408 @@
+[
+  {
+    "alert": "Publisher errors",
+    "alertType": "LOGS_BASED_ALERT",
+    "ruleType": "threshold_rule",
+    "condition": {
+      "compositeQuery": {
+        "queries": [
+          {
+            "type": "builder_query",
+            "spec": {
+              "name": "A",
+              "stepInterval": 0,
+              "signal": "logs",
+              "source": "",
+              "aggregations": [
+                {
+                  "expression": "count()"
+                }
+              ],
+              "disabled": false,
+              "filter": {
+                "expression": "service.name LIKE 'relaysms-publisher-%' AND severity_number >= 17"
+              },
+              "groupBy": [
+                {
+                  "name": "service.name"
+                }
+              ],
+              "legend": ""
+            }
+          }
+        ],
+        "panelType": "graph",
+        "queryType": "builder"
+      },
+      "alertOnAbsent": false,
+      "absentFor": 0,
+      "seasonality": "",
+      "selectedQueryName": "A",
+      "thresholds": {
+        "kind": "basic",
+        "spec": [
+          {
+            "name": "critical",
+            "target": 0,
+            "targetUnit": "",
+            "recoveryTarget": null,
+            "matchType": "in_total",
+            "op": "above",
+            "channels": []
+          }
+        ]
+      }
+    },
+    "annotations": {
+      "summary": "Errors logged by $service.name in 5 minutes: {{$value}}. Read the related logs.",
+      "description": "Errors logged by $service.name in 5 minutes: {{$value}}. Read the related logs."
+    },
+    "disabled": false,
+    "evaluation": {
+      "kind": "rolling",
+      "spec": {
+        "evalWindow": "5m0s",
+        "frequency": "1m"
+      }
+    },
+    "schemaVersion": "v2alpha1",
+    "notificationSettings": {
+      "groupBy": [
+        "service.name"
+      ],
+      "usePolicy": false,
+      "newGroupEvalDelay": "0s",
+      "renotify": {
+        "enabled": false,
+        "interval": "30m",
+        "alertStates": []
+      }
+    }
+  },
+  {
+    "alert": "Publish failure spike",
+    "alertType": "TRACES_BASED_ALERT",
+    "ruleType": "threshold_rule",
+    "condition": {
+      "compositeQuery": {
+        "queries": [
+          {
+            "type": "builder_query",
+            "spec": {
+              "name": "A",
+              "stepInterval": 0,
+              "signal": "traces",
+              "source": "",
+              "aggregations": [
+                {
+                  "expression": "count()"
+                }
+              ],
+              "disabled": false,
+              "filter": {
+                "expression": "name = 'run/tasks.publication_task.publish_message' AND publication.status = 'failed'"
+              },
+              "groupBy": [
+                {
+                  "name": "publication.failure_reason"
+                }
+              ],
+              "legend": ""
+            }
+          }
+        ],
+        "panelType": "graph",
+        "queryType": "builder"
+      },
+      "alertOnAbsent": false,
+      "absentFor": 0,
+      "seasonality": "",
+      "selectedQueryName": "A",
+      "thresholds": {
+        "kind": "basic",
+        "spec": [
+          {
+            "name": "warning",
+            "target": 10,
+            "targetUnit": "",
+            "recoveryTarget": null,
+            "matchType": "in_total",
+            "op": "above",
+            "channels": []
+          }
+        ]
+      }
+    },
+    "annotations": {
+      "summary": "Publications failed with $publication.failure_reason in 15 minutes: {{$value}}. Open the related traces to see which platform.",
+      "description": "Publications failed with $publication.failure_reason in 15 minutes: {{$value}}. Open the related traces to see which platform."
+    },
+    "disabled": false,
+    "evaluation": {
+      "kind": "rolling",
+      "spec": {
+        "evalWindow": "15m0s",
+        "frequency": "1m"
+      }
+    },
+    "schemaVersion": "v2alpha1",
+    "notificationSettings": {
+      "groupBy": [
+        "publication.failure_reason"
+      ],
+      "usePolicy": false,
+      "newGroupEvalDelay": "0s",
+      "renotify": {
+        "enabled": false,
+        "interval": "30m",
+        "alertStates": []
+      }
+    }
+  },
+  {
+    "alert": "Refused requests",
+    "alertType": "LOGS_BASED_ALERT",
+    "ruleType": "threshold_rule",
+    "condition": {
+      "compositeQuery": {
+        "queries": [
+          {
+            "type": "builder_query",
+            "spec": {
+              "name": "A",
+              "stepInterval": 0,
+              "signal": "logs",
+              "source": "",
+              "aggregations": [
+                {
+                  "expression": "count()"
+                }
+              ],
+              "disabled": false,
+              "filter": {
+                "expression": "service.name LIKE 'relaysms-publisher-%' AND severity_number = 13 AND body REGEXP 'Request rejected|refused:|Invalid username or password|Missing scope|Invalid tag|used or missing|consumed by another worker|payload decryption failed'"
+              },
+              "groupBy": [
+                {
+                  "name": "service.name"
+                }
+              ],
+              "legend": ""
+            }
+          }
+        ],
+        "panelType": "graph",
+        "queryType": "builder"
+      },
+      "alertOnAbsent": false,
+      "absentFor": 0,
+      "seasonality": "",
+      "selectedQueryName": "A",
+      "thresholds": {
+        "kind": "basic",
+        "spec": [
+          {
+            "name": "warning",
+            "target": 20,
+            "targetUnit": "",
+            "recoveryTarget": null,
+            "matchType": "in_total",
+            "op": "above",
+            "channels": []
+          }
+        ]
+      }
+    },
+    "annotations": {
+      "summary": "Requests refused by $service.name in 15 minutes: {{$value}}. Read the related logs for replayed requests or guessed secrets.",
+      "description": "Requests refused by $service.name in 15 minutes: {{$value}}. Read the related logs for replayed requests or guessed secrets."
+    },
+    "disabled": false,
+    "evaluation": {
+      "kind": "rolling",
+      "spec": {
+        "evalWindow": "15m0s",
+        "frequency": "1m"
+      }
+    },
+    "schemaVersion": "v2alpha1",
+    "notificationSettings": {
+      "groupBy": [
+        "service.name"
+      ],
+      "usePolicy": false,
+      "newGroupEvalDelay": "0s",
+      "renotify": {
+        "enabled": false,
+        "interval": "30m",
+        "alertStates": []
+      }
+    }
+  },
+  {
+    "alert": "Slow requests",
+    "alertType": "TRACES_BASED_ALERT",
+    "ruleType": "threshold_rule",
+    "condition": {
+      "compositeQuery": {
+        "queries": [
+          {
+            "type": "builder_query",
+            "spec": {
+              "name": "A",
+              "stepInterval": 0,
+              "signal": "traces",
+              "source": "",
+              "aggregations": [
+                {
+                  "expression": "p95(duration_nano)"
+                }
+              ],
+              "disabled": false,
+              "filter": {
+                "expression": "service.name LIKE 'relaysms-publisher-%' AND kind_string = 'Server'"
+              },
+              "groupBy": [
+                {
+                  "name": "service.name"
+                },
+                {
+                  "name": "name"
+                }
+              ],
+              "legend": ""
+            }
+          }
+        ],
+        "panelType": "graph",
+        "queryType": "builder",
+        "unit": "ns"
+      },
+      "alertOnAbsent": false,
+      "absentFor": 0,
+      "seasonality": "",
+      "selectedQueryName": "A",
+      "thresholds": {
+        "kind": "basic",
+        "spec": [
+          {
+            "name": "warning",
+            "target": 5,
+            "targetUnit": "s",
+            "recoveryTarget": null,
+            "matchType": "at_least_once",
+            "op": "above",
+            "channels": []
+          }
+        ]
+      }
+    },
+    "annotations": {
+      "summary": "$name on $service.name took {{$value}} (95th percentile). Open a related trace to see which step is slow.",
+      "description": "$name on $service.name took {{$value}} (95th percentile). Open a related trace to see which step is slow."
+    },
+    "disabled": false,
+    "evaluation": {
+      "kind": "rolling",
+      "spec": {
+        "evalWindow": "15m0s",
+        "frequency": "1m"
+      }
+    },
+    "schemaVersion": "v2alpha1",
+    "notificationSettings": {
+      "groupBy": [
+        "service.name",
+        "name"
+      ],
+      "usePolicy": false,
+      "newGroupEvalDelay": "0s",
+      "renotify": {
+        "enabled": false,
+        "interval": "30m",
+        "alertStates": []
+      }
+    }
+  },
+  {
+    "alert": "Slow publishing",
+    "alertType": "TRACES_BASED_ALERT",
+    "ruleType": "threshold_rule",
+    "condition": {
+      "compositeQuery": {
+        "queries": [
+          {
+            "type": "builder_query",
+            "spec": {
+              "name": "A",
+              "stepInterval": 0,
+              "signal": "traces",
+              "source": "",
+              "aggregations": [
+                {
+                  "expression": "p95(duration_nano)"
+                }
+              ],
+              "disabled": false,
+              "filter": {
+                "expression": "name = 'run/tasks.publication_task.publish_message' AND publication.status = 'published'"
+              },
+              "groupBy": [
+                {
+                  "name": "publication.platform"
+                }
+              ],
+              "legend": ""
+            }
+          }
+        ],
+        "panelType": "graph",
+        "queryType": "builder",
+        "unit": "ns"
+      },
+      "alertOnAbsent": false,
+      "absentFor": 0,
+      "seasonality": "",
+      "selectedQueryName": "A",
+      "thresholds": {
+        "kind": "basic",
+        "spec": [
+          {
+            "name": "warning",
+            "target": 30,
+            "targetUnit": "s",
+            "recoveryTarget": null,
+            "matchType": "at_least_once",
+            "op": "above",
+            "channels": []
+          }
+        ]
+      }
+    },
+    "annotations": {
+      "summary": "Publishing to $publication.platform took {{$value}} (95th percentile). The platform or its adapter is slow.",
+      "description": "Publishing to $publication.platform took {{$value}} (95th percentile). The platform or its adapter is slow."
+    },
+    "disabled": false,
+    "evaluation": {
+      "kind": "rolling",
+      "spec": {
+        "evalWindow": "15m0s",
+        "frequency": "1m"
+      }
+    },
+    "schemaVersion": "v2alpha1",
+    "notificationSettings": {
+      "groupBy": [
+        "publication.platform"
+      ],
+      "usePolicy": false,
+      "newGroupEvalDelay": "0s",
+      "renotify": {
+        "enabled": false,
+        "interval": "30m",
+        "alertStates": []
+      }
+    }
+  }
+]

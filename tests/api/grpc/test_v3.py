@@ -259,6 +259,23 @@ def test_missing_auth_headers_are_rejected(stub):
     assert "missing required headers" in error.details()
 
 
+@pytest.mark.parametrize(
+    ("header", "value"),
+    [("x-public-key-bin", b"short"), ("x-nonce-bin", b"\x00" * 24)],
+)
+def test_a_wrong_sized_key_or_nonce_is_rejected(stub, header, value):
+    metadata = replace_header(
+        signed_metadata("GetOAuth2AuthorizationUrl"), header, value
+    )
+
+    error = rpc_error(
+        stub, "GetOAuth2AuthorizationUrl", AUTH_URL_REQUEST, metadata=metadata
+    )
+
+    assert error.code() == grpc.StatusCode.UNAUTHENTICATED
+    assert "wrong length" in error.details()
+
+
 def test_replayed_request_is_rejected(stub, adapter):
     adapter.results["create_authorization_url"] = {"url": "https://auth.example.org"}
     metadata = signed_metadata("GetOAuth2AuthorizationUrl")
@@ -584,6 +601,23 @@ def test_revoke_oauth2_token_with_out_of_range_key_id_is_rejected(
     assert "Key ID out of range" in caplog.text
 
 
+def test_a_token_without_a_hash_is_logged_as_an_error(stub, adapter, caplog):
+    exchanged, keypairs = exchange_oauth2(stub, adapter)
+    payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
+    with get_session() as s:
+        token = s.scalar(select(Token).where(Token.token_id == exchanged.token_id))
+        s.delete(token.token_hash)
+    request = publisher_pb2.RevokeOAuth2TokenRequest(
+        token_id=exchanged.token_id, key_id=1
+    )
+
+    error = rpc_error(stub, "RevokeOAuth2Token", request, payload=payload)
+
+    assert error.code() == grpc.StatusCode.UNAUTHENTICATED
+    [record] = [r for r in caplog.records if r.name == "publisher.keys"]
+    assert record.levelno == logging.ERROR
+
+
 def _failed_redeem_work(monkeypatch, token_id, key_id, payload):
     """Return a failed redeem_token's SQL statements and its token decrypt count."""
     statements, decrypts = [], []
@@ -778,6 +812,20 @@ def test_revoke_pnba_token_deletes_it_and_revokes_upstream(stub, adapter):
     assert sent.account.token == {"session_string": "session-data"}
 
 
+def test_revoke_pnba_token_with_wrong_token_is_rejected(stub, adapter, caplog):
+    exchanged, keypairs = exchange_pnba(stub, adapter)
+    payload = encrypt_token(exchanged, keypairs, b"not the real token")
+    request = publisher_pb2.RevokePNBATokenRequest(
+        token_id=exchanged.token_id, key_id=1
+    )
+
+    error = rpc_error(stub, "RevokePNBAToken", request, payload=payload)
+
+    assert error.code() == grpc.StatusCode.UNAUTHENTICATED
+    assert "Token revocation refused: Token" in caplog.text
+    assert stored_token(exchanged.token_id) is not None
+
+
 def test_sync_keys_replaces_the_key_pool(stub, adapter):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
     payload = encrypt_token(exchanged, keypairs, decrypt_token(exchanged, keypairs))
@@ -821,7 +869,7 @@ def test_sync_keys_accepts_zero_ids(stub, adapter):
     assert response.success
 
 
-def test_sync_keys_with_wrong_token_is_rejected(stub, adapter):
+def test_sync_keys_with_wrong_token_is_rejected(stub, adapter, caplog):
     exchanged, keypairs = exchange_oauth2(stub, adapter)
     payload = encrypt_token(exchanged, keypairs, b"not the real token")
     _, new_public_keys = client_keys()
@@ -835,3 +883,4 @@ def test_sync_keys_with_wrong_token_is_rejected(stub, adapter):
 
     assert error.code() == grpc.StatusCode.UNAUTHENTICATED
     assert "sync failed" in error.details()
+    assert "Key sync refused: Token" in caplog.text
