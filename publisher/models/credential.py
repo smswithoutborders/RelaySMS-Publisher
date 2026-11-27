@@ -34,8 +34,12 @@ class Scope(StrEnum):
 ALL_SCOPES = frozenset(Scope)
 
 SCOPE_DESCRIPTIONS = {
-    Scope.STATS_PUBLICATIONS_READ: "Read publication stats, without failure reasons",
-    Scope.STATS_PUBLICATIONS_REASONS: "See failure reasons in publication stats",
+    Scope.STATS_PUBLICATIONS_READ: (
+        "Read publication stats, without failure reasons or trace IDs"
+    ),
+    Scope.STATS_PUBLICATIONS_REASONS: (
+        "See failure reasons and trace IDs in publication stats"
+    ),
     Scope.GC_READ: "List gateway clients",
     Scope.GC_WRITE: "Add, change and remove gateway clients",
     Scope.PLATFORMS_READ: "List platform adapters",

@@ -25,6 +25,7 @@ class PublicationStats(Base):
     status: Mapped[str] = mapped_column(String(20))
     country_code: Mapped[str | None] = mapped_column(String(10), default=None)
     failure_reason: Mapped[str | None] = mapped_column(String(255), default=None)
+    trace_id: Mapped[str | None] = mapped_column(String(32), default=None)
     created_at: Mapped[datetime.datetime] = mapped_column(UTCDateTime, default=utc_now)
 
     # (created_at, id) serves keyset pagination, with id breaking timestamp ties.
@@ -41,6 +42,7 @@ class PublicationStats(Base):
             "country_code",
             "created_at",
         ),
+        Index("ix_publication_stats_trace_id", "trace_id"),
     )
 
 
@@ -52,6 +54,7 @@ LIST_COLUMNS = (
     PublicationStats.country_code,
     PublicationStats.created_at,
     PublicationStats.failure_reason,
+    PublicationStats.trace_id,
 )
 
 GROUPABLE_COLUMNS = {
@@ -71,6 +74,7 @@ def record(
     platform_name: str | None = None,
     country_code: str | None = None,
     failure_reason: str | None = None,
+    trace_id: str | None = None,
     created_at: datetime.datetime | None = None,
 ) -> PublicationStats:
     """Record the outcome of a publish attempt."""
@@ -80,6 +84,7 @@ def record(
         platform_name=platform_name,
         country_code=country_code,
         failure_reason=failure_reason,
+        trace_id=trace_id,
         created_at=created_at,
     )
     session.add(stats)
@@ -94,13 +99,14 @@ class StatsFilters:
     protocol: tuple[str, ...] = ()
     country_code: tuple[str, ...] = ()
     exclude_country_code: tuple[str, ...] = ()
+    trace_id: tuple[str, ...] = ()
     since: datetime.datetime | None = None
     until: datetime.datetime | None = None
 
 
 def _filter_clauses(filters: StatsFilters) -> list:
     clauses = []
-    for name in ("status", "platform_name", "protocol", "country_code"):
+    for name in ("status", "platform_name", "protocol", "country_code", "trace_id"):
         values = getattr(filters, name)
         if values:
             clauses.append(getattr(PublicationStats, name).in_(values))

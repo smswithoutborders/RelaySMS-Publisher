@@ -141,4 +141,6 @@ See [Observability](../operating/observability.md).
 | `OTEL_PYTHON_LOG_CORRELATION` | `true` | Adds trace and span IDs to log records |
 | `OTEL_PYTHON_FASTAPI_EXCLUDED_URLS` | `^[a-z]+://[^/]+/health$` | Comma-separated regular expressions, each searched for in a REST request's full URL, such as `https://<DOMAIN>/health`. Matching requests are left out of traces. |
 | `OTEL_PYTHON_GRPC_EXCLUDED_SERVICES` | `grpc.health.v1.Health` | Comma-separated gRPC services left out of traces |
+| `TRACE_URL_TEMPLATE` | None | Link to a trace, returned in publication stats as `trace_url`. Must contain `{trace_id}` ([SigNoz example](../operating/observability.md#linking-stats-to-traces)). |
+| `TRACE_LOGS_URL_TEMPLATE` | None | The same for a trace's logs, returned as `trace_logs_url` ([SigNoz example](../operating/observability.md#linking-stats-to-traces)) |
 | `UPTIME_KUMA_WORKER_PUSH_URL`, `UPTIME_KUMA_SMTP_PUSH_URL` | None | Uptime Kuma push URLs for the worker and email listener heartbeats. Blank turns them off. |

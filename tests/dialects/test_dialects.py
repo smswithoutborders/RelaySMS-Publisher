@@ -370,17 +370,24 @@ def _consume_slot(session, token_id):
     return slot.server_key.public_key, slot.client_key.public_key
 
 
+def test_engines_leave_query_parameters_out_of_errors():
+    assert db.get_engine().hide_parameters
+
+
 def test_a_key_slot_can_be_used_once():
     token_id, public_keys = _token_with_key_pools()
 
     with db.get_session() as session:
         assert _consume_slot(session, token_id) == public_keys
 
-    with pytest.raises(keys.KeyUnavailableError), db.get_session() as session:
+    with (
+        pytest.raises(keys.KeyUnavailableError, match="used or missing"),
+        db.get_session() as session,
+    ):
         _consume_slot(session, token_id)
 
 
-def test_one_of_two_workers_using_a_key_slot_at_once_gets_it(caplog):
+def test_one_of_two_workers_using_a_key_slot_at_once_gets_it():
     token_id, public_keys = _token_with_key_pools()
 
     def use(session):
@@ -389,6 +396,7 @@ def test_one_of_two_workers_using_a_key_slot_at_once_gets_it(caplog):
     first, second = _in_overlapping_transactions(use, use)
 
     assert first.result() == public_keys
-    with pytest.raises(keys.KeyUnavailableError):
+    with pytest.raises(
+        keys.KeyUnavailableError, match=f"key {SLOT} of token {token_id} was consumed"
+    ):
         second.result()
-    assert "Ephemeral key consumed by another worker" in caplog.text

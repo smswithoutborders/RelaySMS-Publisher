@@ -39,15 +39,15 @@ The container applies migrations before the services start. Wait, or follow `doc
 | Log line | Cause |
 | --- | --- |
 | `Published via '<PLATFORM>'.` | It worked |
-| `Failed to process payload: ...` | The payload didn't decrypt or validate, or its keys are unknown or used up |
+| `Failed to process payload: ...` | The payload didn't decrypt or validate, its account isn't linked, or its key is already used or missing. The rest of the line says which. |
 | `Rejected payload: ...` | Offline publishing refused it ([Offline publishing](../configuration/offline-publishing.md)) |
-| `Failed to publish message: Adapter error: ...` | The platform refused it. The rest of the line is the adapter's reason. Fix it with the platform's [provider guide](../platforms/manage.md#provider-guides), then the user sends the message again. |
+| `Failed to publish message: Adapter error: ...` | The platform refused it, or its adapter failed. The rest of the line is the reason. Fix it with the platform's [provider guide](../platforms/manage.md#provider-guides), then the user sends the message again. |
 | `Sent via '<PLATFORM>', but couldn't record the result.` | It was published, but a database error kept it out of the stats. The traceback follows. |
 | `Session <ID> can't be assembled from <N> segment(s): ...` | A multi-part payload's segments don't fit together |
 | `An unexpected error occurred during task processing.` | A bug. The traceback follows. [Report it](https://github.com/smswithoutborders/RelaySMS-Publisher/issues). |
 | No line at all | The worker isn't running (`sudo ./manage.sh status`), or a multi-part payload is still waiting for its other segments, for up to `PAYLOAD_SESSION_MAX_AGE_HOURS`, then it's discarded and recorded as `failed` with reason `segments_missing` |
 
-`GET /v1/stats/publications` lists each failure and rejection with a reason code, for credentials with `stats:publications:reasons`.
+`GET /v1/stats/publications` lists each failure and rejection with a reason code, for credentials with `stats:publications:reasons`. To find the stat behind a log entry in SigNoz, pass the entry's trace ID as `?trace_id=<ID>` ([Linking stats to traces](observability.md#linking-stats-to-traces)).
 
 ### Linking an account fails
 

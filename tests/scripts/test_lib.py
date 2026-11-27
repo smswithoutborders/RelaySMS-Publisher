@@ -41,6 +41,45 @@ class TestReadEnvVar:
         assert bash("read_env_var KEY missing.env").stdout == "\n"
 
 
+class TestSetEnvIfBlank:
+    @pytest.mark.parametrize("line", ["KEY=", "KEY=''", 'KEY=""'])
+    def test_sets_a_blank_value(self, install, bash, line):
+        (install / ".env").write_text(f"A=1\n{line}\nB=2\n")
+
+        result = bash("set_env_if_blank KEY http://localhost:4317 .env")
+
+        assert result.returncode == 0
+        assert (install / ".env").read_text() == "A=1\nKEY=http://localhost:4317\nB=2\n"
+
+    @pytest.mark.parametrize("content", ["A=1\n", "A=1"])
+    def test_appends_a_missing_key_on_its_own_line(self, install, bash, content):
+        (install / ".env").write_text(content)
+
+        assert bash("set_env_if_blank KEY value .env").returncode == 0
+        assert (install / ".env").read_text() == "A=1\nKEY=value\n"
+
+    def test_replaces_a_blank_export_line(self, install, bash):
+        (install / ".env").write_text("export KEY = \n")
+
+        assert bash("set_env_if_blank KEY value .env").returncode == 0
+        assert (install / ".env").read_text() == "KEY=value\n"
+
+    def test_writes_special_characters_unchanged(self, install, bash):
+        value = r"http://h/?a=1&b=2|c#d\e"
+        (install / ".env").write_text("KEY=\n")
+
+        assert bash('set_env_if_blank KEY "$VALUE" .env', VALUE=value).returncode == 0
+        assert (install / ".env").read_text() == f"KEY={value}\n"
+
+    def test_keeps_a_value_that_is_set(self, install, bash):
+        (install / ".env").write_text("KEY=http://collector:4317\n")
+
+        result = bash("set_env_if_blank KEY http://localhost:4317 .env || echo kept")
+
+        assert result.stdout == "kept\n"
+        assert (install / ".env").read_text() == "KEY=http://collector:4317\n"
+
+
 class TestPrompt:
     @pytest.mark.parametrize("name", ["reply", "question", "default"])
     def test_without_a_terminal_sets_the_default(self, bash, name):

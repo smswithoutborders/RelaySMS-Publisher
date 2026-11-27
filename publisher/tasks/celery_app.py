@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
+import logging
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from celery import Celery
 from celery.schedules import crontab
@@ -23,21 +25,34 @@ _WORKER_TASK_LOG_FORMAT = (
 )
 
 
+def _drop_task_arguments(record: logging.LogRecord) -> bool:
+    # Celery attaches the task arguments, such as the payload and sender hash, to
+    # these records as a `data` extra.
+    record.__dict__.pop("data", None)
+    return True
+
+
+for _name in ("celery.worker.strategy", "celery.app.trace"):
+    logging.getLogger(_name).addFilter(_drop_task_arguments)
+
+
 def _ensure_db_dir(path: str) -> None:
     Path(path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
 
 
-def _broker_urls(celery: CeleryConfig) -> tuple[str, str | None]:
+def _broker_settings(celery: CeleryConfig) -> dict[str, Any]:
     if celery.broker_type == "redis":
-        return celery.redis_url, celery.redis_url
+        return {"broker_url": celery.redis_url, "result_backend": celery.redis_url}
     if celery.broker_type == "rabbitmq":
-        return celery.rabbitmq_url, None
+        return {"broker_url": celery.rabbitmq_url}
     _ensure_db_dir(celery.broker_db_path)
     _ensure_db_dir(celery.result_db_path)
-    return (
-        f"sqla+sqlite:///{celery.broker_db_path}",
-        f"db+sqlite:///{celery.result_db_path}",
-    )
+    return {
+        "broker_url": f"sqlite:///{celery.broker_db_path}",
+        "broker_transport": "publisher.tasks.broker:Transport",
+        "broker_transport_options": {"hide_parameters": True},
+        "result_backend": f"db+sqlite:///{celery.result_db_path}",
+    }
 
 
 def _parse_cron(name: str, expression: str) -> crontab:
@@ -49,7 +64,6 @@ def _parse_cron(name: str, expression: str) -> crontab:
 
 def make_celery() -> Celery:
     celery = CeleryConfig.get()
-    broker_url, result_backend = _broker_urls(celery)
     _ensure_db_dir(celery.beat_schedule_path)
 
     cleanup_schedule = _parse_cron("CELERY_CLEANUP_CRON", celery.cleanup_cron)
@@ -95,8 +109,7 @@ def make_celery() -> Celery:
         ],
     )
     app.conf.update(
-        broker_url=broker_url,
-        result_backend=result_backend,
+        **_broker_settings(celery),
         task_serializer="json",
         result_serializer="json",
         accept_content=["json"],
