@@ -39,7 +39,7 @@ Usage: setup-observability.sh [OPTIONS]
   --kuma-site-name DOMAIN   Domain for the Uptime Kuma reverse proxy (optional; must differ from --site-name)
   --letsencrypt-email EMAIL Email for Let's Encrypt renewal notices (optional)
   --skip-nginx              Skip the nginx/TLS setup even if --site-name is given
-  --skip-tracing            Don't install requirements-observability.txt or turn on OTEL_EXPORTER_OTLP_ENDPOINT
+  --skip-tracing            Don't install requirements-observability.txt or fill in a blank OTEL_EXPORTER_OTLP_ENDPOINT
   --signoz-port PORT        Host port for the SigNoz UI (default: 8090)
   --kuma-port PORT          Host port for Uptime Kuma (default: 3001)
   --signoz-email EMAIL      SigNoz admin account email (default: admin@relaysms.local)
@@ -254,7 +254,13 @@ main() {
     }
   fi
 
-  if [ "$INGESTER_RUNNING" != "1" ]; then
+  if [ "$INGESTER_RUNNING" = "1" ]; then
+    OTLP_GRPC_PORT=$(docker port relaysms-publisher-signoz-ingester-1 4317/tcp 2>/dev/null | head -1 | cut -d: -f2 || true)
+    [ -n "$OTLP_GRPC_PORT" ] || {
+      warn "Couldn't read the OTLP gRPC port from relaysms-publisher-signoz-ingester-1, assuming 4317"
+      OTLP_GRPC_PORT=4317
+    }
+  else
     resolve_port OTLP_GRPC_PORT "the OTLP gRPC receiver" 0 || {
       log "Skipping observability setup."
       exit 0
@@ -367,10 +373,19 @@ main() {
 
   if [ "$SKIP_TRACING" != "1" ]; then
     log "Installing OTel packages"
+    packages_before=$(venv/bin/pip freeze)
     venv/bin/pip install --quiet -r requirements-observability.txt
-    sed -i "s|^OTEL_EXPORTER_OTLP_ENDPOINT=.*|OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:$OTLP_GRPC_PORT|" .env
-    log "Restarting services"
-    "$INSTALL_DIR/manage.sh" restart
+    restart=0
+    [ "$(venv/bin/pip freeze)" = "$packages_before" ] || restart=1
+    if set_env_if_blank OTEL_EXPORTER_OTLP_ENDPOINT "http://localhost:$OTLP_GRPC_PORT" .env; then
+      restart=1
+    else
+      log "OTEL_EXPORTER_OTLP_ENDPOINT is already set, leaving it as-is"
+    fi
+    if [ "$restart" = "1" ]; then
+      log "Restarting services"
+      "$INSTALL_DIR/manage.sh" restart
+    fi
   fi
 
   [ -z "$SIGNOZ_WEBHOOK_URL$SIGNOZ_ALERT_EMAIL" ] || provision_signoz

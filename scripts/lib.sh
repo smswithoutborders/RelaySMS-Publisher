@@ -163,6 +163,21 @@ read_instance_name() {
   [ -f "$INSTALL_DIR/.instance-name" ] && cat "$INSTALL_DIR/.instance-name" || true
 }
 
+# Sets $1 to $2 in env file $3 if it's blank or missing there, else returns 1.
+set_env_if_blank() {
+  local key="$1" value="$2" file="$3"
+  local line="^(export[[:space:]]+)?${key}[[:space:]]*="
+  [ -z "$(read_env_var "$key" "$file")" ] || return 1
+  if grep -qE "$line" "$file"; then
+    value="${value//\\/\\\\}"
+    value="${value//&/\\&}"
+    sed -i -E "s#${line}.*#${key}=${value//#/\\#}#" "$file"
+  else
+    [ -z "$(tail -c1 "$file" 2>/dev/null)" ] || echo >>"$file"
+    echo "${key}=${value}" >>"$file"
+  fi
+}
+
 # Prints the last value of $1 in env file $2, without quotes.
 read_env_var() {
   local key="$1" file="$2" val

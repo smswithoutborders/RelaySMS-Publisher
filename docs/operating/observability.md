@@ -24,14 +24,14 @@ sudo ./scripts/setup-observability.sh
 | None | `--signoz-smtp-host`, `--signoz-smtp-port`, `--signoz-smtp-username`, `--signoz-smtp-password`, `--signoz-smtp-from` | SMTP relay for SigNoz's email alerts |
 | None | `--signoz-webhook-url <URL>` | Creates the [dashboard](#dashboard), and [alerts](#alerts) sent to this Slack or Mattermost webhook |
 | None | `--signoz-alert-email <ADDRESS>` | The same, with alerts sent to this address through the SMTP relay |
-| None | `--skip-tracing` | Leaves tracing off |
+| None | `--skip-tracing` | Leaves the OTel packages and `OTEL_EXPORTER_OTLP_ENDPOINT` as they are |
 
 `scripts/setup-observability.sh --help` lists every flag. The script:
 
 - installs Docker if it's missing;
 - writes `observability/signoz/casting.yaml` from its template, binds the SigNoz UI and OTLP ports to `127.0.0.1`, starts SigNoz and creates the admin account;
 - starts Uptime Kuma on `127.0.0.1:3001`, or the port you choose;
-- installs `requirements-observability.txt` and sets `OTEL_EXPORTER_OTLP_ENDPOINT`, unless given `--skip-tracing`;
+- installs `requirements-observability.txt`, sets `OTEL_EXPORTER_OTLP_ENDPOINT` to SigNoz's OTLP gRPC address if it's blank, and restarts the services if either changed anything, unless given `--skip-tracing`;
 - with `--site-name` or `--kuma-site-name`, writes and enables the nginx sites and runs Certbot;
 - with `--signoz-webhook-url` or `--signoz-alert-email`, creates the dashboard, notification channels and alert rules that SigNoz lacks.
 
