@@ -13,6 +13,6 @@ The cleanup jobs run on the [`CELERY_CLEANUP_CRON` and `CELERY_TOKEN_CLEANUP_CRO
 | Credentials, adapters and gateway clients | You remove them |
 | Server identity keys | Kept |
 | Adapters' own files | Up to each adapter, in its state directory |
-| Logs | The system journal's retention, and SigNoz's when `OTEL_EXPORTER_OTLP_ENDPOINT` is set |
+| Logs and traces | The system journal's or Docker's retention, and SigNoz's for [exported](../operating/observability.md) logs and traces |
 
 See the [security model](security-model.md) for what each record holds.

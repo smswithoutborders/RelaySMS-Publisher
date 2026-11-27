@@ -60,7 +60,7 @@ Each adapter is a Python package installed from its own repository into its own 
 2. The REST API or the email listener checks its structure, replaces the sender's address with a keyed hash, and queues it.
 3. A multi-part payload waits until all its segments arrive.
 4. The worker finds the payload's keys, decrypts it, and calls the platform's adapter to publish it.
-5. The keys are used up once the payload decrypts and is ready to send, so a platform's refusal doesn't free them and a payload never publishes twice. A failure before that leaves them usable.
+5. For a linked account, the payload's key pair is used up once the payload is ready to send.
 6. The outcome is recorded in the publication stats.
 
 The [security model](security-model.md) covers the keys and encryption.
