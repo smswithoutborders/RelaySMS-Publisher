@@ -27,7 +27,7 @@ The app refills a linked account's pools with the gRPC `SyncKeys` call. A failed
 | Private keys | Encrypted with `DATA_ENCRYPTION_KEY` |
 | Sender phone numbers | Replaced with a keyed hash before anything is stored |
 | Message content | Ciphertext while queued, and while a multi-part payload waits for its segments. Decrypted only in memory, in the worker and the adapter process it hands it to |
-| Publication stats | Platform, protocol, status, country code, failure reason and time |
+| Publication stats | Platform, protocol, status, country code, failure reason, trace ID and time |
 
 ## Adapters
 

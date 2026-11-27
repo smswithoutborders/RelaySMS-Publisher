@@ -1051,7 +1051,7 @@
           "Stats"
         ],
         "summary": "List publications",
-        "description": "Newest first. Scope: stats:publications:read.\n\n`failure_reason` is null without stats:publications:reasons.",
+        "description": "Newest first. Scope: stats:publications:read.\n\n`failure_reason` and the trace fields are null without stats:publications:reasons.",
         "operationId": "list_publication_stats_v1_stats_publications_get",
         "security": [
           {
@@ -1190,6 +1190,23 @@
             "description": "Leave out these ISO country codes. Rows with no country are kept. Repeatable."
           },
           {
+            "name": "trace_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{32}$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these trace IDs. Needs stats:publications:reasons. Repeatable.",
+              "default": [],
+              "title": "Trace Id"
+            },
+            "description": "Filter by any of these trace IDs. Needs stats:publications:reasons. Repeatable."
+          },
+          {
             "name": "since",
             "in": "query",
             "required": false,
@@ -1260,7 +1277,7 @@
             }
           },
           "403": {
-            "description": "The credential lacks stats:publications:read.",
+            "description": "The credential lacks stats:publications:read. Also when filtering by trace_id without stats:publications:reasons.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1429,6 +1446,23 @@
             "description": "Leave out these ISO country codes. Rows with no country are kept. Repeatable."
           },
           {
+            "name": "trace_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{32}$"
+              },
+              "maxItems": 50,
+              "description": "Filter by any of these trace IDs. Needs stats:publications:reasons. Repeatable.",
+              "default": [],
+              "title": "Trace Id"
+            },
+            "description": "Filter by any of these trace IDs. Needs stats:publications:reasons. Repeatable."
+          },
+          {
             "name": "since",
             "in": "query",
             "required": false,
@@ -1499,7 +1533,7 @@
             }
           },
           "403": {
-            "description": "The credential lacks stats:publications:read. Also when grouping by failure_reason without stats:publications:reasons.",
+            "description": "The credential lacks stats:publications:read. Also when grouping by failure_reason or filtering by trace_id without stats:publications:reasons.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5155,6 +5189,42 @@
             ],
             "title": "Failure Reason",
             "description": "Why it failed or was rejected, as a short code such as payload_malformed or offline_tag_invalid."
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id",
+            "description": "OpenTelemetry trace ID, if the attempt's trace was sampled."
+          },
+          "trace_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Url",
+            "description": "Link to the trace, if the server has trace links set up."
+          },
+          "trace_logs_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Logs Url",
+            "description": "Link to the trace's logs, if the server has log links set up."
           },
           "created_at": {
             "type": "string",

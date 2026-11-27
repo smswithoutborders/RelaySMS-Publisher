@@ -3,6 +3,7 @@
 import logging
 
 from celery.signals import worker_shutdown
+from opentelemetry import trace as otel_trace
 
 from publisher import publications
 from publisher.db import dispose_engine, get_session
@@ -65,6 +66,13 @@ def _failure_reason(exc: Exception) -> str:
     return "unexpected_error"
 
 
+def _trace_id() -> str | None:
+    context = otel_trace.get_current_span().get_span_context()
+    if not context.trace_flags.sampled:
+        return None
+    return otel_trace.format_trace_id(context.trace_id)
+
+
 @worker_shutdown.connect
 def _on_worker_shutdown(**kwargs):
     dispose_engine()
@@ -122,6 +130,7 @@ def publish_message(
                     status="published",
                     platform_name=delivery.platform,
                     country_code=country_code,
+                    trace_id=_trace_id(),
                 )
         except Exception:
             logger.exception(
@@ -139,6 +148,7 @@ def publish_message(
             platform_name=platform_name,
             country_code=country_code,
             failure_reason=failure_reason,
+            trace_id=_trace_id(),
         )
 
 

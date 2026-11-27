@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from unittest.mock import MagicMock
 
 import pytest
+from opentelemetry import trace as otel_trace
 
 from publisher.keys import KeyNotFoundError, KeyUnavailableError, TokenVerificationError
 from publisher.publications import (
@@ -198,3 +199,34 @@ def test_tag_is_passed_to_prepare(monkeypatch):
     publication_task.publish_message("text", "sender", "https", "s3cret-tag")
 
     assert stub.prepare.call_args.kwargs["tag"] == "s3cret-tag"
+
+
+def _span(sampled):
+    flags = otel_trace.TraceFlags(otel_trace.TraceFlags.SAMPLED if sampled else 0)
+    context = otel_trace.SpanContext(0xAB, 0xCD, is_remote=True, trace_flags=flags)
+    return otel_trace.use_span(otel_trace.NonRecordingSpan(context))
+
+
+@pytest.mark.parametrize(
+    "error", [None, PayloadMalformedError("bad")], ids=["published", "failed"]
+)
+def test_records_the_sampled_trace_id(monkeypatch, error):
+    _stub_publications(monkeypatch, prepare_error=error)
+
+    with _span(sampled=True):
+        publication_task.publish_message("text", "sender", "https")
+
+    kwargs = publication_task.record_publication.call_args.kwargs
+    assert kwargs["trace_id"] == f"{0xAB:032x}"
+
+
+@pytest.mark.parametrize(
+    "span", [lambda: _span(sampled=False), nullcontext], ids=["unsampled", "no-span"]
+)
+def test_records_no_trace_id_without_a_sampled_trace(monkeypatch, span):
+    _stub_publications(monkeypatch)
+
+    with span():
+        publication_task.publish_message("text", "sender", "https")
+
+    assert publication_task.record_publication.call_args.kwargs["trace_id"] is None

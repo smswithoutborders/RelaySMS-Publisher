@@ -120,6 +120,23 @@ sudo ./manage.sh restart
 
 To turn it off, blank `OTEL_EXPORTER_OTLP_ENDPOINT` and restart.
 
+## Linking stats to traces
+
+Each publish attempt's stat keeps its trace ID, if the trace was sampled. `GET /v1/stats/publications` returns it as `trace_id` and filters by it with `?trace_id=<ID>`. Both need the `stats:publications:reasons` [scope](credentials.md#scopes).
+
+To return links with it, set either or both of these in `.env`, in single quotes, then restart the services:
+
+- `TRACE_URL_TEMPLATE`, returned as `trace_url`, such as `https://<OPS_DOMAIN>/trace/{trace_id}`, where `<OPS_DOMAIN>` serves SigNoz.
+- `TRACE_LOGS_URL_TEMPLATE`, returned as `trace_logs_url`. For SigNoz, this opens the logs explorer filtered on the trace ID:
+
+  ```text
+  https://<OPS_DOMAIN>/logs/logs-explorer?relativeTime=1month&compositeQuery=%257B%2522queryType%2522%253A%2522builder%2522%252C%2522builder%2522%253A%257B%2522queryData%2522%253A%255B%257B%2522dataSource%2522%253A%2522logs%2522%252C%2522queryName%2522%253A%2522A%2522%252C%2522expression%2522%253A%2522A%2522%252C%2522filter%2522%253A%257B%2522expression%2522%253A%2522trace_id%2520%253D%2520%2527{trace_id}%2527%2522%257D%257D%255D%257D%257D
+  ```
+
+  Logs older than `relativeTime` don't show. Set it to your log retention, such as `2w` or `30d`.
+
+SigNoz keeps traces and logs for 15 days by default. Links on older stats open an empty page.
+
 ## Changing the SigNoz configuration
 
 `observability/signoz/casting.yaml` is generated only once, so updating the Publisher doesn't change a running SigNoz install. To change it, edit `casting.yaml`, then apply it from the install directory:

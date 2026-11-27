@@ -129,6 +129,14 @@ def test_push_urls_must_be_http():
     )
 
 
+@pytest.mark.parametrize("name", ["TRACE_URL_TEMPLATE", "TRACE_LOGS_URL_TEMPLATE"])
+@pytest.mark.parametrize(
+    "template", ["ftp://signoz.example.org/{trace_id}", "https://signoz.example.org/"]
+)
+def test_trace_templates_must_be_http_with_a_placeholder(name, template):
+    assert name in errors(**{name: template})
+
+
 def test_adapter_paths_resolve_against_the_install_dir():
     platforms = load(
         PlatformsConfig,

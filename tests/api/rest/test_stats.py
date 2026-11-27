@@ -4,6 +4,7 @@ import datetime
 
 import pytest
 
+from publisher.api.rest.v1 import stats
 from publisher.api.rest.v1.schemas import StatsGroupBy, StatsInterval
 from publisher.db import get_session
 from publisher.db.pagination import encode_cursor
@@ -124,6 +125,102 @@ def test_stats_without_reasons_scope_hides_failure_reason(client, seeded):
     assert response.status_code == 200
     items = response.json()["data"]
     assert items and all(item["failure_reason"] is None for item in items)
+
+
+TRACE_ID = "ab" * 16
+REASONS = ("stats:publications:read", "stats:publications:reasons")
+
+
+@pytest.fixture
+def traced(set_config):
+    _seed(
+        [
+            dict(status="failed", failure_reason="adapter_upstream", trace_id=TRACE_ID),
+            dict(status="published", trace_id="cd" * 16),
+            dict(status="published"),
+        ]
+    )
+    set_config(
+        stats,
+        "trace_links",
+        trace_url_template="https://s.example/trace/{trace_id}",
+        logs_url_template="https://s.example/logs?q={trace_id}",
+    )
+
+
+def _traced_item(client, headers):
+    response = client.get(
+        "/v1/stats/publications", params={"status": "failed"}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    item = response.json()["data"][0]
+    return item["trace_id"], item["trace_url"], item["trace_logs_url"]
+
+
+def test_list_includes_trace_id_and_links_with_reasons_scope(client, traced):
+    assert _traced_item(client, _scoped_headers(*REASONS)) == (
+        TRACE_ID,
+        f"https://s.example/trace/{TRACE_ID}",
+        f"https://s.example/logs?q={TRACE_ID}",
+    )
+
+
+def test_trace_links_are_null_without_templates(client, traced, set_config):
+    set_config(stats, "trace_links", trace_url_template=None, logs_url_template=None)
+
+    assert _traced_item(client, _scoped_headers(*REASONS)) == (TRACE_ID, None, None)
+
+
+def test_stats_without_reasons_scope_hides_trace_fields(client, traced):
+    headers = _scoped_headers("stats:publications:read")
+
+    assert _traced_item(client, headers) == (None, None, None)
+
+
+def test_filter_by_trace_id_ignores_case(client, traced):
+    response = client.get(
+        "/v1/stats/publications",
+        params={"trace_id": TRACE_ID.upper()},
+        headers=_scoped_headers(*REASONS),
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["trace_id"] for item in response.json()["data"]] == [TRACE_ID]
+
+
+def test_summary_filters_by_trace_id(client, traced):
+    response = client.get(
+        "/v1/stats/publications/summary",
+        params={"trace_id": TRACE_ID},
+        headers=_scoped_headers(*REASONS),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 1
+
+
+@pytest.mark.parametrize(
+    "url", ["/v1/stats/publications", "/v1/stats/publications/summary"]
+)
+def test_filter_by_trace_id_needs_reasons_scope(client, traced, url):
+    response = client.get(
+        url,
+        params={"trace_id": TRACE_ID},
+        headers=_scoped_headers("stats:publications:read"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "Missing scope: stats:publications:reasons."
+
+
+def test_filter_rejects_a_malformed_trace_id(client):
+    response = client.get(
+        "/v1/stats/publications",
+        params={"trace_id": "not-a-trace"},
+        headers=_scoped_headers(*REASONS),
+    )
+
+    assert response.status_code == 422
 
 
 def test_summary_by_failure_reason_needs_reasons_scope(client, seeded):

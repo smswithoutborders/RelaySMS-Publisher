@@ -47,7 +47,7 @@ The container applies migrations before the services start. Wait, or follow `doc
 | `An unexpected error occurred during task processing.` | A bug. The traceback follows. [Report it](https://github.com/smswithoutborders/RelaySMS-Publisher/issues). |
 | No line at all | The worker isn't running (`sudo ./manage.sh status`), or a multi-part payload is still waiting for its other segments, for up to `PAYLOAD_SESSION_MAX_AGE_HOURS`, then it's discarded and recorded as `failed` with reason `segments_missing` |
 
-`GET /v1/stats/publications` lists each failure and rejection with a reason code, for credentials with `stats:publications:reasons`.
+`GET /v1/stats/publications` lists each failure and rejection with a reason code, for credentials with `stats:publications:reasons`. To find the stat behind a log entry in SigNoz, pass the entry's trace ID as `?trace_id=<ID>` ([Linking stats to traces](observability.md#linking-stats-to-traces)).
 
 ### Linking an account fails
 

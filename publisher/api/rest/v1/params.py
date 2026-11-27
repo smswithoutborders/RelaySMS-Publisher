@@ -14,6 +14,9 @@ NAME_PATTERN = r"^[a-zA-Z0-9_-]+$"
 MAX_FILTER_VALUES = 50
 
 FilterValue = Annotated[str, StringConstraints(max_length=100, pattern=NAME_PATTERN)]
+TraceIdValue = Annotated[
+    str, StringConstraints(pattern=r"^[0-9a-fA-F]{32}$", to_lower=True)
+]
 
 
 def filter_query(max_length: int, description: str):
